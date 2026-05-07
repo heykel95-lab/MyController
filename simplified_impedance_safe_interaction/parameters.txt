@@ -1,0 +1,39 @@
+# Parameters for simplified_impedance_safe_interaction.cpp
+
+robot_ip = 172.16.0.2
+experiment_duration = 10.0
+csv_file_name = simplified_impedance_safe_interaction_log.csv
+
+# 1 = static holding/compliance test
+# 0 = smooth relative trajectory test
+use_current_pose = 1
+
+delta_p_x = 0.005
+delta_p_y = 0.000
+delta_p_z = 0.000
+trajectory_duration = 8.0
+
+# Translational stiffness [N/m]
+Kp_x = 80.0
+Kp_y = 80.0
+Kp_z = 80.0
+
+# Translational damping [Ns/m]
+Dp_x = 14.0
+Dp_y = 14.0
+Dp_z = 14.0
+
+# Rotational stiffness [Nm/rad]
+KR_x = 3.0
+KR_y = 3.0
+KR_z = 3.0
+
+# Rotational damping [Nms/rad]
+DR_x = 3.5
+DR_y = 3.5
+DR_z = 3.5
+
+# Interaction safety limits
+f_max = 8.0
+m_max = 2.0
+delta_tau_max = 1.0
