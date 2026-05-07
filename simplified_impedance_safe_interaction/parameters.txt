@@ -14,14 +14,14 @@ delta_p_z = 0.000
 trajectory_duration = 8.0
 
 # Translational stiffness [N/m]
-Kp_x = 80.0
-Kp_y = 80.0
-Kp_z = 80.0
+Kp_x = 200.0
+Kp_y = 100.0
+Kp_z = 100.0
 
 # Translational damping [Ns/m]
-Dp_x = 14.0
-Dp_y = 14.0
-Dp_z = 14.0
+Dp_x = 20.0
+Dp_y = 20.0
+Dp_z = 20.0
 
 # Rotational stiffness [Nm/rad]
 KR_x = 3.0
