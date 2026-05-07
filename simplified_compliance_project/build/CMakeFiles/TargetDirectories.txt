@@ -1,0 +1,3 @@
+/home/hm-panda/Desktop/MyController/simplified_compliance_project/build/CMakeFiles/rebuild_cache.dir
+/home/hm-panda/Desktop/MyController/simplified_compliance_project/build/CMakeFiles/edit_cache.dir
+/home/hm-panda/Desktop/MyController/simplified_compliance_project/build/CMakeFiles/simplified_compliance_test.dir

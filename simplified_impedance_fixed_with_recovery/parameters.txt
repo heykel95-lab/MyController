@@ -1,0 +1,39 @@
+# Parameters for simplified_impedance_fixed_recovery.cpp
+
+robot_ip = 172.16.0.2
+experiment_duration = 10.0
+csv_file_name = simplified_impedance_fixed_recovery_log.csv
+
+# 1 = Hold: use current end-effector position and orientation as desired pose to hold it
+# 0 = Track: use a smooth relative displacement from the current pose for tracking
+use_current_pose = 1
+
+# Relative displacement from the initial end-effector position [m].
+# Only used if use_current_pose = 0.
+delta_p_x = 0.400
+delta_p_y = 0.000
+delta_p_z = 0.000
+
+# Duration of the smooth trajectory [s].
+# Only used if use_current_pose = 0.
+trajectory_duration = 8.0
+
+# Translational stiffness values [N/m].
+Kp_x = 100.0
+Kp_y = 100.0
+Kp_z = 100.0
+
+# Translational damping values [Ns/m].
+Dp_x = 10.0
+Dp_y = 10.0
+Dp_z = 10.0
+
+# Rotational stiffness values [Nm/rad].
+KR_x = 3.0
+KR_y = 3.0
+KR_z = 3.0
+
+# Rotational damping values [Nms/rad].
+DR_x = 3.5
+DR_y = 3.5
+DR_z = 3.5
