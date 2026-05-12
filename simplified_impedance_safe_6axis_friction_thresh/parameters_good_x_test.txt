@@ -14,24 +14,24 @@ delta_p_z = 0.000
 trajectory_duration = 8.0
 
 # Translational stiffness [N/m]
-Kp_x = 120.0
-Kp_y = 120.0
+Kp_x = 180.0
+Kp_y = 100.0
 Kp_z = 100.0
 
 # Translational damping [Ns/m]
-Dp_x = 20.0
-Dp_y = 20.0
-Dp_z = 20.0
+Dp_x = 22.0
+Dp_y = 15.0
+Dp_z = 15.0
 
 # Rotational stiffness [Nm/rad]
-KR_x = 3.5
-KR_y = 2.0
+KR_x = 1.5
+KR_y = 1.5
 KR_z = 3.5
 
 # Rotational damping [Nms/rad]
-DR_x = 4.0
-DR_y = 2.0
-DR_z = 2.0
+DR_x = 1.5
+DR_y = 1.5
+DR_z = 1.5
 
 # Interaction safety limits
 f_max = 8.0
@@ -52,12 +52,12 @@ delta_tau_max = 1.0
 
 # Positional thresholds [m]
 e_thresh_p_x = 0.005
-e_thresh_p_y = 0.005
+e_thresh_p_y = 0.003
 e_thresh_p_z = 0.003
 
 # Friction-compensation forces [N]
 f_fric_x = 1.0
-f_fric_y = 1.5
+f_fric_y = 0.0
 f_fric_z = 0.0
 
 # Rotational thresholds [rad]

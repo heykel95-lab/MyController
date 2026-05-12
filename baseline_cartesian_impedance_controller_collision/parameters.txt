@@ -1,0 +1,46 @@
+# Parameters for baseline_cartesian_impedance_collision.cpp
+
+robot_ip = 172.16.0.2
+experiment_duration = 12.0
+csv_file_name = baseline_cartesian_impedance_collision_log.csv
+
+# Initial joint configuration [rad]
+# Same horizontal-pose start as the extended controller.
+q_goal_1 = 0.000000
+q_goal_2 = -0.785398
+q_goal_3 = 0.000000
+q_goal_4 = -2.356194
+q_goal_5 = 0.000000
+q_goal_6 = 1.570796
+q_goal_7 = 0.000000
+
+# Translational stiffness [N/m]
+Kp_x = 120.0
+Kp_y = 100.0
+Kp_z = 100.0
+
+# Translational damping [Ns/m]
+Dp_x = 20.0
+Dp_y = 20.0
+Dp_z = 20.0
+
+# Rotational stiffness [Nm/rad]
+KR_x = 3.5
+KR_y = 2.0
+KR_z = 3.5
+
+# Rotational damping [Nms/rad]
+DR_x = 4.0
+DR_y = 2.0
+DR_z = 2.0
+
+# ------------------------------------------------------------------
+# Same robot-side collision/contact thresholds as the extended controller
+# ------------------------------------------------------------------
+# 1 = apply robot.setCollisionBehavior(...)
+# 0 = only setDefaultBehavior(robot)
+use_custom_collision_behavior = 1
+
+collision_joint_torque_threshold = 30.0
+collision_cartesian_force_threshold = 30.0
+collision_cartesian_moment_threshold = 20.0

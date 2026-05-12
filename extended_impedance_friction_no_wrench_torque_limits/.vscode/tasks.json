@@ -1,0 +1,37 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build no limits",
+      "type": "shell",
+      "command": "make",
+      "args": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Check linked libfranka",
+      "type": "shell",
+      "command": "make",
+      "args": ["check"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Run no limits",
+      "type": "shell",
+      "command": "make",
+      "args": ["run"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Clean build",
+      "type": "shell",
+      "command": "make",
+      "args": ["clean"],
+      "problemMatcher": []
+    }
+  ]
+}
