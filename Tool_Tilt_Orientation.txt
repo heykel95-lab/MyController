@@ -1,0 +1,83 @@
+Requirement: The rotational degrees of freedom neces-sary for self aligning the endeffektor parallel to the surface shall be compliant with a virtual center of rotation that can be chosen to be above, below or on the surface
+
+// -----------------------------------------------------------------------------
+// Virtual-center self-alignment for a given surface
+// -----------------------------------------------------------------------------
+// Required parameters:
+//   params.use_virtual_center : enable/disable this mode
+//   params.surface_point      : p_s, point on the surface in base frame [m]
+//   params.surface_normal     : n_s, surface normal in base frame
+//   params.vcr_offset         : h, virtual-center offset [m]
+//                               h = 0   -> on the surface
+//                               h > 0   -> above the surface
+//                               h < 0   -> below the surface
+//
+// Required existing variables in callback:
+//   p_EE, R_EE, p_d, pdot_d, pdot, omega
+//   Kp_base, Dp_base, KR_base, DR_base
+//   J
+//   orientationError(...)
+
+Eigen::Vector3d e_p = p_d - p_EE;
+Eigen::Vector3d e_R;
+Eigen::Matrix3d R_d_used = R_d;
+
+if (params.use_virtual_center) {
+  Eigen::Vector3d n_s = params.surface_normal.normalized();
+  Eigen::Vector3d p_s = params.surface_point;
+
+  // Virtual center: on, above, or below the given surface.
+  Eigen::Vector3d p_c = p_s + params.vcr_offset * n_s;
+
+  // Construct desired tool orientation from the surface normal.
+  // Here, the tool z-axis is aligned with the surface normal.
+  Eigen::Vector3d z_d = n_s;
+
+  Eigen::Vector3d a(0.0, 0.0, 1.0);
+  if (std::abs(z_d.dot(a)) > 0.95) {
+    a = Eigen::Vector3d(1.0, 0.0, 0.0);
+  }
+
+  Eigen::Vector3d x_d = a - z_d * z_d.dot(a);
+  x_d.normalize();
+
+  Eigen::Vector3d y_d = z_d.cross(x_d);
+  y_d.normalize();
+
+  R_d_used.col(0) = x_d;
+  R_d_used.col(1) = y_d;
+  R_d_used.col(2) = z_d;
+
+  // Orientation error with respect to the surface-based desired orientation.
+  e_R = orientationError(R_EE, R_d_used);
+
+  // Lever arm from virtual center to current end-effector.
+  Eigen::Vector3d r_c = p_EE - p_c;
+
+  // Coupled virtual-center position error.
+  // This makes the tool behave as if it rotates around p_c.
+  e_p = e_p - e_R.cross(r_c);
+} else {
+  e_R = orientationError(R_EE, R_d_used);
+}
+
+// Optional: apply your existing axis-constraint rotational mask.
+if (params.axis_constraint_mode) {
+  e_R(0) = params.fix_R_x ? e_R(0) : 0.0;
+  e_R(1) = params.fix_R_y ? e_R(1) : 0.0;
+  e_R(2) = params.fix_R_z ? e_R(2) : 0.0;
+}
+
+// Standard impedance law using the possibly coupled error.
+Eigen::Vector3d f =
+    Kp_base * e_p + Dp_base * (pdot_d - pdot);
+
+Eigen::Vector3d m =
+    KR_base * e_R - DR_base * omega;
+
+Eigen::Matrix<double, 6, 1> wrench;
+wrench.head<3>() = f;
+wrench.tail<3>() = m;
+
+Eigen::Matrix<double, 7, 1> tau_task =
+    J.transpose() * wrench;
