@@ -1,0 +1,213 @@
+# Parameters for general_axis_constraint_enter_stop_clean.cpp
+
+robot_ip = 172.16.0.2
+
+# Time mode:
+#   experiment_duration = 0.0  -> run indefinitely until e + Enter
+#   experiment_duration > 0.0  -> automatic stop after this time [s]
+experiment_duration = 0.0
+
+csv_file_name = general_axis_constraint_nullspace_sigma_only_open_collision_log.csv
+
+# ------------------------------------------------------------
+# Coriolis test switch
+# ------------------------------------------------------------
+# 1 = tau_cmd = J^T * F + coriolis
+# 0 = tau_cmd = J^T * F
+use_coriolis = 1
+
+# 1 = static holding/compliance test
+# 0 = smooth relative trajectory test
+use_current_pose = 1
+
+# ------------------------------------------------------------------
+# Spatial surface constraint mode
+# ------------------------------------------------------------------
+# axis_constraint_mode = 1 and use_surface_constraint = 1:
+#
+# The constrained surface is a plane:
+#
+#   n^T * (p - p_surface) = 0
+#
+# surface_normal defines n in the robot base frame.
+# use_start_as_surface_point = 1 uses the start TCP position as p_surface.
+# This is safest because the surface is never far from the initial robot pose.
+#
+# The impedance gains are chosen in the surface frame:
+#
+#   x = surface normal direction
+#   y = first tangent direction
+#   z = second tangent direction
+#
+# Then the code transforms them to the robot base frame:
+#
+#   K_base = R_surface * K_surface * R_surface^T
+#
+# Example Y-Z plane:
+#   surface_normal = [1, 0, 0]
+#
+# Example inclined plane:
+#   surface_normal = [0.7071, 0.0, 0.7071]
+axis_constraint_mode = 1
+use_surface_constraint = 1
+use_start_as_surface_point = 1
+
+surface_point_x = 0.0
+surface_point_y = 0.0
+surface_point_z = 0.0
+
+surface_normal_x = 0.7071
+surface_normal_y = 0.0
+surface_normal_z = 0.7071
+
+surface_tangent_hint_x = 0.0
+surface_tangent_hint_y = 1.0
+surface_tangent_hint_z = 0.0
+
+# ------------------------------------------------------------------
+# Automatic contact search for the virtual surface point
+# ------------------------------------------------------------------
+# use_contact_search = 1:
+#   Before the surface impedance starts, the TCP moves slowly in
+#   contact_search_direction until contact is detected.
+#
+# Contact detection uses the estimated external force only as a trigger:
+#
+#   ||F_ext - F_ext_start|| > contact_force_threshold
+#
+# This is not force control. After the trigger, the current TCP position
+# becomes the virtual surface point:
+#
+#   surface_point_runtime = p_contact
+#
+# Keep disabled until the search direction and distance are checked safely.
+use_contact_search = 0
+
+# Example downward search for a horizontal surface.
+contact_search_direction_x = 0.0
+contact_search_direction_y = 0.0
+contact_search_direction_z = -1.0
+
+# Slow search speed [m/s] and maximum travel distance [m].
+contact_search_speed = 0.005
+contact_search_max_distance = 0.020
+
+# Contact trigger threshold [N] using force change from start.
+contact_force_threshold = 5.0
+
+# Softer Cartesian gains used only during contact search.
+contact_search_Kp_x = 150.0
+contact_search_Kp_y = 150.0
+contact_search_Kp_z = 150.0
+
+contact_search_Dp_x = 25.0
+contact_search_Dp_y = 25.0
+contact_search_Dp_z = 25.0
+
+# Old base-axis mode, used only when use_surface_constraint = 0.
+# fix_p_i = 1 -> p_d_i = p_start_i, axis is fixed/constrained
+# fix_p_i = 0 -> p_d_i = p_EE_i, axis is free in position
+
+# Default: Y-Z plane, x fixed
+fix_p_x = 1
+fix_p_y = 0
+fix_p_z = 0
+
+# Rotation:
+#   fix_R_i = 1 -> keep rotational stiffness in this component
+#   fix_R_i = 0 -> set e_R_i = 0, no rotational spring in this component
+#
+# Damping still acts if DR_i > 0.
+# For a fully free rotational component, set fix_R_i = 0 and DR_i = 0.
+fix_R_x = 1
+fix_R_y = 1
+fix_R_z = 1
+
+# Not used when use_current_pose = 1 and axis_constraint_mode = 1
+delta_p_x = 0.005
+delta_p_y = 0.000
+delta_p_z = 0.000
+trajectory_duration = 8.0
+
+# ------------------------------------------------------------------
+# Initial joint configuration [rad]
+# ------------------------------------------------------------------
+q_goal_1 = 0.000000
+q_goal_2 = -0.785398
+q_goal_3 = 0.000000
+q_goal_4 = -2.356194
+q_goal_5 = 0.000000
+q_goal_6 = 1.570796
+q_goal_7 = 0.785398
+
+# ------------------------------------------------------------------
+# Gains
+# ------------------------------------------------------------------
+# In surface mode:
+#   Kp_x/Dp_x = normal-to-surface stiffness/damping
+#   Kp_y/Dp_y = first tangent stiffness/damping
+#   Kp_z/Dp_z = second tangent stiffness/damping
+Kp_x = 5000.0
+Kp_y = 100.0
+Kp_z = 100.0
+
+Dp_x = 160.0
+Dp_y = 20.0
+Dp_z = 20.0
+
+KR_x = 8.0
+KR_y = 15.0
+KR_z = 15.0
+
+DR_x = 4.0
+DR_y = 7.0
+DR_z = 7.0
+
+# ------------------------------------------------------------------
+# Franka collision/contact threshold tuning
+# ------------------------------------------------------------------
+use_custom_collision_behavior = 1
+
+collision_joint_torque_threshold = 45.0
+collision_cartesian_force_threshold = 45.0
+collision_cartesian_moment_threshold = 30.0
+
+
+# ------------------------------------------------------------------
+# Nullspace sigma-min optimization
+# ------------------------------------------------------------------
+# 1 = enable nullspace optimization
+# Uses the 1D nullspace direction n of the 6x7 Jacobian.
+# It tries to keep q close to the start configuration and compares
+# J(q + alpha*n) with J(q - alpha*n). The direction with larger
+# sigma_min(J) is preferred.
+use_nullspace_optimization = 1
+
+
+# Damping inside the nullspace.
+nullspace_damping = 2.0
+
+# Nullspace restoring spring back to the start joint posture [Nm/rad].
+# This prevents slow nullspace rotation/drift while keeping the TCP task fixed.
+nullspace_k_start = 2.0
+
+# Weight for the sigma_min improvement direction.
+nullspace_k_sigma = 0.1
+
+# Small nullspace step [rad] for comparing q +/- alpha*n. +-5 Degree
+nullspace_alpha = 0.01
+
+# Maximum norm of the added nullspace torque [Nm].
+nullspace_tau_max = 1.0
+
+# ------------------------------------------------------------------
+# More-open Franka collision/reflex thresholds
+# ------------------------------------------------------------------
+# Values are finite. They do NOT disable Franka internal safety.
+# Increase only under professor/lab supervision.
+# Torque thresholds are joint-side [Nm], 7 values internally all set equal.
+# Force thresholds are Cartesian [N/Nm style libfranka 6D thresholds], 6 values internally all set equal.
+collision_torque_acc = 120.0
+collision_torque_nom = 120.0
+collision_force_acc = 120.0
+collision_force_nom = 120.0
