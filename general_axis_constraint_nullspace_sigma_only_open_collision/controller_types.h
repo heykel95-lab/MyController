@@ -7,15 +7,9 @@ struct Parameters {
   double experiment_duration = 10.0;
   std::string csv_file_name = "general_axis_constraint_nullspace_sigma_only_open_collision_log.csv";
 
-  bool use_coriolis = true;
-  bool use_current_pose = true;
+  bool hold_mode = true;
 
-  bool axis_constraint_mode = true;
-  bool fix_p_x = true;
-  bool fix_p_y = false;
-  bool fix_p_z = false;
-
-  bool use_surface_constraint = true;
+  bool constraint_enabled = true;
   bool use_start_as_surface_point = true;
   Vec3 surface_point = Vec3(0.0, 0.0, 0.0);
   Vec3 surface_normal = Vec3(1.0, 0.0, 0.0);
@@ -25,9 +19,12 @@ struct Parameters {
   Vec3 contact_search_direction = Vec3(0.0, 0.0, -1.0);
   double contact_search_speed = 0.005;
   double contact_search_max_distance = 0.02;
+  double contact_search_min_distance = 0.0;
   double contact_force_threshold = 5.0;
   Vec3 contact_search_Kp_diag = Vec3(150.0, 150.0, 150.0);
   Vec3 contact_search_Dp_diag = Vec3(25.0, 25.0, 25.0);
+  Vec3 contact_search_KR_diag = Vec3(0.5, 0.5, 0.5);
+  Vec3 contact_search_DR_diag = Vec3(1.0, 1.0, 1.0);
 
   bool fix_R_x = true;
   bool fix_R_y = true;
@@ -54,7 +51,7 @@ struct Parameters {
   double collision_force_acc = 80.0;
   double collision_force_nom = 80.0;
 
-  Array7 q_goal = {{
+  Array7 q_init = {{
       0.0,
       -M_PI_4,
       0.0,
@@ -63,6 +60,7 @@ struct Parameters {
       M_PI_2,
       0.0
   }};
+  std::string q_init_case = "horizontal_tool";
 
   bool use_custom_collision_behavior = false;
 
@@ -94,7 +92,6 @@ struct LogData {
   Vec3 f;
   Vec3 m;
 
-  Vec7 tau_raw;
   Vec7 tau_cmd;
 };
 

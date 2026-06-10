@@ -1,95 +1,83 @@
-# General Axis Constraint Controller — Sigma-Only Nullspace
+# Surface Constraint Impedance Controller
 
-This version removes `nullspace_k_start` completely.
+This controller uses one unified surface constraint mode.
 
-There is no return-to-start joint posture term anymore.
-
-## Why
-
-The return-to-start term conflicted with the desired free motion in the virtual plane. When the robot was pulled down in the Y-Z plane, the joint-return term made it feel like the robot wanted to go back to the start pose.
-
-The controller now keeps the free-plane behavior and only uses the nullspace for the singular-value optimization.
-
-## Kept features
+The constrained surface is defined by:
 
 ```text
-general axis constraint mode
-fix_p_x / fix_p_y / fix_p_z
-fix_R_x / fix_R_y / fix_R_z
-one startup Enter
-e + Enter stop
-no friction compensation by default
-Coriolis switch
-q_goal_7 = 0.785398
+n^T * (p - p_surface) = 0
 ```
 
-## Nullspace parameters
+where `surface_normal` is the plane normal in the robot base frame.
+
+## Surface Mode
 
 ```text
-use_nullspace_optimization = 1
-nullspace_damping = 1.0
-nullspace_k_sigma = 0.5
-nullspace_alpha = 0.01
-nullspace_tau_max = 1.0
+constraint_enabled = 1
 ```
 
-There is no `nullspace_k_start` parameter in this version.
-
-## Torque command
-
-With Coriolis and nullspace enabled:
+The same mode covers the old axis-aligned cases and inclined surfaces:
 
 ```text
-tau_cmd = J^T * F + tau_nullspace + coriolis
+Y-Z plane:       surface_normal = [1, 0, 0]
+X-Z plane:       surface_normal = [0, 1, 0]
+X-Y plane:       surface_normal = [0, 0, 1]
+45 degree plane: surface_normal = [0.7071, 0, 0.7071]
 ```
 
-where `tau_nullspace` contains only damping and sigma-min optimization, not return-to-start.
+The gains are defined in the surface frame:
 
-## Build
+```text
+Kp_x / Dp_x = normal direction
+Kp_y / Dp_y = first tangent direction
+Kp_z / Dp_z = second tangent direction
+```
+
+The code transforms them to the robot base frame:
+
+```text
+K_base = R_surface * K_surface * R_surface^T
+D_base = R_surface * D_surface * R_surface^T
+```
+
+## Rotation
+
+`fix_R_x/y/z` are also interpreted in the surface frame:
+
+```text
+x = rotation around surface normal
+y = rotation around first tangent
+z = rotation around second tangent
+```
+
+## Nullspace
+
+The nullspace term combines return-to-start posture regulation, damping, and a small singular-value improvement term:
+
+```text
+tau_null = N * (k_start * (q_start - q) - d_null * dq)
+           + N * (k_sigma * alpha * sign * n)
+```
+
+## Contact Search
+
+Optional contact search can set the virtual surface point automatically:
+
+```text
+use_contact_search = 1
+```
+
+The estimated external force is used only as a contact trigger, not as force control.
+
+## Build And Run
 
 ```bash
-make clean
 make
-make check
-make run
+./general_axis_constraint_nullspace_sigma_only_open_collision
 ```
 
-
-## No-limits switch version
-
-Based on `general_axis_constraint_nullspace_sigma_only`.
-
-Default:
-```text
-disable_controller_side_limits = 0
-```
-
-Set to `1` only for careful testing to bypass the controller-side software
-limiters `f_max`, `m_max`, and `delta_tau_max`.
-
-This does not disable Franka internal safety/reflex/collision/joint/torque limits.
-
-
-## More-open collision/reflex threshold version
-
-This version is based on `general_axis_constraint_nullspace_sigma_only_no_limits_switch` and makes the `setCollisionBehavior(...)`
-thresholds configurable from `parameters.txt`.
-
-Default test values:
+Stop during impedance mode with:
 
 ```text
-collision_torque_acc = 80.0
-collision_torque_nom = 80.0
-collision_force_acc = 80.0
-collision_force_nom = 80.0
+e + Enter
 ```
-
-The values are intentionally finite. Franka internal safety is not disabled.
-Recommended default for controller-side limiters remains:
-
-```text
-disable_controller_side_limits = 0
-```
-
-Only increase these thresholds under professor/lab supervision and only after the
-robot has no active Desk error.

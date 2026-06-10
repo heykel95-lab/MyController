@@ -26,8 +26,8 @@ int main() {
     printf("Read-only tool offset check. No robot motion is commanded.\n");
     printf("Connecting to robot: %s\n", params.robot_ip.c_str());
 
-    franka::Robot robot(params.robot_ip);
-    const franka::RobotState state = robot.readOnce();
+    Robot robot(params.robot_ip);
+    const RobotState state = robot.readOnce();
 
     printf("\nF_T_EE is the transform from flange F to end-effector/tool TCP EE.\n");
     printf("If this translation is all zero, no physical tool TCP offset is configured.\n\n");
