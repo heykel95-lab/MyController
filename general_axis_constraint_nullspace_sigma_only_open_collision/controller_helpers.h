@@ -191,7 +191,15 @@ inline Parameters readParameters(const std::string& filename) {
   p.collision_force_nom = getDouble("collision_force_nom", p.collision_force_nom);
 
   p.q_init_case = getString("q_init_case", p.q_init_case);
-  if (p.q_init_case == "tilted_tool") {
+  if (p.q_init_case == "horizontal_table_search") {
+    p.q_init[0] = getDouble("q_init_table_1", p.q_init[0]);
+    p.q_init[1] = getDouble("q_init_table_2", p.q_init[1]);
+    p.q_init[2] = getDouble("q_init_table_3", p.q_init[2]);
+    p.q_init[3] = getDouble("q_init_table_4", p.q_init[3]);
+    p.q_init[4] = getDouble("q_init_table_5", p.q_init[4]);
+    p.q_init[5] = getDouble("q_init_table_6", p.q_init[5]);
+    p.q_init[6] = getDouble("q_init_table_7", p.q_init[6]);
+  } else if (p.q_init_case == "tilted_tool") {
     p.q_init[0] = getDouble("q_init_tilted_1", p.q_init[0]);
     p.q_init[1] = getDouble("q_init_tilted_2", p.q_init[1]);
     p.q_init[2] = getDouble("q_init_tilted_3", p.q_init[2]);

@@ -89,7 +89,7 @@ contact_search_direction_z = -1.0
 
 # Slow search speed [m/s] and maximum travel distance [m].
 # 0.540 m = 54 cm downward search. Increased slightly because 52 cm stopped about 1 cm before the table.
-contact_search_speed = 0.015
+contact_search_speed = 0.07
 contact_search_max_distance = 0.540
 
 # Ignore force-trigger contact before this downward travel distance [m].
@@ -135,7 +135,8 @@ trajectory_duration = 8.0
 # Choose:
 #   horizontal_tool -> current/default tool orientation
 #   tilted_tool     -> same as horizontal_tool, but q_init_5 is changed
-q_init_case = horizontal_tool
+#   horizontal_table_search -> starts close above the detected horizontal table
+q_init_case = horizontal_table_search
 
 q_init_horizontal_1 = 0.0
 q_init_horizontal_2 = -pi/4
@@ -152,6 +153,16 @@ q_init_tilted_4 = -3*pi/4
 q_init_tilted_5 = pi/16
 q_init_tilted_6 = pi/2
 q_init_tilted_7 = pi/4
+
+# Good horizontal table-search start posture.
+# This keeps the tool close to the table while leaving q4 far enough from its lower limit.
+q_init_table_1 = -0.016251
+q_init_table_2 = 0.174096
+q_init_table_3 = -0.018640
+q_init_table_4 = -2.273434
+q_init_table_5 = -0.000397
+q_init_table_6 = 2.533846
+q_init_table_7 = 0.745537
 
 # Optional direct override. Uncomment only if you want to bypass q_init_case.
 # q_init_1 = 0.0
