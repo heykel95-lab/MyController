@@ -25,6 +25,52 @@ inline std::string trim(const std::string& input) {
   return input.substr(begin, end - begin + 1);
 }
 
+inline std::string removeSpaces(std::string value) {
+  value.erase(
+      std::remove_if(value.begin(), value.end(), [](unsigned char c) {
+        return std::isspace(c);
+      }),
+      value.end());
+  return value;
+}
+
+inline double parseDoubleValue(const std::string& input) {
+  std::string value = removeSpaces(input);
+
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+
+  const std::string pi = "pi";
+  const std::size_t pi_pos = value.find(pi);
+  if (pi_pos == std::string::npos) {
+    return std::stod(value);
+  }
+
+  double sign = 1.0;
+  if (!value.empty() && value[0] == '-') {
+    sign = -1.0;
+    value = value.substr(1);
+  } else if (!value.empty() && value[0] == '+') {
+    value = value.substr(1);
+  }
+
+  double numerator = 1.0;
+  if (value.find("*pi") != std::string::npos) {
+    numerator = std::stod(value.substr(0, value.find("*pi")));
+  } else if (value.find(pi) != 0) {
+    numerator = std::stod(value.substr(0, value.find(pi)));
+  }
+
+  double denominator = 1.0;
+  const std::size_t slash_pos = value.find('/');
+  if (slash_pos != std::string::npos) {
+    denominator = std::stod(value.substr(slash_pos + 1));
+  }
+
+  return sign * numerator * M_PI / denominator;
+}
+
 inline Parameters readParameters(const std::string& filename) {
   Parameters p;
   std::ifstream file(filename);
@@ -60,7 +106,7 @@ inline Parameters readParameters(const std::string& filename) {
     return values.count(key) ? values[key] : def;
   };
   auto getDouble = [&](const std::string& key, double def) {
-    return values.count(key) ? std::stod(values[key]) : def;
+    return values.count(key) ? parseDoubleValue(values[key]) : def;
   };
   auto getBool = [&](const std::string& key, bool def) {
     return values.count(key) ? (std::stoi(values[key]) != 0) : def;
@@ -70,15 +116,9 @@ inline Parameters readParameters(const std::string& filename) {
   p.experiment_duration = getDouble("experiment_duration", p.experiment_duration);
   p.csv_file_name = getString("csv_file_name", p.csv_file_name);
 
-  p.use_coriolis = getBool("use_coriolis", p.use_coriolis);
-  p.use_current_pose = getBool("use_current_pose", p.use_current_pose);
-  p.axis_constraint_mode = getBool("axis_constraint_mode", p.axis_constraint_mode);
-
-  p.fix_p_x = getBool("fix_p_x", p.fix_p_x);
-  p.fix_p_y = getBool("fix_p_y", p.fix_p_y);
-  p.fix_p_z = getBool("fix_p_z", p.fix_p_z);
-
-  p.use_surface_constraint = getBool("use_surface_constraint", p.use_surface_constraint);
+  p.hold_mode = getBool("hold_mode", p.hold_mode);
+  p.hold_mode = getBool("use_current_pose", p.hold_mode);
+  p.constraint_enabled = getBool("constraint_enabled", p.constraint_enabled);
   p.use_start_as_surface_point = getBool("use_start_as_surface_point", p.use_start_as_surface_point);
   p.surface_point(0) = getDouble("surface_point_x", p.surface_point(0));
   p.surface_point(1) = getDouble("surface_point_y", p.surface_point(1));
@@ -89,6 +129,9 @@ inline Parameters readParameters(const std::string& filename) {
   p.surface_tangent_hint(0) = getDouble("surface_tangent_hint_x", p.surface_tangent_hint(0));
   p.surface_tangent_hint(1) = getDouble("surface_tangent_hint_y", p.surface_tangent_hint(1));
   p.surface_tangent_hint(2) = getDouble("surface_tangent_hint_z", p.surface_tangent_hint(2));
+  p.align_orientation_to_surface_after_contact =
+      getBool("align_orientation_to_surface_after_contact",
+              p.align_orientation_to_surface_after_contact);
 
   p.use_contact_search = getBool("use_contact_search", p.use_contact_search);
   p.contact_search_direction(0) = getDouble("contact_search_direction_x", p.contact_search_direction(0));
@@ -97,6 +140,8 @@ inline Parameters readParameters(const std::string& filename) {
   p.contact_search_speed = getDouble("contact_search_speed", p.contact_search_speed);
   p.contact_search_max_distance =
       getDouble("contact_search_max_distance", p.contact_search_max_distance);
+  p.contact_search_min_distance =
+      getDouble("contact_search_min_distance", p.contact_search_min_distance);
   p.contact_force_threshold = getDouble("contact_force_threshold", p.contact_force_threshold);
   p.contact_search_Kp_diag(0) = getDouble("contact_search_Kp_x", p.contact_search_Kp_diag(0));
   p.contact_search_Kp_diag(1) = getDouble("contact_search_Kp_y", p.contact_search_Kp_diag(1));
@@ -104,6 +149,12 @@ inline Parameters readParameters(const std::string& filename) {
   p.contact_search_Dp_diag(0) = getDouble("contact_search_Dp_x", p.contact_search_Dp_diag(0));
   p.contact_search_Dp_diag(1) = getDouble("contact_search_Dp_y", p.contact_search_Dp_diag(1));
   p.contact_search_Dp_diag(2) = getDouble("contact_search_Dp_z", p.contact_search_Dp_diag(2));
+  p.contact_search_KR_diag(0) = getDouble("contact_search_KR_x", p.contact_search_KR_diag(0));
+  p.contact_search_KR_diag(1) = getDouble("contact_search_KR_y", p.contact_search_KR_diag(1));
+  p.contact_search_KR_diag(2) = getDouble("contact_search_KR_z", p.contact_search_KR_diag(2));
+  p.contact_search_DR_diag(0) = getDouble("contact_search_DR_x", p.contact_search_DR_diag(0));
+  p.contact_search_DR_diag(1) = getDouble("contact_search_DR_y", p.contact_search_DR_diag(1));
+  p.contact_search_DR_diag(2) = getDouble("contact_search_DR_z", p.contact_search_DR_diag(2));
 
   p.fix_R_x = getBool("fix_R_x", p.fix_R_x);
   p.fix_R_y = getBool("fix_R_y", p.fix_R_y);
@@ -142,13 +193,47 @@ inline Parameters readParameters(const std::string& filename) {
   p.collision_force_acc = getDouble("collision_force_acc", p.collision_force_acc);
   p.collision_force_nom = getDouble("collision_force_nom", p.collision_force_nom);
 
-  p.q_goal[0] = getDouble("q_goal_1", p.q_goal[0]);
-  p.q_goal[1] = getDouble("q_goal_2", p.q_goal[1]);
-  p.q_goal[2] = getDouble("q_goal_3", p.q_goal[2]);
-  p.q_goal[3] = getDouble("q_goal_4", p.q_goal[3]);
-  p.q_goal[4] = getDouble("q_goal_5", p.q_goal[4]);
-  p.q_goal[5] = getDouble("q_goal_6", p.q_goal[5]);
-  p.q_goal[6] = getDouble("q_goal_7", p.q_goal[6]);
+  p.q_init_case = getString("q_init_case", p.q_init_case);
+  if (p.q_init_case == "horizontal_table_search") {
+    p.q_init[0] = getDouble("q_init_table_1", p.q_init[0]);
+    p.q_init[1] = getDouble("q_init_table_2", p.q_init[1]);
+    p.q_init[2] = getDouble("q_init_table_3", p.q_init[2]);
+    p.q_init[3] = getDouble("q_init_table_4", p.q_init[3]);
+    p.q_init[4] = getDouble("q_init_table_5", p.q_init[4]);
+    p.q_init[5] = getDouble("q_init_table_6", p.q_init[5]);
+    p.q_init[6] = getDouble("q_init_table_7", p.q_init[6]);
+  } else if (p.q_init_case == "tilted_tool") {
+    p.q_init[0] = getDouble("q_init_tilted_1", p.q_init[0]);
+    p.q_init[1] = getDouble("q_init_tilted_2", p.q_init[1]);
+    p.q_init[2] = getDouble("q_init_tilted_3", p.q_init[2]);
+    p.q_init[3] = getDouble("q_init_tilted_4", p.q_init[3]);
+    p.q_init[4] = getDouble("q_init_tilted_5", p.q_init[4]);
+    p.q_init[5] = getDouble("q_init_tilted_6", p.q_init[5]);
+    p.q_init[6] = getDouble("q_init_tilted_7", p.q_init[6]);
+  } else {
+    p.q_init[0] = getDouble("q_init_horizontal_1", p.q_init[0]);
+    p.q_init[1] = getDouble("q_init_horizontal_2", p.q_init[1]);
+    p.q_init[2] = getDouble("q_init_horizontal_3", p.q_init[2]);
+    p.q_init[3] = getDouble("q_init_horizontal_4", p.q_init[3]);
+    p.q_init[4] = getDouble("q_init_horizontal_5", p.q_init[4]);
+    p.q_init[5] = getDouble("q_init_horizontal_6", p.q_init[5]);
+    p.q_init[6] = getDouble("q_init_horizontal_7", p.q_init[6]);
+  }
+
+  p.q_init[0] = getDouble("q_goal_1", p.q_init[0]);
+  p.q_init[1] = getDouble("q_goal_2", p.q_init[1]);
+  p.q_init[2] = getDouble("q_goal_3", p.q_init[2]);
+  p.q_init[3] = getDouble("q_goal_4", p.q_init[3]);
+  p.q_init[4] = getDouble("q_goal_5", p.q_init[4]);
+  p.q_init[5] = getDouble("q_goal_6", p.q_init[5]);
+  p.q_init[6] = getDouble("q_goal_7", p.q_init[6]);
+  p.q_init[0] = getDouble("q_init_1", p.q_init[0]);
+  p.q_init[1] = getDouble("q_init_2", p.q_init[1]);
+  p.q_init[2] = getDouble("q_init_3", p.q_init[2]);
+  p.q_init[3] = getDouble("q_init_4", p.q_init[3]);
+  p.q_init[4] = getDouble("q_init_5", p.q_init[4]);
+  p.q_init[5] = getDouble("q_init_6", p.q_init[5]);
+  p.q_init[6] = getDouble("q_init_7", p.q_init[6]);
 
   p.use_custom_collision_behavior = getBool("use_custom_collision_behavior", p.use_custom_collision_behavior);
 
@@ -232,7 +317,50 @@ inline Array6 filledArray6(double value) {
 }
 
 inline void printVec3(const char* label, const Vec3& v) {
-  printf("%s %.6f %.6f %.6f\n", label, v(0), v(1), v(2));
+  printf("%s = [%.6f, %.6f, %.6f]\n", label, v(0), v(1), v(2));
+}
+
+inline void printVec7(const char* label, const Vec7& v) {
+  printf("%s = [%.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f]\n",
+         label,
+         v(0),
+         v(1),
+         v(2),
+         v(3),
+         v(4),
+         v(5),
+         v(6));
+}
+
+inline void printMat3(const char* label, const Mat3& m) {
+  printf("%s = [\n", label);
+  printf("  %.6f, %.6f, %.6f;\n", m(0, 0), m(0, 1), m(0, 2));
+  printf("  %.6f, %.6f, %.6f;\n", m(1, 0), m(1, 1), m(1, 2));
+  printf("  %.6f, %.6f, %.6f\n", m(2, 0), m(2, 1), m(2, 2));
+  printf("]\n");
+}
+
+inline void printMat4x4(const char* label, const Mat4x4& m) {
+  printf("%s = [\n", label);
+  printf("  %.6f, %.6f, %.6f, %.6f;\n", m(0, 0), m(0, 1), m(0, 2), m(0, 3));
+  printf("  %.6f, %.6f, %.6f, %.6f;\n", m(1, 0), m(1, 1), m(1, 2), m(1, 3));
+  printf("  %.6f, %.6f, %.6f, %.6f;\n", m(2, 0), m(2, 1), m(2, 2), m(2, 3));
+  printf("  %.6f, %.6f, %.6f, %.6f\n", m(3, 0), m(3, 1), m(3, 2), m(3, 3));
+  printf("]\n");
+}
+
+inline void printJointStartEndTable(const Vec7& q_start, const Vec7& q_final) {
+  printf("\nq_start_q_final_delta = [\n");
+  printf("  %% joint, q_start_rad, q_final_rad, delta_rad\n");
+  for (int i = 0; i < 7; ++i) {
+    printf("  %d, %.6f, %.6f, %.6f%s\n",
+           i + 1,
+           q_start(i),
+           q_final(i),
+           q_final(i) - q_start(i),
+           (i == 6) ? "" : ";");
+  }
+  printf("]\n");
 }
 
 inline void printParameters(const Parameters& params) {
@@ -244,19 +372,21 @@ inline void printParameters(const Parameters& params) {
     printf("time mode: automatic stop after experiment_duration, or earlier with e + Enter\n");
   }
 
-  printf("axis_constraint_mode: %d\n", params.axis_constraint_mode ? 1 : 0);
-  printf("use_surface_constraint: %d\n", params.use_surface_constraint ? 1 : 0);
+  printf("constraint_enabled: %d\n", params.constraint_enabled ? 1 : 0);
   printf("use_contact_search: %d\n", params.use_contact_search ? 1 : 0);
-  printVec3("surface_normal:", params.surface_normal);
-  printVec3("surface_tangent_hint:", params.surface_tangent_hint);
+  printf("align_orientation_to_surface_after_contact: %d\n",
+         params.align_orientation_to_surface_after_contact ? 1 : 0);
+  printf("q_init_case: %s\n", params.q_init_case.c_str());
+  printVec3("surface_normal", params.surface_normal);
+  printVec3("surface_tangent_hint", params.surface_tangent_hint);
   printf("fix_R in surface frame [normal tangent1 tangent2]: %d %d %d\n",
          params.fix_R_x ? 1 : 0,
          params.fix_R_y ? 1 : 0,
          params.fix_R_z ? 1 : 0);
-  printVec3("Kp [N/m]:", params.Kp_diag);
-  printVec3("Dp [Ns/m]:", params.Dp_diag);
-  printVec3("KR [Nm/rad]:", params.KR_diag);
-  printVec3("DR [Nms/rad]:", params.DR_diag);
+  printVec3("Kp_diag_N_per_m", params.Kp_diag);
+  printVec3("Dp_diag_Ns_per_m", params.Dp_diag);
+  printVec3("KR_diag_Nm_per_rad", params.KR_diag);
+  printVec3("DR_diag_Nms_per_rad", params.DR_diag);
   printf("nullspace gains: k_start=%.6f damping=%.6f k_sigma=%.6f tau_max=%.6f\n",
          params.nullspace_k_start,
          params.nullspace_damping,
@@ -294,11 +424,43 @@ inline Mat3 makeSurfaceFrame(const Parameters& params) {
   return R_surface;
 }
 
+inline Mat3 makeToolOrientationParallelToSurface(const Mat3& R_surface) {
+  const Vec3 normal = R_surface.col(0);
+  const Vec3 tangent1 = R_surface.col(1);
+
+  Mat3 R_tool;
+  R_tool.col(0) = tangent1;
+  R_tool.col(2) = -normal;
+  R_tool.col(1) = R_tool.col(2).cross(R_tool.col(0));
+  R_tool.col(1).normalize();
+  return R_tool;
+}
+
 inline Mat3 makeSpatialGainMatrix(const Vec3& diagonal_in_surface_frame, const Mat3& R_surface) {
   return R_surface * diagonal_in_surface_frame.asDiagonal() * R_surface.transpose();
 }
 
-inline void configureCollisionBehavior(franka::Robot& robot, const Parameters& params) {
+inline void startKeyboardStopThread(
+    const Parameters& params,
+    std::atomic<bool>& stop_requested) {
+  printf("Press e+Enter to stop the Control algorithm before the remaining duration expires.\n");
+  if (params.experiment_duration <= 0.0) {
+    printf("experiment_duration <= 0: the Control algorithm is running indefinitely until e + Enter.\n");
+  }
+
+  std::thread keyboard_thread([&stop_requested]() {
+    std::string line;
+    while (std::getline(std::cin, line)) {
+      if (line == "e" || line == "E") {
+        stop_requested.store(true);
+        break;
+      }
+    }
+  });
+  keyboard_thread.detach();
+}
+
+inline void configureCollisionBehavior(Robot& robot, const Parameters& params) {
   setDefaultBehavior(robot);
 
   if (!params.use_custom_collision_behavior) {
@@ -333,7 +495,7 @@ inline DesiredMotion computeDesiredMotion(
     const Vec3& plane_point) {
   DesiredMotion desired{p_start, Vec3::Zero()};
 
-  if (!params.use_current_pose) {
+  if (!params.hold_mode) {
     const double r = time / params.trajectory_duration;
     const double s = smoothStep(r);
     const double s_dot = smoothStepDerivative(r, params.trajectory_duration);
@@ -341,24 +503,21 @@ inline DesiredMotion computeDesiredMotion(
     desired.pdot_d = s_dot * params.delta_p;
   }
 
-  if (params.axis_constraint_mode) {
-    if (params.use_surface_constraint) {
-      const Vec3 normal = R_surface.col(0);
+  if (params.constraint_enabled) {
+    const Vec3 normal = R_surface.col(0);
 
-      // Plane constraint for any surface orientation:
-      //
-      //   signed_distance [m] = n^T * (p_plane - p_EE)
-      //   p_d [m]            = p_EE + signed_distance * n
-      //
-      // This keeps only the normal direction constrained. The two tangent
-      // directions stay compliant because their position error is zero.
-      const double signed_distance = normal.dot(plane_point - p_EE);
-      desired.p_d = p_EE + signed_distance * normal;
-    } else {
-      desired.p_d(0) = params.fix_p_x ? p_start(0) : p_EE(0);
-      desired.p_d(1) = params.fix_p_y ? p_start(1) : p_EE(1);
-      desired.p_d(2) = params.fix_p_z ? p_start(2) : p_EE(2);
-    }
+    // Plane constraint for any surface orientation:
+    //
+    //   signed_distance [m] = n^T * (p_plane - p_EE)
+    //   p_d [m]            = p_EE + signed_distance * n
+    //
+    // The same surface-frame mode covers axis-aligned and inclined planes:
+    //   YZ plane -> surface_normal = [1, 0, 0]
+    //   XZ plane -> surface_normal = [0, 1, 0]
+    //   XY plane -> surface_normal = [0, 0, 1]
+    //   inclined plane -> any normalized surface_normal
+    const double signed_distance = normal.dot(plane_point - p_EE);
+    desired.p_d = p_EE + signed_distance * normal;
     desired.pdot_d.setZero();
   }
 
@@ -366,58 +525,55 @@ inline DesiredMotion computeDesiredMotion(
 }
 
 inline Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_surface) {
-  if (!params.axis_constraint_mode) {
+  if (!params.constraint_enabled) {
     return e_R;
   }
 
-  Vec3 e_R_task = params.use_surface_constraint ? R_surface.transpose() * e_R : e_R;
+  Vec3 e_R_task = R_surface.transpose() * e_R;
   e_R_task(0) = params.fix_R_x ? e_R_task(0) : 0.0;
   e_R_task(1) = params.fix_R_y ? e_R_task(1) : 0.0;
   e_R_task(2) = params.fix_R_z ? e_R_task(2) : 0.0;
 
-  return params.use_surface_constraint ? R_surface * e_R_task : e_R_task;
-}
-
-inline Vec6 makeWrench(const Vec3& f, const Vec3& m) {
-  Vec6 wrench;
-  wrench.head<3>() = f;
-  wrench.tail<3>() = m;
-  return wrench;
+  return R_surface * e_R_task;
 }
 
 inline Vec7 computeNullspaceTorque(
     const Parameters& params,
-    const franka::Model& model,
-    const franka::RobotState& state,
+    const Model& model,
+    const RobotState& state,
     const Mat6x7& J,
     const Vec7& dq,
     const Vec7& q_start) {
   Vec7 tau_nullspace = Vec7::Zero();
 
+  // If nullspace optimization is disabled, return zero nullspace torque.
   if (!params.use_nullspace_optimization) {
     return tau_nullspace;
   }
+  // else, compute the nullspace torque to optimize the smallest singular value of the Jacobian.
+  // Map the current joint positions to a 7 elements vector.
+  Map<const Vec7> q_current(state.q.data());
 
-  Eigen::Map<const Vec7> q_current(state.q.data());
-
-  const Eigen::Matrix<double, 7, 7> I7 =
-      Eigen::Matrix<double, 7, 7>::Identity();
-  const Eigen::Matrix<double, 6, 6> I6 =
-      Eigen::Matrix<double, 6, 6>::Identity();
+  // Identity matrices for the pseudo-inverse calculation:
+  const Mat7x7 I7 = Mat7x7::Identity();
+  const Mat6x6 I6 = Mat6x6::Identity();
+  // Damping factor for the pseudo-inverse to improve numerical stability near singularities.
   const double lambda = 0.05;
-  const Eigen::Matrix<double, 6, 6> JJt_damped =
-      J * J.transpose() + lambda * lambda * I6;
+  // Damped pseudo-inverse of the Jacobian: JJt_damped = J*J^T + lambda^2 I in units of [m^2/s^2] or [rad^2/s^2], depending on the row of J.
+  const Mat6x6 JJt_damped = J * J.transpose() + lambda * lambda * I6;
 
   // Joint nullspace projector:
   //
-  //   N = I - J^T * (J*J^T + lambda^2 I)^(-1) * J
+  //   N = I - J^T * (JJt_damped)^(-1) * J
   //
   // Units:
   //   J              maps dq [rad/s] to xdot [m/s, rad/s]
   //   tau_posture    is joint torque [Nm]
   //   nullspace term keeps motion from changing the end-effector task.
-  const Eigen::Matrix<double, 7, 7> N =
-      I7 - J.transpose() * JJt_damped.ldlt().solve(J);
+  // JJt_damped.ldlt().solve(J) computes (JJt_damped)^(-1) * J in a numerically stable way.
+  // It solves the linear system JJt_damped * X = J for X, which is equivalent to X = (JJt_damped)^(-1) * J,
+  // but more efficient and stable than explicitly computing the inverse of JJt_damped.
+  const Mat7x7 N = I7 - J.transpose() * JJt_damped.ldlt().solve(J);
 
   // Restoring spring in the nullspace:
   //
@@ -425,12 +581,9 @@ inline Vec7 computeNullspaceTorque(
   //
   // This prevents the robot from slowly rotating/drifting in the nullspace
   // when the TCP is moved back and forth at the same Cartesian place.
-  tau_nullspace =
-      N * (params.nullspace_k_start * (q_start - q_current)
-           - params.nullspace_damping * dq);
+  tau_nullspace = N * (params.nullspace_k_start * (q_start - q_current) - params.nullspace_damping * dq);
 
-  Eigen::JacobiSVD<Mat6x7> svd_current(
-      J, Eigen::ComputeFullU | Eigen::ComputeFullV);
+  Eigen::JacobiSVD<Mat6x7> svd_current(J, Eigen::ComputeFullU | Eigen::ComputeFullV);
   Vec7 n = svd_current.matrixV().col(6);
 
   if (n.norm() <= 1e-9) {
@@ -447,20 +600,20 @@ inline Vec7 computeNullspaceTorque(
 
   const std::array<double, 42> J_plus_array =
       model.zeroJacobian(
-          franka::Frame::kEndEffector,
+          Frame::kEndEffector,
           q_plus_array,
           state.F_T_EE,
           state.EE_T_K);
 
   const std::array<double, 42> J_minus_array =
       model.zeroJacobian(
-          franka::Frame::kEndEffector,
+          Frame::kEndEffector,
           q_minus_array,
           state.F_T_EE,
           state.EE_T_K);
 
-  Eigen::Map<const Mat6x7> J_plus(J_plus_array.data());
-  Eigen::Map<const Mat6x7> J_minus(J_minus_array.data());
+  Map<const Mat6x7> J_plus(J_plus_array.data());
+  Map<const Mat6x7> J_minus(J_minus_array.data());
 
   const double sigma_min_plus = smallestSingularValue(J_plus);
   const double sigma_min_minus = smallestSingularValue(J_minus);
@@ -484,7 +637,6 @@ inline LogData makeLogRow(
     const Vec3& omega,
     const Vec3& f,
     const Vec3& m,
-    const Vec7& tau_raw,
     const Vec7& tau_cmd) {
   LogData row;
   row.time = time;
@@ -498,7 +650,6 @@ inline LogData makeLogRow(
   row.omega = omega;
   row.f = f;
   row.m = m;
-  row.tau_raw = tau_raw;
   row.tau_cmd = tau_cmd;
   return row;
 }
@@ -510,12 +661,12 @@ inline void printFinalSummary(
     const Vec3& final_e_R,
     const std::string& csv_file_name) {
   printf("\nExperiment finished.\n");
-  printVec3("Final desired position p_d [m]: ", final_p_d);
-  printVec3("Final reached position p_EE [m]:", final_p_EE);
-  printVec3("Final position error e_p [m]:   ", final_e_p);
+  printVec3("final_p_d_m", final_p_d);
+  printVec3("final_p_EE_m", final_p_EE);
+  printVec3("final_e_p_m", final_e_p);
   printf("Final position error norm [m]:   %.6f\n", final_e_p.norm());
   printf("Final position error norm [mm]:  %.6f\n", 1000.0 * final_e_p.norm());
-  printVec3("Final rotation error e_R [rad]: ", final_e_R);
+  printVec3("final_e_R_rad", final_e_R);
   printf("Final rotation error norm [rad]: %.6f\n", final_e_R.norm());
   printf("Final rotation error norm [deg]: %.6f\n", (180.0 / M_PI) * final_e_R.norm());
   printf("CSV log written to: %s\n", csv_file_name.c_str());
@@ -537,7 +688,6 @@ inline void writeLogToCsv(
            << "omega_x,omega_y,omega_z,"
            << "f_x,f_y,f_z,"
            << "m_x,m_y,m_z,"
-           << "tau_raw_1,tau_raw_2,tau_raw_3,tau_raw_4,tau_raw_5,tau_raw_6,tau_raw_7,"
            << "tau_cmd_1,tau_cmd_2,tau_cmd_3,tau_cmd_4,tau_cmd_5,tau_cmd_6,tau_cmd_7"
            << "\n";
 
@@ -554,10 +704,6 @@ inline void writeLogToCsv(
              << row.omega(0) << "," << row.omega(1) << "," << row.omega(2) << ","
              << row.f(0) << "," << row.f(1) << "," << row.f(2) << ","
              << row.m(0) << "," << row.m(1) << "," << row.m(2) << ","
-             << row.tau_raw(0) << "," << row.tau_raw(1) << ","
-             << row.tau_raw(2) << "," << row.tau_raw(3) << ","
-             << row.tau_raw(4) << "," << row.tau_raw(5) << ","
-             << row.tau_raw(6) << ","
              << row.tau_cmd(0) << "," << row.tau_cmd(1) << ","
              << row.tau_cmd(2) << "," << row.tau_cmd(3) << ","
              << row.tau_cmd(4) << "," << row.tau_cmd(5) << ","

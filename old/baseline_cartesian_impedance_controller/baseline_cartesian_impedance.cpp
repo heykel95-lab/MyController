@@ -61,8 +61,13 @@
 #include "examples_common.h"
 
 struct Parameters {
+  // Network address of the Panda controller.
   std::string robot_ip = "172.16.0.2";
+
+  // Total time spent in torque-control holding mode after the robot reaches q_goal.
   double experiment_duration = 12.0;
+
+  // CSV file written after the torque-control loop exits.
   std::string csv_file_name = "baseline_cartesian_impedance_log.csv";
 
   // Initial joint configuration [rad].
@@ -91,6 +96,8 @@ struct Parameters {
 };
 
 struct LogData {
+  // One row of experiment data. The callback fills this at control rate and the
+  // data is written to disk after robot.control() returns.
   double time;
 
   Eigen::Vector3d p_EE;
@@ -108,6 +115,7 @@ struct LogData {
 };
 
 std::string trim(const std::string& input) {
+  // Minimal whitespace trimming used by the simple key=value parameter parser.
   const std::string whitespace = " \t\r\n";
   const auto begin = input.find_first_not_of(whitespace);
   if (begin == std::string::npos) {
@@ -130,11 +138,14 @@ Parameters readParameters(const std::string& filename) {
   std::string line;
 
   while (std::getline(file, line)) {
+    // parameters.txt supports inline comments:
+    //     Kp_x = 120.0   # translational stiffness in x
     const auto comment_pos = line.find('#');
     if (comment_pos != std::string::npos) {
       line = line.substr(0, comment_pos);
     }
 
+    // Accept only key=value lines. Blank lines or malformed lines are ignored.
     const auto eq_pos = line.find('=');
     if (eq_pos == std::string::npos) {
       continue;
@@ -149,17 +160,21 @@ Parameters readParameters(const std::string& filename) {
   }
 
   auto getString = [&](const std::string& key, const std::string& def) {
+    // Use the file value when present; otherwise keep the struct default.
     return values.count(key) ? values[key] : def;
   };
 
   auto getDouble = [&](const std::string& key, double def) {
+    // std::stod intentionally lets invalid numeric input throw an exception.
     return values.count(key) ? std::stod(values[key]) : def;
   };
 
+  // Scalar parameters.
   p.robot_ip = getString("robot_ip", p.robot_ip);
   p.experiment_duration = getDouble("experiment_duration", p.experiment_duration);
   p.csv_file_name = getString("csv_file_name", p.csv_file_name);
 
+  // Joint-space start pose. The robot is moved here before Cartesian impedance starts.
   p.q_goal[0] = getDouble("q_goal_1", p.q_goal[0]);
   p.q_goal[1] = getDouble("q_goal_2", p.q_goal[1]);
   p.q_goal[2] = getDouble("q_goal_3", p.q_goal[2]);
@@ -168,6 +183,8 @@ Parameters readParameters(const std::string& filename) {
   p.q_goal[5] = getDouble("q_goal_6", p.q_goal[5]);
   p.q_goal[6] = getDouble("q_goal_7", p.q_goal[6]);
 
+  // Diagonal Cartesian impedance gains. Off-diagonal coupling terms are not used
+  // in this baseline, so the file exposes only per-axis gains.
   p.Kp_diag(0) = getDouble("Kp_x", p.Kp_diag(0));
   p.Kp_diag(1) = getDouble("Kp_y", p.Kp_diag(1));
   p.Kp_diag(2) = getDouble("Kp_z", p.Kp_diag(2));
@@ -188,6 +205,7 @@ Parameters readParameters(const std::string& filename) {
 }
 
 std::array<double, 7> eigenToArray(const Eigen::Matrix<double, 7, 1>& tau) {
+  // libfranka returns torques as std::array<double, 7>; the controller math uses Eigen.
   std::array<double, 7> tau_array{};
   for (int i = 0; i < 7; ++i) {
     tau_array[i] = tau(i);
@@ -199,6 +217,7 @@ Eigen::Vector3d orientationError(
     const Eigen::Matrix3d& R_current,
     const Eigen::Matrix3d& R_desired) {
 
+  // Rotation that moves the current end-effector frame into the desired frame.
   Eigen::Matrix3d R_error = R_current.transpose() * R_desired;
   Eigen::AngleAxisd angle_axis(R_error);
 
@@ -207,6 +226,7 @@ Eigen::Vector3d orientationError(
   }
 
   // Express orientation error in the robot base frame.
+  // This makes e_R compatible with the base-frame angular velocity from J * dq.
   return R_current * angle_axis.axis() * angle_axis.angle();
 }
 
@@ -216,6 +236,7 @@ void writeLogToCsv(
 
   std::ofstream log_file(csv_file_name);
 
+  // Header order matches the row-writing order below.
   log_file << "time,"
            << "p_EE_x,p_EE_y,p_EE_z,"
            << "p_d_x,p_d_y,p_d_z,"
@@ -254,6 +275,8 @@ void writeLogToCsv(
 
 int main() {
   try {
+    // Load experiment settings from parameters.txt when available.
+    // Missing keys keep their default values from Parameters.
     Parameters params = readParameters("parameters.txt");
 
     std::cout << std::fixed << std::setprecision(6);
@@ -276,6 +299,7 @@ int main() {
 
     franka::Robot robot(params.robot_ip);
 
+    // Clear Franka reflex/error state before starting, if possible.
     std::cout << "\nRecovery step:" << std::endl;
     std::cout << "If the robot is in an error/reflex state, automatic recovery will be attempted." << std::endl;
     std::cout << "Make sure the workspace is clear and the emergency stop is reachable." << std::endl;
@@ -293,6 +317,8 @@ int main() {
 
     setDefaultBehavior(robot);
 
+    // Move the robot into a repeatable joint-space start configuration before
+    // measuring the desired Cartesian pose.
     MotionGenerator motion_generator(0.4, params.q_goal);
 
     std::cout << "\nWARNING: The robot will move to the initial joint configuration." << std::endl;
@@ -306,14 +332,19 @@ int main() {
 
     franka::Model model = robot.loadModel();
 
+    // The Cartesian impedance target is the pose reached after the joint-space
+    // move. This baseline therefore acts as a pose-holding controller.
     franka::RobotState initial_state = robot.readOnce();
 
+    // Franka poses are column-major 4x4 transforms from base frame O to EE.
     Eigen::Map<const Eigen::Matrix<double, 4, 4>> T_initial(
         initial_state.O_T_EE.data());
 
+    // Desired position and orientation remain constant during the experiment.
     Eigen::Vector3d p_d = T_initial.block<3, 1>(0, 3);
     Eigen::Matrix3d R_d = T_initial.block<3, 3>(0, 0);
 
+    // Print the target tool axes to make the captured desired orientation visible.
     Eigen::Vector3d tool_x_axis = R_d.col(0);
     Eigen::Vector3d tool_y_axis = R_d.col(1);
     Eigen::Vector3d tool_z_axis = R_d.col(2);
@@ -323,16 +354,20 @@ int main() {
     std::cout << "Tool y-axis in base frame:       " << tool_y_axis.transpose() << std::endl;
     std::cout << "Tool z-axis in base frame:       " << tool_z_axis.transpose() << std::endl;
 
+    // Convert diagonal gain vectors into matrices used by the impedance law.
     Eigen::Matrix3d Kp = params.Kp_diag.asDiagonal();
     Eigen::Matrix3d Dp = params.Dp_diag.asDiagonal();
     Eigen::Matrix3d KR = params.KR_diag.asDiagonal();
     Eigen::Matrix3d DR = params.DR_diag.asDiagonal();
 
     std::vector<LogData> log_data;
+    // The Panda control loop is nominally 1 kHz; reserve extra room to avoid
+    // reallocations during the real-time callback.
     log_data.reserve(static_cast<std::size_t>(params.experiment_duration * 1500.0));
 
     double time = 0.0;
 
+    // Copies of the most recent callback values, printed after the control loop.
     Eigen::Vector3d final_p_EE = Eigen::Vector3d::Zero();
     Eigen::Vector3d final_e_p = Eigen::Vector3d::Zero();
     Eigen::Vector3d final_e_R = Eigen::Vector3d::Zero();
@@ -349,24 +384,30 @@ int main() {
     robot.control([&](const franka::RobotState& state,
                       franka::Duration period) -> franka::Torques {
 
+      // Accumulate elapsed time from libfranka's measured callback period.
       time += period.toSec();
 
+      // Joint velocity in rad/s.
       Eigen::Map<const Eigen::Matrix<double, 7, 1>> dq(state.dq.data());
 
+      // Geometric Jacobian at the end-effector, expressed in the base frame.
       std::array<double, 42> jacobian_array =
           model.zeroJacobian(franka::Frame::kEndEffector, state);
 
       Eigen::Map<const Eigen::Matrix<double, 6, 7>> J(jacobian_array.data());
 
+      // Cartesian twist [linear velocity; angular velocity] = J(q) * dq.
       Eigen::Matrix<double, 6, 1> xdot = J * dq;
       Eigen::Vector3d pdot = xdot.head<3>();
       Eigen::Vector3d omega = xdot.tail<3>();
 
+      // Current end-effector pose in the base frame.
       Eigen::Map<const Eigen::Matrix<double, 4, 4>> T_EE(state.O_T_EE.data());
 
       Eigen::Vector3d p_EE = T_EE.block<3, 1>(0, 3);
       Eigen::Matrix3d R_EE = T_EE.block<3, 3>(0, 0);
 
+      // Pose error relative to the fixed target pose captured before the loop.
       Eigen::Vector3d e_p = p_d - p_EE;
       Eigen::Vector3d e_R = orientationError(R_EE, R_d);
 
@@ -375,17 +416,23 @@ int main() {
       Eigen::Vector3d f = Kp * e_p - Dp * pdot;
       Eigen::Vector3d m = KR * e_R - DR * omega;
 
+      // Spatial wrench in the same ordering as Franka's zeroJacobian:
+      // first force, then moment, both expressed in the base frame.
       Eigen::Matrix<double, 6, 1> wrench;
       wrench.head<3>() = f;
       wrench.tail<3>() = m;
 
+      // Map Cartesian wrench to joint torques by the virtual-work relation.
       Eigen::Matrix<double, 7, 1> tau_task = J.transpose() * wrench;
 
+      // Add model Coriolis compensation so the commanded torque is the task
+      // torque plus nominal robot dynamics compensation.
       std::array<double, 7> coriolis_array = model.coriolis(state);
       Eigen::Map<const Eigen::Matrix<double, 7, 1>> coriolis(coriolis_array.data());
 
       Eigen::Matrix<double, 7, 1> tau_cmd = tau_task + coriolis;
 
+      // Save raw controller quantities for later plotting and comparison.
       LogData row;
       row.time = time;
       row.p_EE = p_EE;
@@ -400,6 +447,7 @@ int main() {
 
       log_data.push_back(row);
 
+      // Update terminal-summary values.
       final_p_EE = p_EE;
       final_e_p = e_p;
       final_e_R = e_R;
@@ -407,11 +455,14 @@ int main() {
       final_m = m;
       final_tau = tau_cmd;
 
+      // Track worst-case norms over the whole experiment.
       max_position_error_norm = std::max(max_position_error_norm, e_p.norm());
       max_rotation_error_norm = std::max(max_rotation_error_norm, e_R.norm());
 
       std::array<double, 7> tau_array = eigenToArray(tau_cmd);
 
+      // Return MotionFinished once the requested duration has elapsed. The
+      // final torque sample is still returned to libfranka.
       if (time >= params.experiment_duration) {
         return franka::MotionFinished(franka::Torques(tau_array));
       }
@@ -419,6 +470,8 @@ int main() {
       return franka::Torques(tau_array);
     });
 
+    // Disk I/O is done after robot.control() so the real-time callback stays
+    // focused on control math and lightweight memory writes.
     writeLogToCsv(log_data, params.csv_file_name);
 
     std::cout << "\nExperiment finished." << std::endl;
