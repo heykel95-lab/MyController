@@ -85,7 +85,7 @@ inline void printJointStartEndTableDeg(const Vec7& q_start, const Vec7& q_final)
   printf("joint    start   final   delta\n");
   printf("------------------------------\n");
   for (int i = 0; i < 7; ++i) {
-    printf("q%-2d   %7.1f %7.1f %+7.1f\n",
+    printf("q%-2d   %7.1f %7.1f %7.1f\n",
            i + 1,
            rad_to_deg * q_start(i),
            rad_to_deg * q_final(i),
