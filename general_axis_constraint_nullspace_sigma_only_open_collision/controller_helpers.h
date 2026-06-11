@@ -132,6 +132,18 @@ inline Parameters readParameters(const std::string& filename) {
   p.align_orientation_to_surface_after_contact =
       getBool("align_orientation_to_surface_after_contact",
               p.align_orientation_to_surface_after_contact);
+  p.orientation_test_only = getBool("orientation_test_only", p.orientation_test_only);
+  p.orientation_test_extra_tilt_deg =
+      getDouble("orientation_test_extra_tilt_deg", p.orientation_test_extra_tilt_deg);
+  p.use_phase_sequence = getBool("use_phase_sequence", p.use_phase_sequence);
+  p.orient_phase_min_time = getDouble("orient_phase_min_time", p.orient_phase_min_time);
+  p.orient_phase_error_threshold =
+      getDouble("orient_phase_error_threshold", p.orient_phase_error_threshold);
+  p.post_contact_align_duration =
+      getDouble("post_contact_align_duration", p.post_contact_align_duration);
+  p.use_virtual_center_after_contact =
+      getBool("use_virtual_center_after_contact", p.use_virtual_center_after_contact);
+  p.vcr_offset = getDouble("vcr_offset", p.vcr_offset);
 
   p.use_contact_search = getBool("use_contact_search", p.use_contact_search);
   p.contact_search_direction(0) = getDouble("contact_search_direction_x", p.contact_search_direction(0));
@@ -320,6 +332,23 @@ inline void printVec3(const char* label, const Vec3& v) {
   printf("%s = [%.6f, %.6f, %.6f]\n", label, v(0), v(1), v(2));
 }
 
+inline void printVec3Mm(const char* label, const Vec3& v) {
+  printf("%s = [%.1f, %.1f, %.1f] mm\n",
+         label,
+         1000.0 * v(0),
+         1000.0 * v(1),
+         1000.0 * v(2));
+}
+
+inline void printVec3Deg(const char* label, const Vec3& v) {
+  const double rad_to_deg = 180.0 / M_PI;
+  printf("%s = [%.2f, %.2f, %.2f] deg\n",
+         label,
+         rad_to_deg * v(0),
+         rad_to_deg * v(1),
+         rad_to_deg * v(2));
+}
+
 inline void printVec7(const char* label, const Vec7& v) {
   printf("%s = [%.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f]\n",
          label,
@@ -330,6 +359,19 @@ inline void printVec7(const char* label, const Vec7& v) {
          v(4),
          v(5),
          v(6));
+}
+
+inline void printVec7Deg(const char* label, const Vec7& v) {
+  const double rad_to_deg = 180.0 / M_PI;
+  printf("%s = [%.1f, %.1f, %.1f, %.1f, %.1f, %.1f, %.1f] deg\n",
+         label,
+         rad_to_deg * v(0),
+         rad_to_deg * v(1),
+         rad_to_deg * v(2),
+         rad_to_deg * v(3),
+         rad_to_deg * v(4),
+         rad_to_deg * v(5),
+         rad_to_deg * v(6));
 }
 
 inline void printMat3(const char* label, const Mat3& m) {
@@ -363,31 +405,47 @@ inline void printJointStartEndTable(const Vec7& q_start, const Vec7& q_final) {
   printf("]\n");
 }
 
-inline void printParameters(const Parameters& params) {
-  printf("\nController summary:\n");
-  printf("experiment_duration [s]: %.6f\n", params.experiment_duration);
-  if (params.experiment_duration <= 0.0) {
-    printf("time mode: indefinite run, stop with e + Enter\n");
-  } else {
-    printf("time mode: automatic stop after experiment_duration, or earlier with e + Enter\n");
+inline void printJointStartEndTableDeg(const Vec7& q_start, const Vec7& q_final) {
+  const double rad_to_deg = 180.0 / M_PI;
+  printf("\nJoint motion [deg]:\n");
+  printf("joint | start | final | delta\n");
+  for (int i = 0; i < 7; ++i) {
+    printf("q%d    | %7.1f | %7.1f | %+7.1f\n",
+           i + 1,
+           rad_to_deg * q_start(i),
+           rad_to_deg * q_final(i),
+           rad_to_deg * (q_final(i) - q_start(i)));
   }
+}
 
-  printf("constraint_enabled: %d\n", params.constraint_enabled ? 1 : 0);
-  printf("use_contact_search: %d\n", params.use_contact_search ? 1 : 0);
-  printf("align_orientation_to_surface_after_contact: %d\n",
-         params.align_orientation_to_surface_after_contact ? 1 : 0);
-  printf("q_init_case: %s\n", params.q_init_case.c_str());
-  printVec3("surface_normal", params.surface_normal);
-  printVec3("surface_tangent_hint", params.surface_tangent_hint);
-  printf("fix_R in surface frame [normal tangent1 tangent2]: %d %d %d\n",
+inline void printParameters(const Parameters& params) {
+  printf("\n=== Controller setup ===\n");
+  if (params.experiment_duration <= 0.0) {
+    printf("time: indefinite, stop with e + Enter\n");
+  } else {
+    printf("time: %.1f s, or stop with e + Enter\n", params.experiment_duration);
+  }
+  printf("q_init: %s | contact: %s | orientation_test: %s\n",
+         params.q_init_case.c_str(),
+         params.use_contact_search ? "on" : "off",
+         params.orientation_test_only ? "on" : "off");
+  printf("phases: %s | virtual_center: %s | vcr_offset: %.1f mm\n",
+         params.use_phase_sequence ? "on" : "off",
+         params.use_virtual_center_after_contact ? "on" : "off",
+         1000.0 * params.vcr_offset);
+  printVec3("surface_n", params.surface_normal);
+  printf("rot_axes [normal, tangent1, tangent2] = [%d, %d, %d]\n",
          params.fix_R_x ? 1 : 0,
          params.fix_R_y ? 1 : 0,
          params.fix_R_z ? 1 : 0);
-  printVec3("Kp_diag_N_per_m", params.Kp_diag);
-  printVec3("Dp_diag_Ns_per_m", params.Dp_diag);
-  printVec3("KR_diag_Nm_per_rad", params.KR_diag);
-  printVec3("DR_diag_Nms_per_rad", params.DR_diag);
-  printf("nullspace gains: k_start=%.6f damping=%.6f k_sigma=%.6f tau_max=%.6f\n",
+  printf("orient_tol: %.1f deg | post_align: %.1f s\n",
+         (180.0 / M_PI) * params.orient_phase_error_threshold,
+         params.post_contact_align_duration);
+  printVec3("Kp", params.Kp_diag);
+  printVec3("Dp", params.Dp_diag);
+  printVec3("KR", params.KR_diag);
+  printVec3("DR", params.DR_diag);
+  printf("nullspace: k_start=%.2f damping=%.2f k_sigma=%.2f tau_max=%.2f Nm\n",
          params.nullspace_k_start,
          params.nullspace_damping,
          params.nullspace_k_sigma,
@@ -424,12 +482,17 @@ inline Mat3 makeSurfaceFrame(const Parameters& params) {
   return R_surface;
 }
 
-inline Mat3 makeToolOrientationParallelToSurface(const Mat3& R_surface) {
+inline Mat3 makeToolOrientationParallelToSurface(const Mat3& R_surface, const Mat3& R_start) {
   const Vec3 normal = R_surface.col(0);
-  const Vec3 tangent1 = R_surface.col(1);
+  Vec3 x_axis = R_start.col(0) - normal * normal.dot(R_start.col(0));
+
+  if (x_axis.norm() <= 1e-9) {
+    x_axis = R_surface.col(1);
+  }
+  x_axis.normalize();
 
   Mat3 R_tool;
-  R_tool.col(0) = tangent1;
+  R_tool.col(0) = x_axis;
   R_tool.col(2) = -normal;
   R_tool.col(1) = R_tool.col(2).cross(R_tool.col(0));
   R_tool.col(1).normalize();
@@ -660,16 +723,14 @@ inline void printFinalSummary(
     const Vec3& final_e_p,
     const Vec3& final_e_R,
     const std::string& csv_file_name) {
-  printf("\nExperiment finished.\n");
-  printVec3("final_p_d_m", final_p_d);
-  printVec3("final_p_EE_m", final_p_EE);
-  printVec3("final_e_p_m", final_e_p);
-  printf("Final position error norm [m]:   %.6f\n", final_e_p.norm());
-  printf("Final position error norm [mm]:  %.6f\n", 1000.0 * final_e_p.norm());
-  printVec3("final_e_R_rad", final_e_R);
-  printf("Final rotation error norm [rad]: %.6f\n", final_e_R.norm());
-  printf("Final rotation error norm [deg]: %.6f\n", (180.0 / M_PI) * final_e_R.norm());
-  printf("CSV log written to: %s\n", csv_file_name.c_str());
+  printf("\n=== Final result ===\n");
+  printVec3Mm("p_d", final_p_d);
+  printVec3Mm("p_EE", final_p_EE);
+  printVec3Mm("e_p", final_e_p);
+  printf("position_error = %.2f mm\n", 1000.0 * final_e_p.norm());
+  printVec3Deg("e_R", final_e_R);
+  printf("rotation_error = %.2f deg\n", (180.0 / M_PI) * final_e_R.norm());
+  printf("csv: %s\n", csv_file_name.c_str());
 }
 
 inline void writeLogToCsv(

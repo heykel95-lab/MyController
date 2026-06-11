@@ -63,10 +63,53 @@ surface_tangent_hint_x = 1.0
 surface_tangent_hint_y = 0.0
 surface_tangent_hint_z = 0.0
 
-# 1 = after contact, use a desired tool orientation parallel to the surface.
+# 1 = use a desired tool orientation parallel to the surface.
 # For the horizontal table, this makes tool z point downward along -base z.
-# Before contact, the controller still uses the tilted q_init orientation.
 align_orientation_to_surface_after_contact = 1
+
+# 1 = test only the rotation part:
+#     hold the TCP position, rotate toward R_d_surface, and do not start contact search.
+# Set this back to 0 when the orientation control is verified.
+orientation_test_only = 0
+
+# Extra test rotation around surface tangent1 [deg], applied to the start orientation R_d.
+# For the horizontal table this is a pure test rotation around base x from the start pose.
+# If this is 0, orientation_test_only targets the horizontal surface orientation R_d_surface.
+# This is only used when orientation_test_only = 1.
+orientation_test_extra_tilt_deg = 0.0
+
+# ------------------------------------------------------------------
+# Phase sequence for tilted-tool alignment
+# ------------------------------------------------------------------
+# use_phase_sequence = 1 runs the controller in this order:
+#   1. orient_to_surface:
+#      rotate the tool at the start position until R_EE is parallel to
+#      the virtual surface orientation R_d_surface.
+#   2. search_first_contact:
+#      translate in contact_search_direction while keeping R_EE near R_d_surface.
+#   3. post_contact_align:
+#      after first contact, keep the detected contact point as the virtual
+#      plane point and continue rotational alignment.
+#   4. surface_impedance:
+#      normal constrained impedance experiment.
+use_phase_sequence = 1
+
+# Minimum time spent in orient_to_surface before switching [s].
+orient_phase_min_time = 0.5
+
+# Orientation error threshold for switching from orient_to_surface to search [rad].
+orient_phase_error_threshold = 0.07
+
+# Time spent in post_contact_align after first contact [s].
+post_contact_align_duration = 3.0
+
+# Virtual center of rotation in the post-contact alignment phase:
+#   p_c = p_contact + vcr_offset * surface_normal
+# vcr_offset = 0.0 -> virtual center on the detected surface point.
+# vcr_offset > 0.0 -> above the surface along surface_normal.
+# vcr_offset < 0.0 -> below the surface.
+use_virtual_center_after_contact = 1
+vcr_offset = 0.0
 
 # ------------------------------------------------------------------
 # Automatic contact search for the virtual surface point
@@ -204,12 +247,12 @@ Dp_y = 20.0
 Dp_z = 20.0
 
 KR_x = 8.0
-KR_y = 2.0
-KR_z = 15.0
+KR_y = 80.0
+KR_z = 40.0
 
 DR_x = 4.0
-DR_y = 2.0
-DR_z = 7.0
+DR_y = 15.0
+DR_z = 12.0
 
 # ------------------------------------------------------------------
 # Franka collision/contact threshold tuning

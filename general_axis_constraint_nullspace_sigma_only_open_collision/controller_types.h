@@ -15,6 +15,14 @@ struct Parameters {
   Vec3 surface_normal = Vec3(1.0, 0.0, 0.0);
   Vec3 surface_tangent_hint = Vec3(0.0, 1.0, 0.0);
   bool align_orientation_to_surface_after_contact = false;
+  bool orientation_test_only = false;
+  double orientation_test_extra_tilt_deg = 0.0;
+  bool use_phase_sequence = true;
+  double orient_phase_min_time = 0.5;
+  double orient_phase_error_threshold = 0.03;
+  double post_contact_align_duration = 3.0;
+  bool use_virtual_center_after_contact = false;
+  double vcr_offset = 0.0;
 
   bool use_contact_search = false;
   Vec3 contact_search_direction = Vec3(0.0, 0.0, -1.0);

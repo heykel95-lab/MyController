@@ -2,6 +2,27 @@
 // The controller_common.h header is included by controller_types.h, so it is not needed here.
 #include "controller_helpers.h"
 
+enum class ControlPhase {
+  kOrientToSurface,
+  kSearchFirstContact,
+  kPostContactAlign,
+  kSurfaceImpedance
+};
+
+const char* phaseName(ControlPhase phase) {
+  switch (phase) {
+    case ControlPhase::kOrientToSurface:
+      return "orient_to_surface";
+    case ControlPhase::kSearchFirstContact:
+      return "search_first_contact";
+    case ControlPhase::kPostContactAlign:
+      return "post_contact_align";
+    case ControlPhase::kSurfaceImpedance:
+      return "surface_impedance";
+  }
+  return "unknown";
+}
+
 // Main function
 
 int main() {
@@ -64,7 +85,6 @@ int main() {
 
     // Extracting the initial joint angles Array and mapping them to a q_start vector with 7 elements (Vec7)
     Vec7 q_start = Map<const Vec7>(initial_state.q.data());
-    printVec7("q_start_rad", q_start);
 
     // Extracting the initial external wrench (force and torque) estimated by the robot,
     // and storing the initial external force for use in contact search in a initial_external_wrench vector with 6 elements (Vec6).
@@ -99,11 +119,13 @@ int main() {
     // Defining the Rotation matrix from the surface frame to the robot base frame
 
     const Mat3 R_surface = makeSurfaceFrame(params);
-    const Mat3 R_d_surface = makeToolOrientationParallelToSurface(R_surface);
-    printMat4x4("T_initial", T_initial);
-    printMat3("R_d", R_d);
-    printMat3("R_d_surface", R_d_surface);
-    printMat3("R_surface", R_surface);
+    const Mat3 R_d_surface = makeToolOrientationParallelToSurface(R_surface, R_d);
+    const double orientation_test_extra_tilt_rad =
+        params.orientation_test_extra_tilt_deg * M_PI / 180.0;
+    const Mat3 R_d_orientation_test =
+        (std::abs(orientation_test_extra_tilt_rad) > 1e-9)
+            ? Eigen::AngleAxisd(orientation_test_extra_tilt_rad, R_surface.col(1)).toRotationMatrix() * R_d
+            : R_d_surface;
     // The surface frame is defined based on the surface normal and tangent hint from parameters.txt.
     // The makeSurfaceFrame function constructs an orthonormal frame where the first column is the surface normal,
     // and the other two columns are tangent directions. This frame is used to define the directions of the impedance control gains.
@@ -113,17 +135,18 @@ int main() {
         normalizedOrFallback(params.contact_search_direction, -R_surface.col(0));
     const Mat3 Kp_search = params.contact_search_Kp_diag.asDiagonal();
     const Mat3 Dp_search = params.contact_search_Dp_diag.asDiagonal();
-    bool searching_contact = params.use_contact_search;
+    ControlPhase phase = ControlPhase::kSurfaceImpedance;
+    if (params.orientation_test_only) {
+      phase = ControlPhase::kOrientToSurface;
+    } else if (params.use_contact_search) {
+      phase = params.use_phase_sequence
+          ? ControlPhase::kOrientToSurface
+          : ControlPhase::kSearchFirstContact;
+    }
+    double phase_start_time = 0.0;
     bool contact_found = !params.use_contact_search;
     bool contact_search_failed = false;
     double contact_time = 0.0;
-
-    // The tool axes in the robot base frame are given by the columns of R_d, which is the initial rotation of the end-effector.
-
-    // The Orientation of the tool in the base frame
-    Vec3 tool_x_axis = R_d.col(0);
-    Vec3 tool_y_axis = R_d.col(1);
-    Vec3 tool_z_axis = R_d.col(2);
 
     // Define the desired final target position as the initial position in hold_mode = 1/true
     // If hold_mode = 0/false, use p_start + delta_p for the move mode.
@@ -133,23 +156,10 @@ int main() {
     if (!params.hold_mode) {
       p_end = p_start + params.delta_p;
     }
-    // Print the tool start Position and the desired target Position unit in meters [m]
-    printVec3("p_start_m", p_start);
-    printVec3("p_end_m", p_end);
-
-    // Print the tool axes Rotation in the Robot Base frame  from R_d unit [-]
-    printVec3("tool_x_axis_base", tool_x_axis);
-    printVec3("tool_y_axis_base", tool_y_axis);
-    printVec3("tool_z_axis_base", tool_z_axis);
-
-    // Print the constraint status and the surface frame information for confirmation before starting the control loop.
-    if (params.constraint_enabled) {
-      printf("Surface constraint active: Kp_x/Dp_x are normal gains, y/z are tangent gains.\n");
-      if (params.use_contact_search) {
-        printf("Contact search active: virtual surface point will be set from detected contact.\n");
-      }
-      printf("Rotation: fixed components keep rotational stiffness; free components have no rotational spring.\n");
-    }
+    printf("\n=== Start pose ===\n");
+    printVec7Deg("q_start", q_start);
+    printVec3Mm("p_start", p_start);
+    printVec3Mm("p_target", p_end);
 
     // The controller gains are defined based on the parameters read from parameters.txt.
     // If the constraint is enabled, the gains are transformed from the surface frame to the robot base frame using the R_surface rotation matrix.
@@ -166,12 +176,8 @@ int main() {
     Mat3 DR = params.constraint_enabled
         ? makeSpatialGainMatrix(params.DR_diag, R_surface)
         : params.DR_diag.asDiagonal();
-    printMat3("Kp", Kp);
-    printMat3("Dp", Dp);
-    printMat3("KR", KR);
-    printMat3("DR", DR);
-    printMat3("Kp_search", Kp_search);
-    printMat3("Dp_search", Dp_search);
+    printf("\n=== Run ===\n");
+    printf("phase: %s\n", phaseName(phase));
 
     // The log_data vector will store the data for each control cycle, which will be written to a CSV file at the end of the experiment.
     std::vector<LogData> log_data;
@@ -185,6 +191,7 @@ int main() {
     Vec3 final_e_p = Vec3::Zero();
     Vec3 final_e_R = Vec3::Zero();
     Vec7 final_q = q_start;
+    double next_orientation_debug_time = 0.0;
 
     // Print the starting message and instructions for the user before entering the control loop.
     printf("Starting impedance controller:\n");
@@ -262,7 +269,18 @@ int main() {
       Map<const Mat4x4> T_EE(state.O_T_EE.data());
       Vec3 p_EE = T_EE.block<3, 1>(0, 3);
       Mat3 R_EE = T_EE.block<3, 3>(0, 0);
-      // The desired rotation R_d is constant in this experiment, set from the initial EE pose.
+      // R_d is the initial tool orientation. R_d_surface is the desired tool
+      // orientation parallel to the virtual surface.
+      // In orientation_test_only, R_d_orientation_test adds an extra rotation
+      // around surface tangent1. For the horizontal table this is base x.
+      //
+      // With use_phase_sequence = 1:
+      //   1. orient_to_surface: rotate at the start position until R_EE ~= R_d_surface
+      //   2. search_first_contact: translate along contact_search_direction
+      //      while keeping R_EE ~= R_d_surface
+      //   3. post_contact_align: keep the first contact point as the virtual
+      //      plane point and continue rotational alignment
+      //   4. surface_impedance: normal surface impedance experiment
       Map<const Vec6> external_wrench(state.O_F_ext_hat_K.data());
       const Vec3 external_force_delta = external_wrench.head<3>() - external_force_start;
       // The control logic is as follows:
@@ -284,11 +302,46 @@ int main() {
       // The impedance_time variable is used to keep track of the time since the start of impedance control,
       // which is used for logging and for the duration condition to end the experiment.
       double impedance_time = time;
-      // Computing the desired motion for this control cycle
-      // based on the current mode (searching for contact or impedance control) and the elapsed time.
-      if (searching_contact) {
+      const bool orienting_to_surface = (phase == ControlPhase::kOrientToSurface);
+      const Mat3& R_d_phase =
+          params.orientation_test_only ? R_d_orientation_test : R_d_surface;
+
+      const Vec3 e_R_to_surface =
+          applyRotationalAxisMask(params, orientationError(R_EE, R_d_phase), R_surface);
+      const double tool_z_dot = std::max(
+          -1.0,
+          std::min(1.0, R_EE.col(2).dot(R_d_phase.col(2))));
+      const double tool_z_alignment_error = std::acos(tool_z_dot);
+      if (orienting_to_surface &&
+          !params.orientation_test_only &&
+          (time - phase_start_time) >= params.orient_phase_min_time &&
+          tool_z_alignment_error <= params.orient_phase_error_threshold) {
+        phase = params.use_contact_search
+            ? ControlPhase::kSearchFirstContact
+            : ControlPhase::kSurfaceImpedance;
+        phase_start_time = time;
+        printf("\nOrientation reached: z_error = %.2f deg, full_error = %.2f deg\n",
+               (180.0 / M_PI) * tool_z_alignment_error,
+               (180.0 / M_PI) * e_R_to_surface.norm());
+        printf("phase: %s\n", phaseName(phase));
+      }
+
+      if (phase == ControlPhase::kPostContactAlign &&
+          (time - phase_start_time) >= params.post_contact_align_duration) {
+        phase = ControlPhase::kSurfaceImpedance;
+        phase_start_time = time;
+        printf("\nphase: %s\n", phaseName(phase));
+      }
+
+      // Computing the desired motion for this control cycle based on the
+      // active phase.
+      if (phase == ControlPhase::kOrientToSurface) {
+        // Rotate the tool first, but keep the TCP at the start position.
+        desired.p_d = p_start;
+        desired.pdot_d.setZero();
+      } else if (phase == ControlPhase::kSearchFirstContact) {
         const double search_distance =
-            std::min(params.contact_search_speed * time,
+            std::min(params.contact_search_speed * (time - phase_start_time),
                      params.contact_search_max_distance);
 
         // During contact search, keep the full Cartesian target from the
@@ -319,13 +372,17 @@ int main() {
             search_distance >= params.contact_search_min_distance;
         if (contact_distance_reached && force_delta_norm >= params.contact_force_threshold) {
           surface_point_runtime = p_EE;
-          searching_contact = false;
           contact_found = true;
           contact_time = time;
-          printf("\nContact found. Virtual surface point set from current TCP position.\n");
-          printf("search_distance [m]: %.6f\n", search_distance);
-          printf("external force change norm [N]: %.6f\n", force_delta_norm);
-          printVec3("surface_point_runtime_m", surface_point_runtime);
+          phase = params.use_phase_sequence
+              ? ControlPhase::kPostContactAlign
+              : ControlPhase::kSurfaceImpedance;
+          phase_start_time = time;
+          printf("\nContact found: search = %.1f mm, force_delta = %.1f N\n",
+                 1000.0 * search_distance,
+                 force_delta_norm);
+          printVec3Mm("surface_point", surface_point_runtime);
+          printf("phase: %s\n", phaseName(phase));
         // If the maximum search distance is reached without detecting contact, stop the controller and log the final data.
         } else if (search_distance >= params.contact_search_max_distance) {
           contact_search_failed = true;
@@ -333,13 +390,10 @@ int main() {
           desired.p_d = p_EE;
           desired.pdot_d.setZero();
         }
-      }
-      // If contact is found or contact search is not enabled, compute the desired motion
-      // based on the current EE position and the virtual surface point.
-      // The desired position is computed based on the current EE position, the virtual surface point,
-      // and the surface normal, to create a plane constraint.
-      if (contact_found) {
-        impedance_time = params.use_contact_search ? (time - contact_time) : time;
+      } else {
+        if (contact_found) {
+          impedance_time = params.use_contact_search ? (time - contact_time) : time;
+        }
         desired = computeDesiredMotion(
             params,
             impedance_time,
@@ -348,17 +402,42 @@ int main() {
             R_surface,
             surface_point_runtime);
       }
+
+      // If contact is found or contact search is not enabled, compute the desired motion
+      // based on the current EE position and the virtual surface point.
+      // The desired position is computed based on the current EE position, the virtual surface point,
+      // and the surface normal, to create a plane constraint.
       // The position error e_p and orientation error e_R are computed
       // based on the desired position and the current EE position and orientation.
       Vec3 e_p = desired.p_d - p_EE;
-      const Mat3& R_d_used =
-          (contact_found && params.align_orientation_to_surface_after_contact) ? R_d_surface : R_d;
+      const bool use_surface_orientation =
+          params.orientation_test_only ||
+          params.use_phase_sequence ||
+          (contact_found && params.align_orientation_to_surface_after_contact);
+      const Mat3& R_d_used = params.orientation_test_only
+          ? R_d_orientation_test
+          : (use_surface_orientation ? R_d_surface : R_d);
       Vec3 e_R = applyRotationalAxisMask(params, orientationError(R_EE, R_d_used), R_surface);
+      const Vec3 e_R_surface = R_surface.transpose() * e_R;
+
+      if (phase == ControlPhase::kPostContactAlign && params.use_virtual_center_after_contact) {
+        // Virtual center of rotation for the post-contact alignment phase:
+        //
+        //   p_c [m] = p_contact [m] + vcr_offset [m] * n_surface [-]
+        //   r_c [m] = p_EE [m] - p_c [m]
+        //   e_p [m] = e_p [m] - e_R [rad] x r_c [m]
+        //
+        // This couples the rotational correction into the translational error
+        // so the tool behaves more like it is rotating around p_c.
+        const Vec3 p_c = surface_point_runtime + params.vcr_offset * R_surface.col(0);
+        const Vec3 r_c = p_EE - p_c;
+        e_p = e_p - e_R.cross(r_c);
+      }
 
       // Defining the stiffness and damping matrices to be used in the impedance control law,
       // based on the current mode (searching for contact or impedance control).
-      const Mat3& Kp_used = searching_contact ? Kp_search : Kp;
-      const Mat3& Dp_used = searching_contact ? Dp_search : Dp;
+      const Mat3& Kp_used = (phase == ControlPhase::kSearchFirstContact) ? Kp_search : Kp;
+      const Mat3& Dp_used = (phase == ControlPhase::kSearchFirstContact) ? Dp_search : Dp;
       const Mat3& KR_used = KR;
       const Mat3& DR_used = DR;
       // Comuting forces and torques from the impedance control law:
@@ -372,12 +451,23 @@ int main() {
       // by mapping the task-space wrench through the Jacobian transpose.
 
       Vec7 tau_task = J.transpose() * wrench;
+      if (params.orientation_test_only && time >= next_orientation_debug_time) {
+        printf("\norientation_debug:\n");
+        printf("time_s = %.3f\n", time);
+        printVec3Deg("e_R_base", e_R);
+        printVec3Deg("e_R_surface", e_R_surface);
+        printVec3("m_cmd_Nm", m);
+        printf("tau_task_norm_Nm = %.6f\n", tau_task.norm());
+        next_orientation_debug_time += 0.5;
+      }
       // During contact search, keep the nullspace torque off.
       // The search phase should only move the TCP downward to find the table.
       // After contact is found, the normal surface impedance starts and the
       // nullspace optimization is enabled again.
       Vec7 tau_nullspace = Vec7::Zero();
-      if (!searching_contact) {
+      if ((phase != ControlPhase::kOrientToSurface) &&
+          (phase != ControlPhase::kSearchFirstContact) &&
+          !params.orientation_test_only) {
         tau_nullspace = computeNullspaceTorque(params, model, state, J, dq, q_start);
       }
 
@@ -426,8 +516,7 @@ int main() {
     if (contact_search_failed) {
       printf("\nContact search stopped: maximum search distance reached before contact.\n");
     }
-    printJointStartEndTable(q_start, final_q);
-    printVec7("q_final_rad", final_q);
+    printJointStartEndTableDeg(q_start, final_q);
 
     // After the control loop finishes, write the logged data to a CSV file and print the final summary of the experiment results.
     writeLogToCsv(log_data, params.csv_file_name);
