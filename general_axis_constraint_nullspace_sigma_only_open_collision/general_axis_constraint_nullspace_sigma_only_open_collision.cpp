@@ -36,13 +36,13 @@ int main() {
     // Connect to the robot. This will block until a connection is established.
     Robot robot(params.robot_ip);
 
-    printf("\nPress Enter to recover the robot if needed and move to the initial joint configuration.\n");
+    printf("\nPress Enter to recover/configure and move to q_init.\n");
     std::cin.ignore();
 
     // If the robot is in an error/reflex state, try to recover automatically.
     try {
       robot.automaticErrorRecovery();
-      printf("Automatic error recovery finished or was not necessary.\n");
+      printf("Robot recovered or already ready.\n");
     } catch (const franka::Exception& e) {
       fprintf(stderr, "Automatic error recovery failed: %s\n", e.what());
       fprintf(stderr, "Please recover/unlock the robot manually in Franka Desk.\n");
@@ -57,13 +57,13 @@ int main() {
     // The second argument is the target joint configuration, which is read from parameters.txt.
     MotionGenerator motion_generator(0.4, params.q_init);
 
-    printf("\nMoving to the initial joint configuration after the single startup confirmation...\n");
+    printf("Moving to q_init...\n");
     // The robot.control() function takes a lambda function as an argument, which is called at the robot control rate (normally 1 kHz).
     // The lambda function is responsible for generating the desired joint torques for each control cycle.
     // In this case, we pass the motion_generator object, which is a callable that generates the desired joint torques to move to the initial configuration.
     robot.control(motion_generator);
 
-    printf("Finished moving to initial joint configuration.\n");
+    printf("q_init reached.\n");
 
     // Load the robot model, which is needed for the controller and nullspace optimization.
     // The model contains the robot's kinematics and dynamics, and is used to compute the Jacobian, Coriolis forces, etc.

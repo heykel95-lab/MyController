@@ -527,11 +527,11 @@ inline void configureCollisionBehavior(Robot& robot, const Parameters& params) {
   setDefaultBehavior(robot);
 
   if (!params.use_custom_collision_behavior) {
-    printf("Using setDefaultBehavior(robot) collision thresholds only.\n");
+    printf("Collision: default thresholds.\n");
     return;
   }
 
-  printf("Applying custom robot.setCollisionBehavior(...) thresholds.\n");
+  printf("Collision: custom thresholds.\n");
 
   const Array7 collision_torque_acc = filledArray7(params.collision_torque_acc);
   const Array7 collision_torque_nom = filledArray7(params.collision_torque_nom);
