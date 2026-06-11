@@ -7,7 +7,12 @@ TARGET := general_axis_constraint_nullspace_sigma_only_open_collision
 TOOL_OFFSET_TARGET := check_tool_offset
 SRC := general_axis_constraint_nullspace_sigma_only_open_collision.cpp
 TOOL_OFFSET_SRC := check_tool_offset.cpp
-HEADERS := controller_common.h controller_types.h controller_helpers.h
+HEADERS := controller_common.h \
+           controller_types.h \
+           controller_helpers.h \
+           controller_parameters.h \
+           controller_logging.h \
+           controller_printing.h
 
 FRANKA_DIR := /home/hm-panda/libfranka
 EIGEN_INC := /usr/include/eigen3

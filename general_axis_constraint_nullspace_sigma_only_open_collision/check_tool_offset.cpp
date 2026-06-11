@@ -1,4 +1,5 @@
 #include "controller_helpers.h"
+#include "controller_parameters.h"
 
 void printTransform(const char* name, const std::array<double, 16>& transform) {
   printf("%s:\n", name);

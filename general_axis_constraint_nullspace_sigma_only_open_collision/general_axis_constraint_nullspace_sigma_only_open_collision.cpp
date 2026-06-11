@@ -1,6 +1,8 @@
 // Include the controller types and helper functions for this experiment.
 // The controller_common.h header is included by controller_types.h, so it is not needed here.
 #include "controller_helpers.h"
+#include "controller_logging.h"
+#include "controller_parameters.h"
 #include "controller_printing.h"
 
 enum class ControlPhase {
