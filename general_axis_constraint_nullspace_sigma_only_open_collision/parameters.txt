@@ -28,9 +28,9 @@ hold_mode = 1
 #
 # The impedance gains are chosen in the surface frame:
 #
-#   x = surface normal direction
-#   y = first tangent direction
-#   z = second tangent direction
+#   normal   = surface normal direction
+#   tangent1 = first tangent direction
+#   tangent2 = second tangent direction
 #
 # Then the code transforms them to the robot base frame:
 #
@@ -65,9 +65,22 @@ surface_normal_z = 0.940
 #surface_normal_y = 0.0
 #surface_normal_z = 1.0
 
-surface_tangent_hint_x = 1.0
-surface_tangent_hint_y = 0.0
-surface_tangent_hint_z = 0.0
+# Only tangent1 is entered by the user. The code removes any normal component:
+#   tangent1 = normalize(tangent1 - normal * dot(normal, tangent1))
+# and computes:
+#   tangent2 = normalize(normal x tangent1)
+surface_tangent1_x = 1.0
+surface_tangent1_y = 0.0
+surface_tangent1_z = 0.0
+
+# Physical tool axis in the EE frame. This is different from the surface frame.
+# The alignment phase enforces:
+#   R_desired * tool_axis_ee = tool_axis_target_sign * surface_normal
+# Usually tool_axis_target_sign = -1 means the tool points into the surface.
+tool_axis_ee_x = 0.0
+tool_axis_ee_y = 0.0
+tool_axis_ee_z = 1.0
+tool_axis_target_sign = -1.0
 
 # 1 = use a desired tool orientation parallel to the surface.
 # For the horizontal table, this makes tool z point downward along -base z.
@@ -124,9 +137,11 @@ vcr_offset = 1.0
 #   Before the surface impedance starts, the TCP moves slowly in
 #   contact_search_direction until contact is detected.
 #
-# Contact detection uses the estimated external force only as a trigger:
+# Contact detection uses estimated external force and moment only as triggers:
 #
-#   ||F_ext - F_ext_start|| > contact_force_threshold
+#   ||F_ext - F_bias|| > contact_force_threshold
+#   or
+#   ||M_ext - M_bias|| > contact_moment_threshold
 #
 # This is not force control. After the trigger, the current TCP position
 # becomes the virtual surface point:
@@ -150,8 +165,17 @@ contact_search_max_distance = 0.540
 # The last false trigger happened at 0.300 m.
 contact_search_min_distance = 0.430
 
-# Contact trigger threshold [N] using force change from start.
+# Contact trigger thresholds during search.
 contact_force_threshold = 12.0
+contact_moment_threshold = 2.0
+contact_require_force_and_moment = 0
+
+# Contact trigger thresholds during the first orientation-alignment phase.
+# Moment detection is useful if one tool edge touches before a large force appears.
+detect_contact_during_alignment = 1
+alignment_contact_force_threshold = 12.0
+alignment_contact_moment_threshold = 2.0
+alignment_contact_require_force_and_moment = 0
 
 # Softer Cartesian gains used only during contact search.
 contact_search_Kp_x = 150.0
@@ -163,10 +187,10 @@ contact_search_Dp_y = 25.0
 contact_search_Dp_z = 25.0
 
 # Rotation:
-# fix_R is interpreted in the surface frame:
-#   x = rotation around surface normal
-#   y = rotation around first tangent direction
-#   z = rotation around second tangent direction
+# These rotational constraint flags are interpreted in the surface frame:
+#   normal   = rotation around surface normal
+#   tangent1 = rotation around first tangent direction
+#   tangent2 = rotation around second tangent direction
 #
 # For the current horizontal surface:
 #   surface normal = base z
@@ -174,18 +198,18 @@ contact_search_Dp_z = 25.0
 #   tangent2       = base y
 #
 # Therefore:
-#   fix_R_x -> rotation around surface normal -> base z
-#   fix_R_y -> rotation around tangent1       -> base x
-#   fix_R_z -> rotation around tangent2       -> base y
+#   constrain_rotation_about_surface_normal   -> base z
+#   constrain_rotation_about_surface_tangent1 -> base x
+#   constrain_rotation_about_surface_tangent2 -> base y
 #
-#   fix_R_i = 1 -> keep rotational stiffness in this surface-frame component
-#   fix_R_i = 0 -> set e_R_i = 0, no rotational spring in this component
+#   1 -> keep rotational stiffness in this surface-frame component
+#   0 -> set e_R component to 0, no rotational spring in this component
 #
 # Damping still acts if DR_i > 0.
-# For a fully free rotational component, set fix_R_i = 0 and DR_i = 0.
-fix_R_x = 1
-fix_R_y = 1
-fix_R_z = 1
+# For a fully free rotational component, set its flag = 0 and damping = 0.
+constrain_rotation_about_surface_normal = 1
+constrain_rotation_about_surface_tangent1 = 1
+constrain_rotation_about_surface_tangent2 = 1
 
 # Not used when hold_mode = 1 and constraint_enabled = 1
 delta_p_x = 0.005
@@ -241,24 +265,24 @@ q_init_table_7 = 0.745537
 # Gains
 # ------------------------------------------------------------------
 # In surface mode:
-#   Kp_x/Dp_x = normal-to-surface stiffness/damping
-#   Kp_y/Dp_y = first tangent stiffness/damping
-#   Kp_z/Dp_z = second tangent stiffness/damping
-Kp_x = 7000.0
-Kp_y = 100.0
-Kp_z = 100.0
+#   normal   = normal-to-surface stiffness/damping
+#   tangent1 = first tangent stiffness/damping
+#   tangent2 = second tangent stiffness/damping
+Kp_normal = 7000.0
+Kp_tangent1 = 100.0
+Kp_tangent2 = 100.0
 
-Dp_x = 220.0
-Dp_y = 20.0
-Dp_z = 20.0
+Dp_normal = 220.0
+Dp_tangent1 = 20.0
+Dp_tangent2 = 20.0
 
-KR_x = 8.0
-KR_y = 80.0
-KR_z = 40.0
+KR_normal = 8.0
+KR_tangent1 = 80.0
+KR_tangent2 = 40.0
 
-DR_x = 4.0
-DR_y = 15.0
-DR_z = 12.0
+DR_normal = 4.0
+DR_tangent1 = 15.0
+DR_tangent2 = 12.0
 
 # ------------------------------------------------------------------
 # Franka collision/contact threshold tuning

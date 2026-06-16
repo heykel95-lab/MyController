@@ -98,6 +98,12 @@ inline Parameters readParameters(const std::string& filename) {
   auto getBool = [&](const std::string& key, bool def) {
     return values.count(key) ? (std::stoi(values[key]) != 0) : def;
   };
+  auto getDoubleAlias = [&](const std::string& new_key, const std::string& old_key, double def) {
+    return getDouble(new_key, getDouble(old_key, def));
+  };
+  auto getBoolAlias = [&](const std::string& new_key, const std::string& old_key, bool def) {
+    return getBool(new_key, getBool(old_key, def));
+  };
 
   p.robot_ip = getString("robot_ip", p.robot_ip);
   p.experiment_duration = getDouble("experiment_duration", p.experiment_duration);
@@ -113,9 +119,17 @@ inline Parameters readParameters(const std::string& filename) {
   p.surface_normal(0) = getDouble("surface_normal_x", p.surface_normal(0));
   p.surface_normal(1) = getDouble("surface_normal_y", p.surface_normal(1));
   p.surface_normal(2) = getDouble("surface_normal_z", p.surface_normal(2));
-  p.surface_tangent_hint(0) = getDouble("surface_tangent_hint_x", p.surface_tangent_hint(0));
-  p.surface_tangent_hint(1) = getDouble("surface_tangent_hint_y", p.surface_tangent_hint(1));
-  p.surface_tangent_hint(2) = getDouble("surface_tangent_hint_z", p.surface_tangent_hint(2));
+  p.surface_tangent1(0) =
+      getDoubleAlias("surface_tangent1_x", "surface_tangent_hint_x", p.surface_tangent1(0));
+  p.surface_tangent1(1) =
+      getDoubleAlias("surface_tangent1_y", "surface_tangent_hint_y", p.surface_tangent1(1));
+  p.surface_tangent1(2) =
+      getDoubleAlias("surface_tangent1_z", "surface_tangent_hint_z", p.surface_tangent1(2));
+  p.tool_axis_ee(0) = getDouble("tool_axis_ee_x", p.tool_axis_ee(0));
+  p.tool_axis_ee(1) = getDouble("tool_axis_ee_y", p.tool_axis_ee(1));
+  p.tool_axis_ee(2) = getDouble("tool_axis_ee_z", p.tool_axis_ee(2));
+  p.tool_axis_target_sign =
+      getDouble("tool_axis_target_sign", p.tool_axis_target_sign);
   p.align_orientation_to_surface_after_contact =
       getBool("align_orientation_to_surface_after_contact",
               p.align_orientation_to_surface_after_contact);
@@ -142,6 +156,19 @@ inline Parameters readParameters(const std::string& filename) {
   p.contact_search_min_distance =
       getDouble("contact_search_min_distance", p.contact_search_min_distance);
   p.contact_force_threshold = getDouble("contact_force_threshold", p.contact_force_threshold);
+  p.contact_moment_threshold =
+      getDouble("contact_moment_threshold", p.contact_moment_threshold);
+  p.contact_require_force_and_moment =
+      getBool("contact_require_force_and_moment", p.contact_require_force_and_moment);
+  p.detect_contact_during_alignment =
+      getBool("detect_contact_during_alignment", p.detect_contact_during_alignment);
+  p.alignment_contact_force_threshold =
+      getDouble("alignment_contact_force_threshold", p.alignment_contact_force_threshold);
+  p.alignment_contact_moment_threshold =
+      getDouble("alignment_contact_moment_threshold", p.alignment_contact_moment_threshold);
+  p.alignment_contact_require_force_and_moment =
+      getBool("alignment_contact_require_force_and_moment",
+              p.alignment_contact_require_force_and_moment);
   p.contact_search_Kp_diag(0) = getDouble("contact_search_Kp_x", p.contact_search_Kp_diag(0));
   p.contact_search_Kp_diag(1) = getDouble("contact_search_Kp_y", p.contact_search_Kp_diag(1));
   p.contact_search_Kp_diag(2) = getDouble("contact_search_Kp_z", p.contact_search_Kp_diag(2));
@@ -155,9 +182,18 @@ inline Parameters readParameters(const std::string& filename) {
   p.contact_search_DR_diag(1) = getDouble("contact_search_DR_y", p.contact_search_DR_diag(1));
   p.contact_search_DR_diag(2) = getDouble("contact_search_DR_z", p.contact_search_DR_diag(2));
 
-  p.fix_R_x = getBool("fix_R_x", p.fix_R_x);
-  p.fix_R_y = getBool("fix_R_y", p.fix_R_y);
-  p.fix_R_z = getBool("fix_R_z", p.fix_R_z);
+  p.constrain_rotation_about_surface_normal =
+      getBoolAlias("constrain_rotation_about_surface_normal",
+                   "fix_R_x",
+                   p.constrain_rotation_about_surface_normal);
+  p.constrain_rotation_about_surface_tangent1 =
+      getBoolAlias("constrain_rotation_about_surface_tangent1",
+                   "fix_R_y",
+                   p.constrain_rotation_about_surface_tangent1);
+  p.constrain_rotation_about_surface_tangent2 =
+      getBoolAlias("constrain_rotation_about_surface_tangent2",
+                   "fix_R_z",
+                   p.constrain_rotation_about_surface_tangent2);
 
   p.use_nullspace_optimization = getBool("use_nullspace_optimization", p.use_nullspace_optimization);
   p.nullspace_k_start = getDouble("nullspace_k_start", p.nullspace_k_start);
@@ -171,21 +207,21 @@ inline Parameters readParameters(const std::string& filename) {
   p.delta_p(2) = getDouble("delta_p_z", p.delta_p(2));
   p.trajectory_duration = getDouble("trajectory_duration", p.trajectory_duration);
 
-  p.Kp_diag(0) = getDouble("Kp_x", p.Kp_diag(0));
-  p.Kp_diag(1) = getDouble("Kp_y", p.Kp_diag(1));
-  p.Kp_diag(2) = getDouble("Kp_z", p.Kp_diag(2));
+  p.Kp_diag(0) = getDoubleAlias("Kp_normal", "Kp_x", p.Kp_diag(0));
+  p.Kp_diag(1) = getDoubleAlias("Kp_tangent1", "Kp_y", p.Kp_diag(1));
+  p.Kp_diag(2) = getDoubleAlias("Kp_tangent2", "Kp_z", p.Kp_diag(2));
 
-  p.Dp_diag(0) = getDouble("Dp_x", p.Dp_diag(0));
-  p.Dp_diag(1) = getDouble("Dp_y", p.Dp_diag(1));
-  p.Dp_diag(2) = getDouble("Dp_z", p.Dp_diag(2));
+  p.Dp_diag(0) = getDoubleAlias("Dp_normal", "Dp_x", p.Dp_diag(0));
+  p.Dp_diag(1) = getDoubleAlias("Dp_tangent1", "Dp_y", p.Dp_diag(1));
+  p.Dp_diag(2) = getDoubleAlias("Dp_tangent2", "Dp_z", p.Dp_diag(2));
 
-  p.KR_diag(0) = getDouble("KR_x", p.KR_diag(0));
-  p.KR_diag(1) = getDouble("KR_y", p.KR_diag(1));
-  p.KR_diag(2) = getDouble("KR_z", p.KR_diag(2));
+  p.KR_diag(0) = getDoubleAlias("KR_normal", "KR_x", p.KR_diag(0));
+  p.KR_diag(1) = getDoubleAlias("KR_tangent1", "KR_y", p.KR_diag(1));
+  p.KR_diag(2) = getDoubleAlias("KR_tangent2", "KR_z", p.KR_diag(2));
 
-  p.DR_diag(0) = getDouble("DR_x", p.DR_diag(0));
-  p.DR_diag(1) = getDouble("DR_y", p.DR_diag(1));
-  p.DR_diag(2) = getDouble("DR_z", p.DR_diag(2));
+  p.DR_diag(0) = getDoubleAlias("DR_normal", "DR_x", p.DR_diag(0));
+  p.DR_diag(1) = getDoubleAlias("DR_tangent1", "DR_y", p.DR_diag(1));
+  p.DR_diag(2) = getDoubleAlias("DR_tangent2", "DR_z", p.DR_diag(2));
 
   p.collision_torque_acc = getDouble("collision_torque_acc", p.collision_torque_acc);
   p.collision_torque_nom = getDouble("collision_torque_nom", p.collision_torque_nom);

@@ -25,12 +25,21 @@ X-Y plane:       surface_normal = [0, 0, 1]
 45 degree plane: surface_normal = [0.7071, 0, 0.7071]
 ```
 
+The surface/task frame is:
+
+```text
+R_surface = [normal tangent1 tangent2]
+```
+
+Only `surface_tangent1` is entered by the user. The code computes `tangent2`
+automatically from `normal x tangent1`.
+
 The gains are defined in the surface frame:
 
 ```text
-Kp_x / Dp_x = normal direction
-Kp_y / Dp_y = first tangent direction
-Kp_z / Dp_z = second tangent direction
+Kp_normal / Dp_normal     = normal direction
+Kp_tangent1 / Dp_tangent1 = first tangent direction
+Kp_tangent2 / Dp_tangent2 = second tangent direction
 ```
 
 The code transforms them to the robot base frame:
@@ -42,12 +51,21 @@ D_base = R_surface * D_surface * R_surface^T
 
 ## Rotation
 
-`fix_R_x/y/z` are also interpreted in the surface frame:
+The rotational constraint flags are also interpreted in the surface frame:
 
 ```text
-x = rotation around surface normal
-y = rotation around first tangent
-z = rotation around second tangent
+constrain_rotation_about_surface_normal   = rotation around surface normal
+constrain_rotation_about_surface_tangent1 = rotation around first tangent
+constrain_rotation_about_surface_tangent2 = rotation around second tangent
+```
+
+These components are angle-axis orientation-error components, not yaw/pitch/roll.
+
+Tool alignment is separate from the surface frame. The physical tool axis is
+configured in the end-effector frame:
+
+```text
+R_desired * tool_axis_ee = tool_axis_target_sign * surface_normal
 ```
 
 ## Nullspace
@@ -67,7 +85,9 @@ Optional contact search can set the virtual surface point automatically:
 use_contact_search = 1
 ```
 
-The estimated external force is used only as a contact trigger, not as force control.
+The estimated external force and moment are used only as contact triggers, not as
+force control. On contact, the current TCP position becomes the runtime surface
+point.
 
 ## Build And Run
 

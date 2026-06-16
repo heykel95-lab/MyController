@@ -76,7 +76,7 @@ inline Vec3 normalizedOrFallback(const Vec3& v, const Vec3& fallback) {
 
 inline Mat3 makeSurfaceFrame(const Parameters& params) {
   const Vec3 normal = normalizedOrFallback(params.surface_normal, Vec3(1.0, 0.0, 0.0));
-  Vec3 tangent1 = params.surface_tangent_hint - normal * normal.dot(params.surface_tangent_hint);
+  Vec3 tangent1 = params.surface_tangent1 - normal * normal.dot(params.surface_tangent1);
 
   if (tangent1.norm() <= 1e-9) {
     Vec3 fallback(0.0, 1.0, 0.0);
@@ -97,21 +97,47 @@ inline Mat3 makeSurfaceFrame(const Parameters& params) {
   return R_surface;
 }
 
-inline Mat3 makeToolOrientationParallelToSurface(const Mat3& R_surface, const Mat3& R_start) {
-  const Vec3 normal = R_surface.col(0);
-  Vec3 x_axis = R_start.col(0) - normal * normal.dot(R_start.col(0));
-
-  if (x_axis.norm() <= 1e-9) {
-    x_axis = R_surface.col(1);
+inline Mat3 rotationBetweenUnitVectors(const Vec3& from_unit, const Vec3& to_unit) {
+  const double dot = std::max(-1.0, std::min(1.0, from_unit.dot(to_unit)));
+  if (dot > 1.0 - 1e-9) {
+    return Mat3::Identity();
   }
-  x_axis.normalize();
 
-  Mat3 R_tool;
-  R_tool.col(0) = x_axis;
-  R_tool.col(2) = -normal;
-  R_tool.col(1) = R_tool.col(2).cross(R_tool.col(0));
-  R_tool.col(1).normalize();
-  return R_tool;
+  if (dot < -1.0 + 1e-9) {
+    Vec3 axis = from_unit.cross(Vec3::UnitX());
+    if (axis.norm() <= 1e-9) {
+      axis = from_unit.cross(Vec3::UnitY());
+    }
+    axis.normalize();
+    return Eigen::AngleAxisd(M_PI, axis).toRotationMatrix();
+  }
+
+  Vec3 axis = from_unit.cross(to_unit);
+  axis.normalize();
+  return Eigen::AngleAxisd(std::acos(dot), axis).toRotationMatrix();
+}
+
+inline Vec3 desiredToolAxisInBase(const Parameters& params, const Mat3& R_surface) {
+  const double sign = (params.tool_axis_target_sign >= 0.0) ? 1.0 : -1.0;
+  return sign * R_surface.col(0);
+}
+
+inline Vec3 currentToolAxisInBase(const Parameters& params, const Mat3& R_EE) {
+  return R_EE * normalizedOrFallback(params.tool_axis_ee, Vec3(0.0, 0.0, 1.0));
+}
+
+inline Mat3 makeToolOrientationParallelToSurface(
+    const Parameters& params,
+    const Mat3& R_surface,
+    const Mat3& R_start) {
+  const Vec3 tool_axis_start =
+      currentToolAxisInBase(params, R_start).normalized();
+  const Vec3 tool_axis_target =
+      desiredToolAxisInBase(params, R_surface).normalized();
+
+  // Rotate the current physical tool axis onto +-surface_normal while keeping
+  // the remaining orientation twist as close as possible to the start pose.
+  return rotationBetweenUnitVectors(tool_axis_start, tool_axis_target) * R_start;
 }
 
 inline Mat3 makeSpatialGainMatrix(const Vec3& diagonal_in_surface_frame, const Mat3& R_surface) {
@@ -208,9 +234,12 @@ inline Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Ma
   }
 
   Vec3 e_R_task = R_surface.transpose() * e_R;
-  e_R_task(0) = params.fix_R_x ? e_R_task(0) : 0.0;
-  e_R_task(1) = params.fix_R_y ? e_R_task(1) : 0.0;
-  e_R_task(2) = params.fix_R_z ? e_R_task(2) : 0.0;
+  e_R_task(0) =
+      params.constrain_rotation_about_surface_normal ? e_R_task(0) : 0.0;
+  e_R_task(1) =
+      params.constrain_rotation_about_surface_tangent1 ? e_R_task(1) : 0.0;
+  e_R_task(2) =
+      params.constrain_rotation_about_surface_tangent2 ? e_R_task(2) : 0.0;
 
   return R_surface * e_R_task;
 }

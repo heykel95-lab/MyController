@@ -109,10 +109,19 @@ inline void printParameters(const Parameters& params) {
          params.use_virtual_center_after_contact ? "on" : "off",
          1000.0 * params.vcr_offset);
   printVec3("surface_n", params.surface_normal);
+  printVec3("surface_t1", params.surface_tangent1);
+  printVec3("tool_axis_ee", params.tool_axis_ee);
+  printf("tool_axis_target_sign = %.0f\n",
+         (params.tool_axis_target_sign >= 0.0) ? 1.0 : -1.0);
   printf("rot_axes [normal, tangent1, tangent2] = [%d, %d, %d]\n",
-         params.fix_R_x ? 1 : 0,
-         params.fix_R_y ? 1 : 0,
-         params.fix_R_z ? 1 : 0);
+         params.constrain_rotation_about_surface_normal ? 1 : 0,
+         params.constrain_rotation_about_surface_tangent1 ? 1 : 0,
+         params.constrain_rotation_about_surface_tangent2 ? 1 : 0);
+  printf("contact thresholds: search %.1f N / %.1f Nm, align %.1f N / %.1f Nm\n",
+         params.contact_force_threshold,
+         params.contact_moment_threshold,
+         params.alignment_contact_force_threshold,
+         params.alignment_contact_moment_threshold);
   printf("orient_tol: %.1f deg | post_align: %.1f s\n",
          (180.0 / M_PI) * params.orient_phase_error_threshold,
          params.post_contact_align_duration);
