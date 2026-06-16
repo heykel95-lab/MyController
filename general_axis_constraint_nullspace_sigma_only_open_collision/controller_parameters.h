@@ -140,13 +140,31 @@ inline Parameters readParameters(const std::string& filename) {
   p.orient_phase_min_time = getDouble("orient_phase_min_time", p.orient_phase_min_time);
   p.orient_phase_error_threshold =
       getDouble("orient_phase_error_threshold", p.orient_phase_error_threshold);
+  p.post_contact_align_min_time =
+      getDouble("post_contact_align_min_time", p.post_contact_align_min_time);
   p.post_contact_align_duration =
       getDouble("post_contact_align_duration", p.post_contact_align_duration);
+  p.post_contact_moment_threshold =
+      getDoubleAlias("post_contact_moment_threshold",
+                     "alignment_contact_moment_threshold",
+                     p.post_contact_moment_threshold);
+  p.post_contact_rotation_axis_base(0) =
+      getDouble("post_contact_rotation_axis_base_x", p.post_contact_rotation_axis_base(0));
+  p.post_contact_rotation_axis_base(1) =
+      getDouble("post_contact_rotation_axis_base_y", p.post_contact_rotation_axis_base(1));
+  p.post_contact_rotation_axis_base(2) =
+      getDouble("post_contact_rotation_axis_base_z", p.post_contact_rotation_axis_base(2));
+  p.post_contact_rotation_speed_deg =
+      getDouble("post_contact_rotation_speed_deg", p.post_contact_rotation_speed_deg);
+  p.post_contact_rotation_max_deg =
+      getDouble("post_contact_rotation_max_deg", p.post_contact_rotation_max_deg);
   p.use_virtual_center_after_contact =
       getBool("use_virtual_center_after_contact", p.use_virtual_center_after_contact);
   p.vcr_offset = getDouble("vcr_offset", p.vcr_offset);
 
   p.use_contact_search = getBool("use_contact_search", p.use_contact_search);
+  p.contact_search_use_surface_normal =
+      getBool("contact_search_use_surface_normal", p.contact_search_use_surface_normal);
   p.contact_search_direction(0) = getDouble("contact_search_direction_x", p.contact_search_direction(0));
   p.contact_search_direction(1) = getDouble("contact_search_direction_y", p.contact_search_direction(1));
   p.contact_search_direction(2) = getDouble("contact_search_direction_z", p.contact_search_direction(2));
@@ -156,19 +174,10 @@ inline Parameters readParameters(const std::string& filename) {
   p.contact_search_min_distance =
       getDouble("contact_search_min_distance", p.contact_search_min_distance);
   p.contact_force_threshold = getDouble("contact_force_threshold", p.contact_force_threshold);
-  p.contact_moment_threshold =
-      getDouble("contact_moment_threshold", p.contact_moment_threshold);
-  p.contact_require_force_and_moment =
-      getBool("contact_require_force_and_moment", p.contact_require_force_and_moment);
   p.detect_contact_during_alignment =
       getBool("detect_contact_during_alignment", p.detect_contact_during_alignment);
   p.alignment_contact_force_threshold =
       getDouble("alignment_contact_force_threshold", p.alignment_contact_force_threshold);
-  p.alignment_contact_moment_threshold =
-      getDouble("alignment_contact_moment_threshold", p.alignment_contact_moment_threshold);
-  p.alignment_contact_require_force_and_moment =
-      getBool("alignment_contact_require_force_and_moment",
-              p.alignment_contact_require_force_and_moment);
   p.contact_search_Kp_diag(0) = getDouble("contact_search_Kp_x", p.contact_search_Kp_diag(0));
   p.contact_search_Kp_diag(1) = getDouble("contact_search_Kp_y", p.contact_search_Kp_diag(1));
   p.contact_search_Kp_diag(2) = getDouble("contact_search_Kp_z", p.contact_search_Kp_diag(2));

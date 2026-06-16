@@ -85,9 +85,10 @@ Optional contact search can set the virtual surface point automatically:
 use_contact_search = 1
 ```
 
-The estimated external force and moment are used only as contact triggers, not as
-force control. On contact, the current TCP position becomes the runtime surface
-point.
+The translational search phase uses estimated external force only as a contact
+trigger, not as force control. On contact, the current TCP position becomes the
+runtime surface point. Moment comparison is used later in `post_contact_align`,
+while the tool rotates after the first contact.
 
 ## Build And Run
 

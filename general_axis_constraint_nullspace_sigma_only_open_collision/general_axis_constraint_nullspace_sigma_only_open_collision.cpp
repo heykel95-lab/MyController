@@ -96,6 +96,7 @@ int main() {
     // when contact with the surface has been made.
     // The initial force/moment are the first contact-detection bias.
     Map<const Vec6> initial_external_wrench(initial_state.O_F_ext_hat_K.data());
+    const Vec3 external_force_start = initial_external_wrench.head<3>();
     Vec3 contact_force_bias = initial_external_wrench.head<3>();
     Vec3 contact_moment_bias = initial_external_wrench.tail<3>();
 
@@ -136,7 +137,9 @@ int main() {
     Vec3 surface_point_runtime =
         params.use_start_as_surface_point ? p_start : params.surface_point;
     const Vec3 contact_search_direction =
-        normalizedOrFallback(params.contact_search_direction, -R_surface.col(0));
+        params.contact_search_use_surface_normal
+            ? -R_surface.col(0)
+            : normalizedOrFallback(params.contact_search_direction, -R_surface.col(0));
     const Mat3 Kp_search = params.contact_search_Kp_diag.asDiagonal();
     const Mat3 Dp_search = params.contact_search_Dp_diag.asDiagonal();
     ControlPhase phase = ControlPhase::kSurfaceImpedance;
@@ -151,21 +154,15 @@ int main() {
     bool contact_found = !params.use_contact_search;
     bool contact_search_failed = false;
     double contact_time = 0.0;
+    Mat3 R_contact_start = R_d_surface;
+    Mat3 R_after_contact_align = R_d_surface;
 
-    auto contactDetected = [&](const Vec3& force,
-                               const Vec3& moment,
-                               double force_threshold,
-                               double moment_threshold,
-                               bool require_force_and_moment,
-                               double* force_delta_norm,
-                               double* moment_delta_norm) {
+    auto forceContactDetected = [&](const Vec3& force,
+                                    double force_threshold,
+                                    double* force_delta_norm) {
       const Vec3 force_delta = force - contact_force_bias;
-      const Vec3 moment_delta = moment - contact_moment_bias;
       *force_delta_norm = force_delta.norm();
-      *moment_delta_norm = moment_delta.norm();
-      const bool force_hit = *force_delta_norm >= force_threshold;
-      const bool moment_hit = *moment_delta_norm >= moment_threshold;
-      return require_force_and_moment ? (force_hit && moment_hit) : (force_hit || moment_hit);
+      return *force_delta_norm >= force_threshold;
     };
 
     // Define the desired final target position as the initial position in hold_mode = 1/true
@@ -336,32 +333,26 @@ int main() {
           std::min(1.0, tool_axis_current.dot(tool_axis_target)));
       const double tool_axis_alignment_error = std::acos(tool_axis_dot);
       double force_delta_norm = 0.0;
-      double moment_delta_norm = 0.0;
       const bool alignment_contact_detected =
           orienting_to_surface &&
           params.detect_contact_during_alignment &&
           !params.orientation_test_only &&
-          contactDetected(external_force,
-                          external_moment,
-                          params.alignment_contact_force_threshold,
-                          params.alignment_contact_moment_threshold,
-                          params.alignment_contact_require_force_and_moment,
-                          &force_delta_norm,
-                          &moment_delta_norm);
+          forceContactDetected(external_force,
+                               params.alignment_contact_force_threshold,
+                               &force_delta_norm);
 
       if (alignment_contact_detected) {
         surface_point_runtime = p_EE;
         contact_found = true;
         contact_time = time;
+        R_contact_start = R_EE;
         phase = params.use_phase_sequence
             ? ControlPhase::kPostContactAlign
             : ControlPhase::kSurfaceImpedance;
         phase_start_time = time;
-        contact_force_bias = external_force;
+        contact_force_bias = external_force_start;
         contact_moment_bias = external_moment;
-        printf("\nContact during alignment: force = %.1f N, moment = %.2f Nm\n",
-               force_delta_norm,
-               moment_delta_norm);
+        printf("\nContact during alignment: force = %.1f N\n", force_delta_norm);
         printVec3Mm("surface_point", surface_point_runtime);
         printf("phase: %s\n", phaseName(phase));
       }
@@ -383,11 +374,26 @@ int main() {
         printf("phase: %s\n", phaseName(phase));
       }
 
-      if (phase == ControlPhase::kPostContactAlign &&
-          (time - phase_start_time) >= params.post_contact_align_duration) {
-        phase = ControlPhase::kSurfaceImpedance;
-        phase_start_time = time;
-        printf("\nphase: %s\n", phaseName(phase));
+      if (phase == ControlPhase::kPostContactAlign) {
+        const double post_align_time = time - phase_start_time;
+        const double post_moment_delta_norm = (external_moment - contact_moment_bias).norm();
+        const bool moment_contact_reached =
+            post_align_time >= params.post_contact_align_min_time &&
+            post_moment_delta_norm >= params.post_contact_moment_threshold;
+        const bool max_align_time_reached =
+            post_align_time >= params.post_contact_align_duration;
+
+        if (moment_contact_reached || max_align_time_reached) {
+          R_after_contact_align = R_EE;
+          phase = ControlPhase::kSurfaceImpedance;
+          phase_start_time = time;
+          if (moment_contact_reached) {
+            printf("\nPost-align moment reached: %.2f Nm\n", post_moment_delta_norm);
+          } else {
+            printf("\nPost-align time reached: %.1f s\n", post_align_time);
+          }
+          printf("phase: %s\n", phaseName(phase));
+        }
       }
 
       // Computing the desired motion for this control cycle based on the
@@ -413,7 +419,7 @@ int main() {
         // Contact trigger only, not force control:
         //
         //   if search_distance [m] >= contact_search_min_distance [m]
-        //   and force/moment change exceeds the thresholds,
+        //   and force change exceeds the threshold,
         //   the current TCP position becomes the point of the virtual surface.
         //
         // The minimum distance prevents an early false trigger before the TCP is
@@ -422,25 +428,22 @@ int main() {
         // After this one-time event, the controller switches back to pure
         // surface impedance.
 
-        // Compute the contact point if force or moment changes enough compared
-        // to the bias saved at the start of this phase.
+        // Search is translational: the first contact point is detected by
+        // force only. Moment comparison is reserved for post_contact_align,
+        // where the tool rotates after the first contact.
         double search_force_delta_norm = 0.0;
-        double search_moment_delta_norm = 0.0;
         const bool contact_distance_reached =
             search_distance >= params.contact_search_min_distance;
+        const Vec3 force_delta_from_start = external_force - external_force_start;
         const bool search_contact_detected =
             contact_distance_reached &&
-            contactDetected(external_force,
-                            external_moment,
-                            params.contact_force_threshold,
-                            params.contact_moment_threshold,
-                            params.contact_require_force_and_moment,
-                            &search_force_delta_norm,
-                            &search_moment_delta_norm);
+            (force_delta_from_start.norm() >= params.contact_force_threshold);
+        search_force_delta_norm = force_delta_from_start.norm();
         if (search_contact_detected) {
           surface_point_runtime = p_EE;
           contact_found = true;
           contact_time = time;
+          R_contact_start = R_EE;
           phase = params.use_phase_sequence
               ? ControlPhase::kPostContactAlign
               : ControlPhase::kSurfaceImpedance;
@@ -450,7 +453,6 @@ int main() {
           printf("\nContact found: search = %.1f mm, force_delta = %.1f N\n",
                  1000.0 * search_distance,
                  search_force_delta_norm);
-          printf("moment_delta = %.2f Nm\n", search_moment_delta_norm);
           printVec3Mm("surface_point", surface_point_runtime);
           printf("phase: %s\n", phaseName(phase));
         // If the maximum search distance is reached without detecting contact, stop the controller and log the final data.
@@ -460,6 +462,12 @@ int main() {
           desired.p_d = p_EE;
           desired.pdot_d.setZero();
         }
+      } else if (phase == ControlPhase::kPostContactAlign) {
+        // Keep the first detected contact point during the probing rotation.
+        // This prevents the tool from sliding away while we rotate around the
+        // configured post-contact axis to find the real plane alignment.
+        desired.p_d = surface_point_runtime;
+        desired.pdot_d.setZero();
       } else {
         if (contact_found) {
           impedance_time = params.use_contact_search ? (time - contact_time) : time;
@@ -480,17 +488,36 @@ int main() {
       // The position error e_p and orientation error e_R are computed
       // based on the desired position and the current EE position and orientation.
       Vec3 e_p = desired.p_d - p_EE;
+      const Vec3 post_contact_axis =
+          normalizedOrFallback(params.post_contact_rotation_axis_base, Vec3(1.0, 0.0, 0.0));
+      const double post_contact_rotation_speed_rad =
+          params.post_contact_rotation_speed_deg * M_PI / 180.0;
+      const double post_contact_rotation_max_rad =
+          params.post_contact_rotation_max_deg * M_PI / 180.0;
+      const double post_contact_angle_abs =
+          std::min(std::abs(post_contact_rotation_speed_rad) *
+                       std::max(0.0, time - phase_start_time),
+                   std::abs(post_contact_rotation_max_rad));
+      const double post_contact_angle =
+          std::copysign(post_contact_angle_abs, post_contact_rotation_speed_rad);
+      const Mat3 R_d_post_contact =
+          Eigen::AngleAxisd(post_contact_angle, post_contact_axis).toRotationMatrix() *
+          R_contact_start;
       const bool use_surface_orientation =
           params.orientation_test_only ||
           params.use_phase_sequence ||
           (contact_found && params.align_orientation_to_surface_after_contact);
-      const Mat3& R_d_used = params.orientation_test_only
-          ? R_d_orientation_test
-          : (use_surface_orientation ? R_d_surface : R_d);
+      const Mat3& R_d_used = (phase == ControlPhase::kPostContactAlign)
+          ? R_d_post_contact
+          : (params.orientation_test_only
+                 ? R_d_orientation_test
+                 : (phase == ControlPhase::kSurfaceImpedance && contact_found
+                        ? R_after_contact_align
+                        : (use_surface_orientation ? R_d_surface : R_d)));
       Vec3 e_R = applyRotationalAxisMask(params, orientationError(R_EE, R_d_used), R_surface);
       const Vec3 e_R_surface = R_surface.transpose() * e_R;
 
-      if (phase == ControlPhase::kPostContactAlign && params.use_virtual_center_after_contact) {
+      if (phase == ControlPhase::kSurfaceImpedance && params.use_virtual_center_after_contact) {
         // Virtual center of rotation for the post-contact alignment phase:
         //
         //   p_c [m] = p_contact [m] + vcr_offset [m] * n_surface [-]

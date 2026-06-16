@@ -104,6 +104,8 @@ inline void printParameters(const Parameters& params) {
          params.q_init_case.c_str(),
          params.use_contact_search ? "on" : "off",
          params.orientation_test_only ? "on" : "off");
+  printf("search_direction: %s\n",
+         params.contact_search_use_surface_normal ? "-surface_normal" : "manual");
   printf("phases: %s | virtual_center: %s | vcr_offset: %.1f mm\n",
          params.use_phase_sequence ? "on" : "off",
          params.use_virtual_center_after_contact ? "on" : "off",
@@ -117,14 +119,18 @@ inline void printParameters(const Parameters& params) {
          params.constrain_rotation_about_surface_normal ? 1 : 0,
          params.constrain_rotation_about_surface_tangent1 ? 1 : 0,
          params.constrain_rotation_about_surface_tangent2 ? 1 : 0);
-  printf("contact thresholds: search %.1f N / %.1f Nm, align %.1f N / %.1f Nm\n",
+  printf("contact thresholds: search %.1f N, align %.1f N, post %.1f Nm\n",
          params.contact_force_threshold,
-         params.contact_moment_threshold,
          params.alignment_contact_force_threshold,
-         params.alignment_contact_moment_threshold);
+         params.post_contact_moment_threshold);
   printf("orient_tol: %.1f deg | post_align: %.1f s\n",
          (180.0 / M_PI) * params.orient_phase_error_threshold,
          params.post_contact_align_duration);
+  printVec3("post_axis_base", params.post_contact_rotation_axis_base);
+  printf("post_rotation: %.1f deg/s, max %.1f deg, moment %.1f Nm\n",
+         params.post_contact_rotation_speed_deg,
+         params.post_contact_rotation_max_deg,
+         params.post_contact_moment_threshold);
   printVec3("Kp", params.Kp_diag);
   printVec3("Dp", params.Dp_diag);
   printVec3("KR", params.KR_diag);

@@ -119,16 +119,33 @@ orient_phase_min_time = 0.5
 # Orientation error threshold for switching from orient_to_surface to search [rad].
 orient_phase_error_threshold = 0.07
 
-# Time spent in post_contact_align after first contact [s].
-post_contact_align_duration = 3.0
+# Minimum time before moment comparison can end post_contact_align [s].
+post_contact_align_min_time = 3.0
+
+# Maximum time spent in post_contact_align after first contact [s].
+post_contact_align_duration = 10.0
+
+# Moment change that means the post-contact rotation produced clear surface
+# moment feedback, for example the second tool edge started touching [Nm].
+post_contact_moment_threshold = 25.0
+
+# After first contact, ignore the nominal virtual plane and rotate the tool
+# around this base-frame probing axis. For your tilted tool/table test, base x
+# is the desired tilt direction and should mainly excite q5.
+# Use a negative speed if the probing rotation goes in the wrong direction.
+post_contact_rotation_axis_base_x = 1.0
+post_contact_rotation_axis_base_y = 0.0
+post_contact_rotation_axis_base_z = 0.0
+post_contact_rotation_speed_deg = -5.0
+post_contact_rotation_max_deg = 20.0
 
 # Virtual center of rotation in the post-contact alignment phase:
 #   p_c = p_contact + vcr_offset * surface_normal
 # vcr_offset = 0.0 -> virtual center on the detected surface point.
 # vcr_offset > 0.0 -> above the surface along surface_normal.
 # vcr_offset < 0.0 -> below the surface.
-use_virtual_center_after_contact = 1
-vcr_offset = 1.0
+use_virtual_center_after_contact = 0
+vcr_offset = 0.0
 
 # ------------------------------------------------------------------
 # Automatic contact search for the virtual surface point
@@ -137,11 +154,9 @@ vcr_offset = 1.0
 #   Before the surface impedance starts, the TCP moves slowly in
 #   contact_search_direction until contact is detected.
 #
-# Contact detection uses estimated external force and moment only as triggers:
+# Contact search is translational and uses estimated external force only:
 #
 #   ||F_ext - F_bias|| > contact_force_threshold
-#   or
-#   ||M_ext - M_bias|| > contact_moment_threshold
 #
 # This is not force control. After the trigger, the current TCP position
 # becomes the virtual surface point:
@@ -151,7 +166,11 @@ vcr_offset = 1.0
 # Enabled for finding the horizontal table contact point.
 use_contact_search = 1
 
-# Example downward search for a horizontal surface.
+# For a general surface, search along -surface_normal.
+# For a horizontal surface this is the same as base [0, 0, -1].
+contact_search_use_surface_normal = 0
+
+# Manual direction is only used when contact_search_use_surface_normal = 0.
 contact_search_direction_x = 0.0
 contact_search_direction_y = 0.0
 contact_search_direction_z = -1.0
@@ -165,17 +184,13 @@ contact_search_max_distance = 0.540
 # The last false trigger happened at 0.300 m.
 contact_search_min_distance = 0.430
 
-# Contact trigger thresholds during search.
+# Contact trigger threshold during translational search.
 contact_force_threshold = 12.0
-contact_moment_threshold = 2.0
-contact_require_force_and_moment = 0
 
-# Contact trigger thresholds during the first orientation-alignment phase.
-# Moment detection is useful if one tool edge touches before a large force appears.
+# Force safety trigger during the first orientation-alignment phase.
+# Moment comparison is reserved for post_contact_align after first contact.
 detect_contact_during_alignment = 1
 alignment_contact_force_threshold = 12.0
-alignment_contact_moment_threshold = 2.0
-alignment_contact_require_force_and_moment = 0
 
 # Softer Cartesian gains used only during contact search.
 contact_search_Kp_x = 150.0
