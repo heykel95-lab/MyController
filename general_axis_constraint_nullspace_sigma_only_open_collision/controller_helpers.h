@@ -45,6 +45,15 @@ inline double smoothStepDerivative(double r, double T) {
   return ds_dr / T;
 }
 
+inline double postContactPush(const Parameters& params, double post_align_time) {
+  double push =
+      params.post_contact_normal_push + params.post_contact_push_speed * post_align_time;
+  if (params.post_contact_max_push > 0.0) {
+    push = std::min(params.post_contact_max_push, push);
+  }
+  return push;
+}
+
 inline Vec3 orientationError(const Mat3& R_current, const Mat3& R_desired) {
   Mat3 R_error = R_current.transpose() * R_desired;
   Eigen::AngleAxisd angle_axis(R_error);
@@ -74,9 +83,9 @@ inline Vec3 normalizedOrFallback(const Vec3& v, const Vec3& fallback) {
   return fallback.normalized();
 }
 
-inline Mat3 makeSurfaceFrame(const Parameters& params) {
-  const Vec3 normal = normalizedOrFallback(params.surface_normal, Vec3(1.0, 0.0, 0.0));
-  Vec3 tangent1 = params.surface_tangent1 - normal * normal.dot(params.surface_tangent1);
+inline Mat3 makeSurfaceFrameFromNormalTangent(const Vec3& normal_input, const Vec3& tangent1_input) {
+  const Vec3 normal = normalizedOrFallback(normal_input, Vec3(1.0, 0.0, 0.0));
+  Vec3 tangent1 = tangent1_input - normal * normal.dot(tangent1_input);
 
   if (tangent1.norm() <= 1e-9) {
     Vec3 fallback(0.0, 1.0, 0.0);
@@ -95,6 +104,10 @@ inline Mat3 makeSurfaceFrame(const Parameters& params) {
   R_surface.col(1) = tangent1;
   R_surface.col(2) = tangent2;
   return R_surface;
+}
+
+inline Mat3 makeSurfaceFrame(const Parameters& params) {
+  return makeSurfaceFrameFromNormalTangent(params.surface_normal, params.surface_tangent1);
 }
 
 inline Mat3 rotationBetweenUnitVectors(const Vec3& from_unit, const Vec3& to_unit) {

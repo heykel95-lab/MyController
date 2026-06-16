@@ -111,10 +111,17 @@ inline void printParameters(const Parameters& params) {
          params.use_virtual_center_after_contact ? "on" : "off",
          1000.0 * params.vcr_offset);
   printVec3("surface_n", params.surface_normal);
+  if (params.use_surface_tilt_angle) {
+    printf("surface_tilt_angle: %.1f deg\n", params.surface_tilt_angle_deg);
+  }
   printVec3("surface_t1", params.surface_tangent1);
   printVec3("tool_axis_ee", params.tool_axis_ee);
   printf("tool_axis_target_sign = %.0f\n",
          (params.tool_axis_target_sign >= 0.0) ? 1.0 : -1.0);
+  printf("edge_point_control: %s | auto_edge: %s\n",
+         params.use_tool_contact_point_control ? "on" : "off",
+         params.auto_select_tool_contact_edge ? "on" : "off");
+  printVec3Mm("tool_contact_point_ee", params.tool_contact_point_ee);
   printf("rot_axes [normal, tangent1, tangent2] = [%d, %d, %d]\n",
          params.constrain_rotation_about_surface_normal ? 1 : 0,
          params.constrain_rotation_about_surface_tangent1 ? 1 : 0,
@@ -127,10 +134,20 @@ inline void printParameters(const Parameters& params) {
          (180.0 / M_PI) * params.orient_phase_error_threshold,
          params.post_contact_align_duration);
   printVec3("post_axis_base", params.post_contact_rotation_axis_base);
-  printf("post_rotation: %.1f deg/s, max %.1f deg, moment %.1f Nm\n",
+  printf("post_rotation: %.1f deg/s, max %.1f deg, moment %.1f Nm after %.0f%% rot, auto_sign: %s\n",
          params.post_contact_rotation_speed_deg,
          params.post_contact_rotation_max_deg,
-         params.post_contact_moment_threshold);
+         params.post_contact_moment_threshold,
+         100.0 * params.post_contact_moment_min_rotation_ratio,
+         params.auto_post_contact_rotation_sign ? "on" : "off");
+  printf("post_push: %.1f mm + %.1f mm/s, max %.1f mm\n",
+         1000.0 * params.post_contact_normal_push,
+         1000.0 * params.post_contact_push_speed,
+         1000.0 * params.post_contact_max_push);
+  printVec3("post_Kp", params.post_contact_Kp_diag);
+  printVec3("post_Dp", params.post_contact_Dp_diag);
+  printf("contact_surface_after_align: %s\n",
+         params.use_search_direction_surface_after_alignment ? "on" : "off");
   printVec3("Kp", params.Kp_diag);
   printVec3("Dp", params.Dp_diag);
   printVec3("KR", params.KR_diag);

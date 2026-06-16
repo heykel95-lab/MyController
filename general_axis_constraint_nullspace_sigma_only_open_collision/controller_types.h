@@ -13,9 +13,14 @@ struct Parameters {
   bool use_start_as_surface_point = true;
   Vec3 surface_point = Vec3(0.0, 0.0, 0.0);
   Vec3 surface_normal = Vec3(1.0, 0.0, 0.0);
+  bool use_surface_tilt_angle = false;
+  double surface_tilt_angle_deg = 0.0;
   Vec3 surface_tangent1 = Vec3(0.0, 1.0, 0.0);
   Vec3 tool_axis_ee = Vec3(0.0, 0.0, 1.0);
   double tool_axis_target_sign = -1.0;
+  bool use_tool_contact_point_control = true;
+  bool auto_select_tool_contact_edge = true;
+  Vec3 tool_contact_point_ee = Vec3(0.0, 0.0, 0.0);
   bool align_orientation_to_surface_after_contact = false;
   bool orientation_test_only = false;
   double orientation_test_extra_tilt_deg = 0.0;
@@ -25,9 +30,16 @@ struct Parameters {
   double post_contact_align_min_time = 0.3;
   double post_contact_align_duration = 3.0;
   double post_contact_moment_threshold = 2.0;
+  double post_contact_moment_min_rotation_ratio = 0.0;
   Vec3 post_contact_rotation_axis_base = Vec3(1.0, 0.0, 0.0);
+  bool auto_post_contact_rotation_sign = true;
   double post_contact_rotation_speed_deg = 5.0;
   double post_contact_rotation_max_deg = 15.0;
+  double post_contact_rotation_margin_deg = 0.0;
+  double post_contact_normal_push = 0.0;
+  double post_contact_push_speed = 0.0;
+  double post_contact_max_push = 0.0;
+  bool use_search_direction_surface_after_alignment = true;
   bool use_virtual_center_after_contact = false;
   double vcr_offset = 0.0;
 
@@ -42,8 +54,8 @@ struct Parameters {
   double alignment_contact_force_threshold = 5.0;
   Vec3 contact_search_Kp_diag = Vec3(150.0, 150.0, 150.0);
   Vec3 contact_search_Dp_diag = Vec3(25.0, 25.0, 25.0);
-  Vec3 contact_search_KR_diag = Vec3(0.5, 0.5, 0.5);
-  Vec3 contact_search_DR_diag = Vec3(1.0, 1.0, 1.0);
+  Vec3 post_contact_Kp_diag = Vec3(800.0, 800.0, 1200.0);
+  Vec3 post_contact_Dp_diag = Vec3(35.0, 35.0, 45.0);
 
   bool constrain_rotation_about_surface_normal = true;
   bool constrain_rotation_about_surface_tangent1 = true;

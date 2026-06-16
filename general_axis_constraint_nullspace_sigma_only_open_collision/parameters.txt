@@ -55,8 +55,14 @@ surface_point_x = 0.0
 surface_point_y = 0.0
 surface_point_z = 0.0
 
-# Surface tilt by 20 deg by y=-sin(20) and and z=cos(20)
-# Needs to be implemented Enter the tilt angle and calculate the surface normal alone
+# Nominal virtual surface tilt angle [deg].
+# The normal is computed as:
+#   surface_normal = [0, -sin(angle), cos(angle)]
+# angle = 0 deg gives a horizontal table normal [0, 0, 1].
+use_surface_tilt_angle = 1
+surface_tilt_angle_deg = 20.0
+
+# Manual normal is only used when use_surface_tilt_angle = 0.
 surface_normal_x = 0.0
 surface_normal_y = -0.342
 surface_normal_z = 0.940
@@ -81,6 +87,17 @@ tool_axis_ee_x = 0.0
 tool_axis_ee_y = 0.0
 tool_axis_ee_z = 1.0
 tool_axis_target_sign = -1.0
+
+# Contact point used during post_contact_align [m], expressed in the EE/TCP frame.
+# The controller keeps this edge point pressed while rotating:
+#   p_edge = p_EE + R_EE * tool_contact_point_ee
+# With auto_select_tool_contact_edge = 1, the code chooses +edge or -edge
+# at first contact, whichever is lower along contact_search_direction.
+use_tool_contact_point_control = 1
+auto_select_tool_contact_edge = 1
+tool_contact_point_ee_x = 0.0
+tool_contact_point_ee_y = 0.040
+tool_contact_point_ee_z = 0.0
 
 # 1 = use a desired tool orientation parallel to the surface.
 # For the horizontal table, this makes tool z point downward along -base z.
@@ -120,14 +137,18 @@ orient_phase_min_time = 0.5
 orient_phase_error_threshold = 0.07
 
 # Minimum time before moment comparison can end post_contact_align [s].
-post_contact_align_min_time = 3.0
+post_contact_align_min_time = 3.5
 
 # Maximum time spent in post_contact_align after first contact [s].
-post_contact_align_duration = 10.0
+post_contact_align_duration = 8.0
 
 # Moment change that means the post-contact rotation produced clear surface
 # moment feedback, for example the second tool edge started touching [Nm].
 post_contact_moment_threshold = 25.0
+
+# Moment stop is ignored until this fraction of the planned post rotation is
+# reached. Example: 0.7 with 20 deg means moment can stop only after 14 deg.
+post_contact_moment_min_rotation_ratio = 0.7
 
 # After first contact, ignore the nominal virtual plane and rotate the tool
 # around this base-frame probing axis. For your tilted tool/table test, base x
@@ -136,8 +157,40 @@ post_contact_moment_threshold = 25.0
 post_contact_rotation_axis_base_x = 1.0
 post_contact_rotation_axis_base_y = 0.0
 post_contact_rotation_axis_base_z = 0.0
+# If enabled, negative surface_tilt_angle_deg flips the probing rotation sign.
+# The value below is the speed/sign for positive tilt.
+auto_post_contact_rotation_sign = 1
 post_contact_rotation_speed_deg = -5.0
-post_contact_rotation_max_deg = 20.0
+# Set <= 0 to use abs(surface_tilt_angle_deg) + margin, so the controller
+# can continue slightly past the nominal virtual tilt if the real table differs.
+post_contact_rotation_max_deg = 0.0
+post_contact_rotation_margin_deg = 3.0
+
+# Small position offset into the real surface during post_contact_align [m].
+# This acts like a spring preload while rotating:
+#   preload force approx Kp_normal * post_contact_normal_push
+# For Kp_normal = 7000 N/m, 0.002 m gives about 14 N.
+post_contact_normal_push = 0.004
+
+# During post_contact_align, keep searching slightly into the surface while
+# rotating. This helps maintain the first edge contact instead of rotating away
+# from it. Total push is clamped by post_contact_max_push.
+post_contact_push_speed = 0.0015
+post_contact_max_push = 0.012
+
+# Translational spring used only during post_contact_align.
+# Higher z makes the selected edge follow p_edge_d more strongly while rotating.
+post_contact_Kp_x = 800.0
+post_contact_Kp_y = 800.0
+post_contact_Kp_z = 1200.0
+post_contact_Dp_x = 35.0
+post_contact_Dp_y = 35.0
+post_contact_Dp_z = 45.0
+
+# After post-contact alignment, use the real contact/search surface for
+# surface impedance. With manual downward search this means a horizontal table
+# plane, so x/y can move while z stays constrained to the table.
+use_search_direction_surface_after_alignment = 1
 
 # Virtual center of rotation in the post-contact alignment phase:
 #   p_c = p_contact + vcr_offset * surface_normal

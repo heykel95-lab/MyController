@@ -119,6 +119,14 @@ inline Parameters readParameters(const std::string& filename) {
   p.surface_normal(0) = getDouble("surface_normal_x", p.surface_normal(0));
   p.surface_normal(1) = getDouble("surface_normal_y", p.surface_normal(1));
   p.surface_normal(2) = getDouble("surface_normal_z", p.surface_normal(2));
+  p.use_surface_tilt_angle =
+      getBool("use_surface_tilt_angle", p.use_surface_tilt_angle);
+  p.surface_tilt_angle_deg =
+      getDouble("surface_tilt_angle_deg", p.surface_tilt_angle_deg);
+  if (p.use_surface_tilt_angle) {
+    const double tilt_rad = p.surface_tilt_angle_deg * M_PI / 180.0;
+    p.surface_normal = Vec3(0.0, -std::sin(tilt_rad), std::cos(tilt_rad));
+  }
   p.surface_tangent1(0) =
       getDoubleAlias("surface_tangent1_x", "surface_tangent_hint_x", p.surface_tangent1(0));
   p.surface_tangent1(1) =
@@ -130,6 +138,16 @@ inline Parameters readParameters(const std::string& filename) {
   p.tool_axis_ee(2) = getDouble("tool_axis_ee_z", p.tool_axis_ee(2));
   p.tool_axis_target_sign =
       getDouble("tool_axis_target_sign", p.tool_axis_target_sign);
+  p.use_tool_contact_point_control =
+      getBool("use_tool_contact_point_control", p.use_tool_contact_point_control);
+  p.auto_select_tool_contact_edge =
+      getBool("auto_select_tool_contact_edge", p.auto_select_tool_contact_edge);
+  p.tool_contact_point_ee(0) =
+      getDouble("tool_contact_point_ee_x", p.tool_contact_point_ee(0));
+  p.tool_contact_point_ee(1) =
+      getDouble("tool_contact_point_ee_y", p.tool_contact_point_ee(1));
+  p.tool_contact_point_ee(2) =
+      getDouble("tool_contact_point_ee_z", p.tool_contact_point_ee(2));
   p.align_orientation_to_surface_after_contact =
       getBool("align_orientation_to_surface_after_contact",
               p.align_orientation_to_surface_after_contact);
@@ -148,16 +166,36 @@ inline Parameters readParameters(const std::string& filename) {
       getDoubleAlias("post_contact_moment_threshold",
                      "alignment_contact_moment_threshold",
                      p.post_contact_moment_threshold);
+  p.post_contact_moment_min_rotation_ratio =
+      getDouble("post_contact_moment_min_rotation_ratio",
+                p.post_contact_moment_min_rotation_ratio);
   p.post_contact_rotation_axis_base(0) =
       getDouble("post_contact_rotation_axis_base_x", p.post_contact_rotation_axis_base(0));
   p.post_contact_rotation_axis_base(1) =
       getDouble("post_contact_rotation_axis_base_y", p.post_contact_rotation_axis_base(1));
   p.post_contact_rotation_axis_base(2) =
       getDouble("post_contact_rotation_axis_base_z", p.post_contact_rotation_axis_base(2));
+  p.auto_post_contact_rotation_sign =
+      getBool("auto_post_contact_rotation_sign", p.auto_post_contact_rotation_sign);
   p.post_contact_rotation_speed_deg =
       getDouble("post_contact_rotation_speed_deg", p.post_contact_rotation_speed_deg);
   p.post_contact_rotation_max_deg =
       getDouble("post_contact_rotation_max_deg", p.post_contact_rotation_max_deg);
+  p.post_contact_rotation_margin_deg =
+      getDouble("post_contact_rotation_margin_deg", p.post_contact_rotation_margin_deg);
+  if (p.post_contact_rotation_max_deg <= 0.0 && p.use_surface_tilt_angle) {
+    p.post_contact_rotation_max_deg =
+        std::abs(p.surface_tilt_angle_deg) + p.post_contact_rotation_margin_deg;
+  }
+  p.post_contact_normal_push =
+      getDouble("post_contact_normal_push", p.post_contact_normal_push);
+  p.post_contact_push_speed =
+      getDouble("post_contact_push_speed", p.post_contact_push_speed);
+  p.post_contact_max_push =
+      getDouble("post_contact_max_push", p.post_contact_max_push);
+  p.use_search_direction_surface_after_alignment =
+      getBool("use_search_direction_surface_after_alignment",
+              p.use_search_direction_surface_after_alignment);
   p.use_virtual_center_after_contact =
       getBool("use_virtual_center_after_contact", p.use_virtual_center_after_contact);
   p.vcr_offset = getDouble("vcr_offset", p.vcr_offset);
@@ -184,12 +222,12 @@ inline Parameters readParameters(const std::string& filename) {
   p.contact_search_Dp_diag(0) = getDouble("contact_search_Dp_x", p.contact_search_Dp_diag(0));
   p.contact_search_Dp_diag(1) = getDouble("contact_search_Dp_y", p.contact_search_Dp_diag(1));
   p.contact_search_Dp_diag(2) = getDouble("contact_search_Dp_z", p.contact_search_Dp_diag(2));
-  p.contact_search_KR_diag(0) = getDouble("contact_search_KR_x", p.contact_search_KR_diag(0));
-  p.contact_search_KR_diag(1) = getDouble("contact_search_KR_y", p.contact_search_KR_diag(1));
-  p.contact_search_KR_diag(2) = getDouble("contact_search_KR_z", p.contact_search_KR_diag(2));
-  p.contact_search_DR_diag(0) = getDouble("contact_search_DR_x", p.contact_search_DR_diag(0));
-  p.contact_search_DR_diag(1) = getDouble("contact_search_DR_y", p.contact_search_DR_diag(1));
-  p.contact_search_DR_diag(2) = getDouble("contact_search_DR_z", p.contact_search_DR_diag(2));
+  p.post_contact_Kp_diag(0) = getDouble("post_contact_Kp_x", p.post_contact_Kp_diag(0));
+  p.post_contact_Kp_diag(1) = getDouble("post_contact_Kp_y", p.post_contact_Kp_diag(1));
+  p.post_contact_Kp_diag(2) = getDouble("post_contact_Kp_z", p.post_contact_Kp_diag(2));
+  p.post_contact_Dp_diag(0) = getDouble("post_contact_Dp_x", p.post_contact_Dp_diag(0));
+  p.post_contact_Dp_diag(1) = getDouble("post_contact_Dp_y", p.post_contact_Dp_diag(1));
+  p.post_contact_Dp_diag(2) = getDouble("post_contact_Dp_z", p.post_contact_Dp_diag(2));
 
   p.constrain_rotation_about_surface_normal =
       getBoolAlias("constrain_rotation_about_surface_normal",
