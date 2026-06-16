@@ -55,9 +55,15 @@ surface_point_x = 0.0
 surface_point_y = 0.0
 surface_point_z = 0.0
 
+# Surface tilt by 20 deg by y=-sin(20) and and z=cos(20)
+# Needs to be implemented Enter the tilt angle and calculate the surface normal alone
 surface_normal_x = 0.0
-surface_normal_y = 0.0
-surface_normal_z = 1.0
+surface_normal_y = -0.342
+surface_normal_z = 0.940
+
+#surface_normal_x = 0.0
+#surface_normal_y = 0.0
+#surface_normal_z = 1.0
 
 surface_tangent_hint_x = 1.0
 surface_tangent_hint_y = 0.0
@@ -109,7 +115,7 @@ post_contact_align_duration = 3.0
 # vcr_offset > 0.0 -> above the surface along surface_normal.
 # vcr_offset < 0.0 -> below the surface.
 use_virtual_center_after_contact = 1
-vcr_offset = 0.0
+vcr_offset = 1.0
 
 # ------------------------------------------------------------------
 # Automatic contact search for the virtual surface point
@@ -194,7 +200,7 @@ trajectory_duration = 8.0
 #   horizontal_tool -> current/default tool orientation
 #   tilted_tool     -> same as horizontal_tool, but q_init_5 is changed
 #   horizontal_table_search -> starts close above the detected horizontal table
-q_init_case = tilted_tool
+q_init_case = horizontal_table_search
 
 q_init_horizontal_1 = 0.0
 q_init_horizontal_2 = -pi/4
