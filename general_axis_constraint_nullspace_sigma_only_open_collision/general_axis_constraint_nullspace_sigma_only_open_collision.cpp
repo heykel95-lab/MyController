@@ -146,6 +146,19 @@ int main() {
     const Mat3 Dp_search = params.contact_search_Dp_diag.asDiagonal();
     const Mat3 Kp_post_contact = params.post_contact_Kp_diag.asDiagonal();
     const Mat3 Dp_post_contact = params.post_contact_Dp_diag.asDiagonal();
+    // Rotational compliance used only during post_contact_align, in the
+    // surface frame (normal/tangent1/tangent2), same convention as the
+    // global KR/DR below. Normal (yaw about the push axis) stays at a
+    // constrained stiffness; tangent1/tangent2 (the tipping directions) are
+    // intentionally very soft so a real contact moment at the pressed edge
+    // can passively rotate the tool flat instead of being resisted by the
+    // spring.
+    const Mat3 KR_post_contact = params.constraint_enabled
+        ? makeSpatialGainMatrix(params.post_contact_KR_diag, R_surface)
+        : params.post_contact_KR_diag.asDiagonal();
+    const Mat3 DR_post_contact = params.constraint_enabled
+        ? makeSpatialGainMatrix(params.post_contact_DR_diag, R_surface)
+        : params.post_contact_DR_diag.asDiagonal();
     ControlPhase phase = ControlPhase::kSurfaceImpedance;
     if (params.orientation_test_only) {
       phase = ControlPhase::kOrientToSurface;
@@ -355,27 +368,6 @@ int main() {
         }
       }
       const Vec3 tool_contact_point = p_EE + R_EE * tool_contact_offset_ee;
-      const Vec3 post_contact_axis =
-          normalizedOrFallback(params.post_contact_rotation_axis_base, Vec3(1.0, 0.0, 0.0));
-      double post_contact_rotation_speed_deg = params.post_contact_rotation_speed_deg;
-      if (params.auto_post_contact_rotation_sign &&
-          params.use_surface_tilt_angle &&
-          params.surface_tilt_angle_deg < 0.0) {
-        post_contact_rotation_speed_deg = -post_contact_rotation_speed_deg;
-      }
-      const double post_contact_rotation_speed_rad =
-          post_contact_rotation_speed_deg * M_PI / 180.0;
-      const double post_contact_rotation_max_rad =
-          params.post_contact_rotation_max_deg * M_PI / 180.0;
-      const double post_contact_angle_abs =
-          std::min(std::abs(post_contact_rotation_speed_rad) *
-                       std::max(0.0, time - phase_start_time),
-                   std::abs(post_contact_rotation_max_rad));
-      const double post_contact_angle =
-          std::copysign(post_contact_angle_abs, post_contact_rotation_speed_rad);
-      const Mat3 R_d_post_contact =
-          Eigen::AngleAxisd(post_contact_angle, post_contact_axis).toRotationMatrix() *
-          R_contact_start;
 
       const Vec3 e_R_to_surface =
           applyRotationalAxisMask(params, orientationError(R_EE, R_d_phase), R_surface);
@@ -433,54 +425,48 @@ int main() {
 
       if (phase == ControlPhase::kPostContactAlign) {
         const double post_align_time = time - phase_start_time;
-        const double post_contact_push = postContactPush(params, post_align_time);
-        const Vec3 edge_target =
-            first_contact_point + post_contact_push * contact_search_direction;
         const double post_moment_delta_norm = (external_moment - contact_moment_bias).norm();
         const double post_force_delta_norm = (external_force - contact_force_bias).norm();
-        const double debug_rotation_deg =
-            std::min(std::abs(post_contact_rotation_speed_deg) * post_align_time,
-                     std::abs(params.post_contact_rotation_max_deg));
         if (time >= next_post_align_debug_time) {
-          printf("\npost_align_debug: t=%.1f s, rot=%.1f/%.1f deg, push=%.1f mm, F=%.1f N, M=%.1f/%.1f Nm\n",
+          // height_delta_mm: actual height change of the pressed CONTACT
+          // EDGE since first contact (negative = moved down), comparing the
+          // edge point to itself over time. Comparing p_EE (TCP origin) to
+          // first_contact_point (the edge) would mix two different physical
+          // points and just report their fixed geometric offset.
+          const double height_delta_mm =
+              1000.0 * (tool_contact_point(2) - first_contact_point(2));
+          // actual_tip_deg: measured rotation away from the orientation held
+          // at first contact -- shows whether/how much the tool has
+          // passively tipped so far, not just where it is now.
+          const double actual_tip_deg =
+              (180.0 / M_PI) * orientationError(R_EE, R_contact_start).norm();
+          printf("post_align_debug: t=%.1f s, height_delta=%.1f mm (negative=down), F=%.1f N, tip=%.1f deg, M=%.1f Nm\n",
                  post_align_time,
-                 debug_rotation_deg,
-                 std::abs(params.post_contact_rotation_max_deg),
-                 1000.0 * post_contact_push,
+                 height_delta_mm,
                  post_force_delta_norm,
-                 post_moment_delta_norm,
-                 params.post_contact_moment_threshold);
-          printVec3Mm("p_EE", p_EE);
-          printVec3Mm("p_edge", tool_contact_point);
-          printVec3Mm("p_edge_minus_target", tool_contact_point - edge_target);
-          printVec3Mm("p_edge_minus_p_contact_1", tool_contact_point - first_contact_point);
-          printVec3Mm("p_EE_minus_p_contact_1", p_EE - first_contact_point);
+                 actual_tip_deg,
+                 post_moment_delta_norm);
           next_post_align_debug_time = time + 1.0;
         }
-        const double moment_stop_min_rotation_deg =
-            params.post_contact_moment_min_rotation_ratio *
-            std::abs(params.post_contact_rotation_max_deg);
         const bool moment_contact_reached =
             post_align_time >= params.post_contact_align_min_time &&
-            debug_rotation_deg >= moment_stop_min_rotation_deg &&
             post_moment_delta_norm >= params.post_contact_moment_threshold;
-        const bool max_rotation_reached =
-            post_align_time >= params.post_contact_align_min_time &&
-            debug_rotation_deg >= (std::abs(params.post_contact_rotation_max_deg) - 1e-6);
         const bool max_align_time_reached =
             post_align_time >= params.post_contact_align_duration;
 
-        if (moment_contact_reached || max_rotation_reached || max_align_time_reached) {
+        if (moment_contact_reached || max_align_time_reached) {
+          const double actual_tip_deg =
+              (180.0 / M_PI) * orientationError(R_EE, R_contact_start).norm();
           R_after_contact_align = R_EE;
           surface_point_runtime = p_EE;
           phase = ControlPhase::kSurfaceImpedance;
           phase_start_time = time;
           if (moment_contact_reached) {
-            printf("\nPost-align moment reached: %.2f Nm\n", post_moment_delta_norm);
-          } else if (max_rotation_reached) {
-            printf("\nPost-align rotation limit reached: %.1f deg\n", debug_rotation_deg);
+            printf("\nPost-align moment reached: %.2f Nm, actual_tip = %.1f deg\n",
+                   post_moment_delta_norm, actual_tip_deg);
           } else {
-            printf("\nPost-align time reached: %.1f s\n", post_align_time);
+            printf("\nPost-align time reached: %.1f s, actual_tip = %.1f deg\n",
+                   post_align_time, actual_tip_deg);
           }
           printf("first_contact_search = %.1f mm, first_force = %.1f N\n",
                  1000.0 * first_contact_search_distance,
@@ -572,12 +558,14 @@ int main() {
           desired.pdot_d.setZero();
         }
       } else if (phase == ControlPhase::kPostContactAlign) {
-        // Rotate while the selected tool edge/contact point stays pressed
-        // into the real surface. The controlled Cartesian point is still the
-        // TCP, so convert the desired edge position back to a TCP target:
+        // Keep pressing the selected tool edge/contact point into the real
+        // surface while holding the orientation captured at first contact as
+        // the (soft) rotational target. The controlled Cartesian point is
+        // still the TCP, so convert the desired edge position back to a TCP
+        // target:
         //
         //   p_edge_d = p_contact_1 + preload * search_direction
-        //   p_TCP_d  = p_edge_d - R_d_post_contact * r_edge_EE
+        //   p_TCP_d  = p_edge_d - R_contact_start * r_edge_EE
         //
         // This prevents the first edge from lifting away simply because the
         // TCP rotates around a different point.
@@ -585,7 +573,7 @@ int main() {
         const double post_contact_push = postContactPush(params, post_align_time);
         const Vec3 edge_target =
             first_contact_point + post_contact_push * contact_search_direction;
-        desired.p_d = edge_target - R_d_post_contact * tool_contact_offset_ee;
+        desired.p_d = edge_target - R_contact_start * tool_contact_offset_ee;
         desired.pdot_d.setZero();
       } else {
         if (contact_found) {
@@ -618,7 +606,7 @@ int main() {
           params.use_phase_sequence ||
           (contact_found && params.align_orientation_to_surface_after_contact);
       const Mat3& R_d_used = (phase == ControlPhase::kPostContactAlign)
-          ? R_d_post_contact
+          ? R_contact_start
           : (params.orientation_test_only
                  ? R_d_orientation_test
                  : (phase == ControlPhase::kSurfaceImpedance && contact_found
@@ -657,8 +645,10 @@ int main() {
           (phase == ControlPhase::kPostContactAlign)
               ? Dp_post_contact
               : (use_soft_translation ? Dp_search : (use_contact_surface_gains ? Dp_contact : Dp));
-      const Mat3& KR_used = KR;
-      const Mat3& DR_used = DR;
+      const Mat3& KR_used =
+          (phase == ControlPhase::kPostContactAlign) ? KR_post_contact : KR;
+      const Mat3& DR_used =
+          (phase == ControlPhase::kPostContactAlign) ? DR_post_contact : DR;
       // Comuting forces and torques from the impedance control law:
       Vec3 f = Kp_used * e_p + Dp_used * (desired.pdot_d - pdot);
       Vec3 m = KR_used * e_R - DR_used * omega;

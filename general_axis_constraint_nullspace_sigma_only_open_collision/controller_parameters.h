@@ -166,27 +166,6 @@ inline Parameters readParameters(const std::string& filename) {
       getDoubleAlias("post_contact_moment_threshold",
                      "alignment_contact_moment_threshold",
                      p.post_contact_moment_threshold);
-  p.post_contact_moment_min_rotation_ratio =
-      getDouble("post_contact_moment_min_rotation_ratio",
-                p.post_contact_moment_min_rotation_ratio);
-  p.post_contact_rotation_axis_base(0) =
-      getDouble("post_contact_rotation_axis_base_x", p.post_contact_rotation_axis_base(0));
-  p.post_contact_rotation_axis_base(1) =
-      getDouble("post_contact_rotation_axis_base_y", p.post_contact_rotation_axis_base(1));
-  p.post_contact_rotation_axis_base(2) =
-      getDouble("post_contact_rotation_axis_base_z", p.post_contact_rotation_axis_base(2));
-  p.auto_post_contact_rotation_sign =
-      getBool("auto_post_contact_rotation_sign", p.auto_post_contact_rotation_sign);
-  p.post_contact_rotation_speed_deg =
-      getDouble("post_contact_rotation_speed_deg", p.post_contact_rotation_speed_deg);
-  p.post_contact_rotation_max_deg =
-      getDouble("post_contact_rotation_max_deg", p.post_contact_rotation_max_deg);
-  p.post_contact_rotation_margin_deg =
-      getDouble("post_contact_rotation_margin_deg", p.post_contact_rotation_margin_deg);
-  if (p.post_contact_rotation_max_deg <= 0.0 && p.use_surface_tilt_angle) {
-    p.post_contact_rotation_max_deg =
-        std::abs(p.surface_tilt_angle_deg) + p.post_contact_rotation_margin_deg;
-  }
   p.post_contact_normal_push =
       getDouble("post_contact_normal_push", p.post_contact_normal_push);
   p.post_contact_push_speed =
@@ -228,6 +207,12 @@ inline Parameters readParameters(const std::string& filename) {
   p.post_contact_Dp_diag(0) = getDouble("post_contact_Dp_x", p.post_contact_Dp_diag(0));
   p.post_contact_Dp_diag(1) = getDouble("post_contact_Dp_y", p.post_contact_Dp_diag(1));
   p.post_contact_Dp_diag(2) = getDouble("post_contact_Dp_z", p.post_contact_Dp_diag(2));
+  p.post_contact_KR_diag(0) = getDouble("post_contact_KR_normal", p.post_contact_KR_diag(0));
+  p.post_contact_KR_diag(1) = getDouble("post_contact_KR_tangent1", p.post_contact_KR_diag(1));
+  p.post_contact_KR_diag(2) = getDouble("post_contact_KR_tangent2", p.post_contact_KR_diag(2));
+  p.post_contact_DR_diag(0) = getDouble("post_contact_DR_normal", p.post_contact_DR_diag(0));
+  p.post_contact_DR_diag(1) = getDouble("post_contact_DR_tangent1", p.post_contact_DR_diag(1));
+  p.post_contact_DR_diag(2) = getDouble("post_contact_DR_tangent2", p.post_contact_DR_diag(2));
 
   p.constrain_rotation_about_surface_normal =
       getBoolAlias("constrain_rotation_about_surface_normal",

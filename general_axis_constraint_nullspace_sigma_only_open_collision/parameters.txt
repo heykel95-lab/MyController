@@ -60,7 +60,7 @@ surface_point_z = 0.0
 #   surface_normal = [0, -sin(angle), cos(angle)]
 # angle = 0 deg gives a horizontal table normal [0, 0, 1].
 use_surface_tilt_angle = 1
-surface_tilt_angle_deg = 20.0
+surface_tilt_angle_deg = 15.0
 
 # Manual normal is only used when use_surface_tilt_angle = 0.
 surface_normal_x = 0.0
@@ -124,8 +124,10 @@ orientation_test_extra_tilt_deg = 0.0
 #   2. search_first_contact:
 #      translate in contact_search_direction while keeping R_EE near R_d_surface.
 #   3. post_contact_align:
-#      after first contact, keep the detected contact point as the virtual
-#      plane point and continue rotational alignment.
+#      after first contact, keep pressing the contacted edge into the
+#      surface (stiff downward push) while holding a very soft rotational
+#      spring, so a real contact moment can passively tip the tool flat
+#      instead of the controller scripting the rotation.
 #   4. surface_impedance:
 #      normal constrained impedance experiment.
 use_phase_sequence = 1
@@ -140,52 +142,66 @@ orient_phase_error_threshold = 0.07
 post_contact_align_min_time = 3.5
 
 # Maximum time spent in post_contact_align after first contact [s].
-post_contact_align_duration = 8.0
+# Raised since the moment threshold below was triggering the exit early
+# (a large steady preload force alone generates a sizeable moment through
+# the tool_contact_point_ee lever arm, even before the tool is fully flat),
+# so time, not moment, should now be the deciding exit condition.
+post_contact_align_duration = 15.0
 
-# Moment change that means the post-contact rotation produced clear surface
-# moment feedback, for example the second tool edge started touching [Nm].
-post_contact_moment_threshold = 25.0
-
-# Moment stop is ignored until this fraction of the planned post rotation is
-# reached. Example: 0.7 with 20 deg means moment can stop only after 14 deg.
-post_contact_moment_min_rotation_ratio = 0.7
-
-# After first contact, ignore the nominal virtual plane and rotate the tool
-# around this base-frame probing axis. For your tilted tool/table test, base x
-# is the desired tilt direction and should mainly excite q5.
-# Use a negative speed if the probing rotation goes in the wrong direction.
-post_contact_rotation_axis_base_x = 1.0
-post_contact_rotation_axis_base_y = 0.0
-post_contact_rotation_axis_base_z = 0.0
-# If enabled, negative surface_tilt_angle_deg flips the probing rotation sign.
-# The value below is the speed/sign for positive tilt.
-auto_post_contact_rotation_sign = 1
-post_contact_rotation_speed_deg = -5.0
-# Set <= 0 to use abs(surface_tilt_angle_deg) + margin, so the controller
-# can continue slightly past the nominal virtual tilt if the real table differs.
-post_contact_rotation_max_deg = 0.0
-post_contact_rotation_margin_deg = 3.0
+# Moment change that means the tool has settled/made firm contact, for
+# example the second tool edge touching down after passively tipping flat
+# [Nm]. Early-exit threshold for post_contact_align; only checked once
+# post_contact_align_min_time has elapsed.
+# Raised because with the much higher preload force now in use, the steady
+# preload alone was already producing ~30 Nm at only 9.8 deg of actual tip --
+# the old 25 Nm threshold was firing before the tool finished flattening.
+post_contact_moment_threshold = 60.0
 
 # Small position offset into the real surface during post_contact_align [m].
-# This acts like a spring preload while rotating:
-#   preload force approx Kp_normal * post_contact_normal_push
-# For Kp_normal = 7000 N/m, 0.002 m gives about 14 N.
-post_contact_normal_push = 0.004
+# This acts like a spring preload, pressing the selected edge down:
+#   preload force approx post_contact_Kp_z * post_contact_normal_push
+# Starts higher so a real downward force is felt immediately at phase entry,
+# not only after several seconds of ramp.
+post_contact_normal_push = 0.016
 
-# During post_contact_align, keep searching slightly into the surface while
-# rotating. This helps maintain the first edge contact instead of rotating away
-# from it. Total push is clamped by post_contact_max_push.
-post_contact_push_speed = 0.0015
-post_contact_max_push = 0.012
+# During post_contact_align, keep pushing slightly deeper into the surface
+# over time. This grows the preload/contact moment at the pressed edge,
+# which is what should passively tip the tool flat. Total push is clamped by
+# post_contact_max_push.
+post_contact_push_speed = 0.008
+post_contact_max_push = 0.029
 
-# Translational spring used only during post_contact_align.
-# Higher z makes the selected edge follow p_edge_d more strongly while rotating.
-post_contact_Kp_x = 800.0
-post_contact_Kp_y = 800.0
-post_contact_Kp_z = 1200.0
-post_contact_Dp_x = 35.0
-post_contact_Dp_y = 35.0
-post_contact_Dp_z = 45.0
+# Translational spring used only during post_contact_align, in the base
+# frame [x0, y0, z0]. z0 (downward, into the table) is intentionally stiff
+# so the preload above generates a real contact moment at the pressed edge:
+# 4500 N/m * 0.016 m = 72 N immediately, ramping to 4500 N/m * 0.029 m =
+# 130.5 N peak. Real Cartesian safety limit is collision_force_acc/nom
+# (180 N, see below) -- collision_cartesian_force_threshold (45 N) is NOT
+# actually enforced by this controller. 130.5 N peak leaves ~49.5 N margin.
+# x0 and y0 are made even softer than before (still compliant, lower than
+# the previous 150 N/m) so the tool can slide freely sideways as it tips,
+# in case that lateral spring was part of what stopped it short of flat.
+post_contact_Kp_x = 40.0
+post_contact_Kp_y = 40.0
+post_contact_Kp_z = 4500.0
+post_contact_Dp_x = 10.0
+post_contact_Dp_y = 10.0
+post_contact_Dp_z = 145.0
+
+# Rotational spring/damping used only during post_contact_align, surface
+# frame [normal, tangent1, tangent2]. The orientation target is the pose
+# held at first contact (no scripted rotation). normal (yaw about the push
+# axis) stays constrained so the tool can't spin freely; tangent1/tangent2
+# (the tipping directions) are set to zero stiffness -- fully free, the
+# minimum possible -- relying only on light damping to avoid wild
+# oscillation, so the real contact moment from the edge preload above can
+# passively rotate the tool flat with no spring resisting it.
+post_contact_KR_normal = 8.0
+post_contact_KR_tangent1 = 0.0
+post_contact_KR_tangent2 = 0.0
+post_contact_DR_normal = 4.0
+post_contact_DR_tangent1 = 0.05
+post_contact_DR_tangent2 = 0.05
 
 # After post-contact alignment, use the real contact/search surface for
 # surface impedance. With manual downward search this means a horizontal table
@@ -396,7 +412,10 @@ nullspace_tau_max = 1.0
 # Increase only under professor/lab supervision.
 # Torque thresholds are joint-side [Nm], 7 values internally all set equal.
 # Force thresholds are Cartesian [N/Nm style libfranka 6D thresholds], 6 values internally all set equal.
+# These are the ones that actually reach robot.setCollisionBehavior() --
+# collision_joint_torque_threshold/collision_cartesian_force_threshold/
+# collision_cartesian_moment_threshold above are NOT wired into that call.
 collision_torque_acc = 120.0
 collision_torque_nom = 120.0
-collision_force_acc = 120.0
-collision_force_nom = 120.0
+collision_force_acc = 180.0
+collision_force_nom = 180.0

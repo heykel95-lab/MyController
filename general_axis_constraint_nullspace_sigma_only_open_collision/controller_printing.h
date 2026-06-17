@@ -133,19 +133,14 @@ inline void printParameters(const Parameters& params) {
   printf("orient_tol: %.1f deg | post_align: %.1f s\n",
          (180.0 / M_PI) * params.orient_phase_error_threshold,
          params.post_contact_align_duration);
-  printVec3("post_axis_base", params.post_contact_rotation_axis_base);
-  printf("post_rotation: %.1f deg/s, max %.1f deg, moment %.1f Nm after %.0f%% rot, auto_sign: %s\n",
-         params.post_contact_rotation_speed_deg,
-         params.post_contact_rotation_max_deg,
-         params.post_contact_moment_threshold,
-         100.0 * params.post_contact_moment_min_rotation_ratio,
-         params.auto_post_contact_rotation_sign ? "on" : "off");
   printf("post_push: %.1f mm + %.1f mm/s, max %.1f mm\n",
          1000.0 * params.post_contact_normal_push,
          1000.0 * params.post_contact_push_speed,
          1000.0 * params.post_contact_max_push);
   printVec3("post_Kp", params.post_contact_Kp_diag);
   printVec3("post_Dp", params.post_contact_Dp_diag);
+  printVec3("post_KR [normal, tangent1, tangent2]", params.post_contact_KR_diag);
+  printVec3("post_DR [normal, tangent1, tangent2]", params.post_contact_DR_diag);
   printf("contact_surface_after_align: %s\n",
          params.use_search_direction_surface_after_alignment ? "on" : "off");
   printVec3("Kp", params.Kp_diag);

@@ -28,14 +28,8 @@ struct Parameters {
   double orient_phase_min_time = 0.5;
   double orient_phase_error_threshold = 0.03;
   double post_contact_align_min_time = 0.3;
-  double post_contact_align_duration = 3.0;
-  double post_contact_moment_threshold = 2.0;
-  double post_contact_moment_min_rotation_ratio = 0.0;
-  Vec3 post_contact_rotation_axis_base = Vec3(1.0, 0.0, 0.0);
-  bool auto_post_contact_rotation_sign = true;
-  double post_contact_rotation_speed_deg = 5.0;
-  double post_contact_rotation_max_deg = 15.0;
-  double post_contact_rotation_margin_deg = 0.0;
+  double post_contact_align_duration = 15.0;
+  double post_contact_moment_threshold = 60.0;
   double post_contact_normal_push = 0.0;
   double post_contact_push_speed = 0.0;
   double post_contact_max_push = 0.0;
@@ -54,8 +48,10 @@ struct Parameters {
   double alignment_contact_force_threshold = 5.0;
   Vec3 contact_search_Kp_diag = Vec3(150.0, 150.0, 150.0);
   Vec3 contact_search_Dp_diag = Vec3(25.0, 25.0, 25.0);
-  Vec3 post_contact_Kp_diag = Vec3(800.0, 800.0, 1200.0);
-  Vec3 post_contact_Dp_diag = Vec3(35.0, 35.0, 45.0);
+  Vec3 post_contact_Kp_diag = Vec3(40.0, 40.0, 4500.0);
+  Vec3 post_contact_Dp_diag = Vec3(10.0, 10.0, 145.0);
+  Vec3 post_contact_KR_diag = Vec3(8.0, 0.0, 0.0);
+  Vec3 post_contact_DR_diag = Vec3(4.0, 0.05, 0.05);
 
   bool constrain_rotation_about_surface_normal = true;
   bool constrain_rotation_about_surface_tangent1 = true;

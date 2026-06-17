@@ -87,8 +87,12 @@ use_contact_search = 1
 
 The translational search phase uses estimated external force only as a contact
 trigger, not as force control. On contact, the current TCP position becomes the
-runtime surface point. Moment comparison is used later in `post_contact_align`,
-while the tool rotates after the first contact.
+runtime surface point. In `post_contact_align`, the controller keeps pressing
+the contacted edge into the surface with a stiff downward spring while holding
+a very soft rotational spring (target = orientation at first contact); a real
+contact moment at the pressed edge should passively tip the tool flat instead
+of the controller scripting the rotation. A moment-threshold or time-based
+exit then hands off to normal surface impedance.
 
 ## Build And Run
 
