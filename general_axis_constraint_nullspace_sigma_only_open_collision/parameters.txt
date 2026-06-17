@@ -139,14 +139,12 @@ orient_phase_min_time = 0.5
 orient_phase_error_threshold = 0.07
 
 # Minimum time before moment comparison can end post_contact_align [s].
-post_contact_align_min_time = 3.5
+post_contact_align_min_time = 2.0
 
 # Maximum time spent in post_contact_align after first contact [s].
-# Raised since the moment threshold below was triggering the exit early
-# (a large steady preload force alone generates a sizeable moment through
-# the tool_contact_point_ee lever arm, even before the tool is fully flat),
-# so time, not moment, should now be the deciding exit condition.
-post_contact_align_duration = 15.0
+# The no-sideways test settled by about 2-3 s; 8 s keeps a larger safety margin
+# without holding the high preload for the old 15 s window.
+post_contact_align_duration = 8.0
 
 # Moment change that means the tool has settled/made firm contact, for
 # example the second tool edge touching down after passively tipping flat
@@ -178,12 +176,14 @@ post_contact_max_push = 0.031
 # 170.5 N peak. Real Cartesian safety limit is collision_force_acc/nom
 # (200 N, see below) -- collision_cartesian_force_threshold (45 N) is NOT
 # actually enforced by this controller. 170.5 N peak leaves ~29.5 N margin.
-# x0 and y0 stay soft so the tool can slide freely sideways as it tips.
-post_contact_Kp_x = 40.0
-post_contact_Kp_y = 40.0
+# Medium x0/y0 stiffness for the sideways-compliance pole test. This should
+# show whether the instantaneous screw axis changes when lateral motion is
+# less constrained, while keeping more support than the original 40 N/m case.
+post_contact_Kp_x = 120.0
+post_contact_Kp_y = 120.0
 post_contact_Kp_z = 5500.0
-post_contact_Dp_x = 10.0
-post_contact_Dp_y = 10.0
+post_contact_Dp_x = 25.0
+post_contact_Dp_y = 25.0
 post_contact_Dp_z = 175.0
 
 # Rotational spring/damping used only during post_contact_align, surface

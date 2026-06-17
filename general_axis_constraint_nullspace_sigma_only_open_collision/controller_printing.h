@@ -159,6 +159,12 @@ inline void printFinalSummary(
     const Vec3& final_p_EE,
     const Vec3& final_e_p,
     const Vec3& final_e_R,
+    const Vec3& final_instant_pole_to_edge,
+    const Vec3& final_instant_axis_dir,
+    double final_instant_screw_pitch,
+    double final_instant_edge_axis_distance,
+    double final_instant_axis_time,
+    bool final_instant_pole_valid,
     const std::string& csv_file_name) {
   printf("\n=== Final result ===\n");
   printVec3Mm("p_d", final_p_d);
@@ -167,5 +173,19 @@ inline void printFinalSummary(
   printf("position_error = %.2f mm\n", 1000.0 * final_e_p.norm());
   printVec3Deg("e_R", final_e_R);
   printf("rotation_error = %.2f deg\n", (180.0 / M_PI) * final_e_R.norm());
+  if (final_instant_pole_valid) {
+    printf("last_valid_axis: t=%.1f s | edge=%.2f mm | axis_point_from_edge=[%+.1f, %+.1f, %+.1f] mm | pitch=%.2f mm/rad | dir=[%+.3f, %+.3f, %+.3f]\n",
+           final_instant_axis_time,
+           1000.0 * final_instant_edge_axis_distance,
+           1000.0 * final_instant_pole_to_edge(0),
+           1000.0 * final_instant_pole_to_edge(1),
+           1000.0 * final_instant_pole_to_edge(2),
+           1000.0 * final_instant_screw_pitch,
+           final_instant_axis_dir(0),
+           final_instant_axis_dir(1),
+           final_instant_axis_dir(2));
+  } else {
+    printf("instant_axis: slow_rotation\n");
+  }
   printf("csv: %s\n", csv_file_name.c_str());
 }

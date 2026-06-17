@@ -54,6 +54,41 @@ inline double postContactPush(const Parameters& params, double post_align_time) 
   return push;
 }
 
+inline bool computeInstantaneousPoleFromTcp(
+    const Vec3& v,
+    const Vec3& omega,
+    Vec3* pole_from_tcp) {
+  const double omega_norm_squared = omega.squaredNorm();
+  constexpr double kMinUsefulAngularSpeed = 0.02;
+  if (omega_norm_squared <= kMinUsefulAngularSpeed * kMinUsefulAngularSpeed) {
+    pole_from_tcp->setZero();
+    return false;
+  }
+
+  *pole_from_tcp = omega.cross(v) / omega_norm_squared;
+  return true;
+}
+
+inline double instantaneousScrewPitch(const Vec3& v, const Vec3& omega) {
+  const double omega_norm_squared = omega.squaredNorm();
+  if (omega_norm_squared <= 1e-8) {
+    return 0.0;
+  }
+  return omega.dot(v) / omega_norm_squared;
+}
+
+inline double pointDistanceToAxis(
+    const Vec3& point,
+    const Vec3& axis_point,
+    const Vec3& axis_direction) {
+  const double axis_norm = axis_direction.norm();
+  if (axis_norm <= 1e-8) {
+    return 0.0;
+  }
+
+  return (point - axis_point).cross(axis_direction / axis_norm).norm();
+}
+
 inline Vec3 orientationError(const Mat3& R_current, const Mat3& R_desired) {
   Mat3 R_error = R_current.transpose() * R_desired;
   Eigen::AngleAxisd angle_axis(R_error);

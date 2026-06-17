@@ -235,8 +235,25 @@ int main() {
     Vec3 final_p_d = Vec3::Zero();
     Vec3 final_e_p = Vec3::Zero();
     Vec3 final_e_R = Vec3::Zero();
+    Vec3 final_pdot = Vec3::Zero();
+    Vec3 final_omega = Vec3::Zero();
+    Vec3 final_tool_contact_point = Vec3::Zero();
+    Vec3 final_instant_pole_from_tcp = Vec3::Zero();
+    Vec3 final_instant_pole_base = Vec3::Zero();
+    Vec3 final_instant_pole_to_edge = Vec3::Zero();
+    Vec3 final_instant_axis_dir = Vec3::Zero();
+    double final_instant_screw_pitch = 0.0;
+    double final_instant_edge_axis_distance = 0.0;
+    double final_instant_axis_time = 0.0;
+    bool final_instant_pole_valid = false;
     Vec7 final_q = q_start;
     double next_orientation_debug_time = 0.0;
+    Vec3 last_valid_post_align_axis_point_from_edge = Vec3::Zero();
+    Vec3 last_valid_post_align_axis_dir = Vec3::Zero();
+    double last_valid_post_align_axis_edge_distance = 0.0;
+    double last_valid_post_align_screw_pitch = 0.0;
+    double last_valid_post_align_axis_time = 0.0;
+    bool last_valid_post_align_axis_valid = false;
 
     // Print the starting message and instructions for the user before entering the control loop.
     printf("Starting impedance controller:\n");
@@ -428,24 +445,52 @@ int main() {
         const double post_moment_delta_norm = (external_moment - contact_moment_bias).norm();
         const double post_force_delta_norm = (external_force - contact_force_bias).norm();
         if (time >= next_post_align_debug_time) {
-          // height_delta_mm: actual height change of the pressed CONTACT
-          // EDGE since first contact (negative = moved down), comparing the
-          // edge point to itself over time. Comparing p_EE (TCP origin) to
-          // first_contact_point (the edge) would mix two different physical
-          // points and just report their fixed geometric offset.
-          const double height_delta_mm =
-              1000.0 * (tool_contact_point(2) - first_contact_point(2));
           // actual_tip_deg: measured rotation away from the orientation held
           // at first contact -- shows whether/how much the tool has
           // passively tipped so far, not just where it is now.
           const double actual_tip_deg =
               (180.0 / M_PI) * orientationError(R_EE, R_contact_start).norm();
-          printf("post_align_debug: t=%.1f s, height_delta=%.1f mm (negative=down), F=%.1f N, tip=%.1f deg, M=%.1f Nm\n",
+          Vec3 instant_pole_from_tcp = Vec3::Zero();
+          const bool instant_pole_valid =
+              computeInstantaneousPoleFromTcp(pdot, omega, &instant_pole_from_tcp);
+          const Vec3 instant_pole_base = p_EE + instant_pole_from_tcp;
+          const Vec3 instant_axis_point_from_edge =
+              instant_pole_base - tool_contact_point;
+          const Vec3 instant_axis_dir =
+              instant_pole_valid ? omega.normalized() : Vec3::Zero();
+          const double instant_screw_pitch =
+              instant_pole_valid ? instantaneousScrewPitch(pdot, omega) : 0.0;
+          const double instant_edge_axis_distance =
+              instant_pole_valid
+                  ? pointDistanceToAxis(tool_contact_point, instant_pole_base, omega)
+                  : 0.0;
+          const Vec3 edge_from_contact_mm =
+              1000.0 * (tool_contact_point - first_contact_point);
+          printf("align: t=%4.1f s | edge=[%5.1f %5.1f %5.1f] mm | |edge|=%5.1f mm | tip=%4.1f deg | F=%5.1f N | M=%5.1f Nm",
                  post_align_time,
-                 height_delta_mm,
-                 post_force_delta_norm,
+                 edge_from_contact_mm(0),
+                 edge_from_contact_mm(1),
+                 edge_from_contact_mm(2),
+                 edge_from_contact_mm.norm(),
                  actual_tip_deg,
+                 post_force_delta_norm,
                  post_moment_delta_norm);
+          if (instant_pole_valid) {
+            last_valid_post_align_axis_point_from_edge = instant_axis_point_from_edge;
+            last_valid_post_align_axis_dir = instant_axis_dir;
+            last_valid_post_align_axis_edge_distance = instant_edge_axis_distance;
+            last_valid_post_align_screw_pitch = instant_screw_pitch;
+            last_valid_post_align_axis_time = post_align_time;
+            last_valid_post_align_axis_valid = true;
+            printf(" | axis_edge=%5.1f mm | axis_from_edge=[%+5.1f %+5.1f %+5.1f] mm | pitch=%6.1f mm/rad\n",
+                   1000.0 * instant_edge_axis_distance,
+                   1000.0 * instant_axis_point_from_edge(0),
+                   1000.0 * instant_axis_point_from_edge(1),
+                   1000.0 * instant_axis_point_from_edge(2),
+                   1000.0 * instant_screw_pitch);
+          } else {
+            printf(" | axis=slow\n");
+          }
           next_post_align_debug_time = time + 1.0;
         }
         const bool moment_contact_reached =
@@ -461,22 +506,41 @@ int main() {
           surface_point_runtime = p_EE;
           phase = ControlPhase::kSurfaceImpedance;
           phase_start_time = time;
-          if (moment_contact_reached) {
-            printf("\nPost-align moment reached: %.2f Nm, actual_tip = %.1f deg\n",
-                   post_moment_delta_norm, actual_tip_deg);
+          const Vec3 edge_from_contact_mm =
+              1000.0 * (tool_contact_point - first_contact_point);
+          const Vec3 tcp_from_contact_mm =
+              1000.0 * (p_EE - first_contact_point);
+          printf("\n=== Post-align result ===\n");
+          printf("stop: %s | t=%.1f s | tip=%.1f deg | F=%.1f N | M=%.1f Nm\n",
+                 moment_contact_reached ? "moment" : "time",
+                 post_align_time,
+                 actual_tip_deg,
+                 post_force_delta_norm,
+                 post_moment_delta_norm);
+          printf("edge_from_contact = [%+.1f, %+.1f, %+.1f] mm | norm=%.1f mm\n",
+                 edge_from_contact_mm(0),
+                 edge_from_contact_mm(1),
+                 edge_from_contact_mm(2),
+                 edge_from_contact_mm.norm());
+          printf("tcp_from_contact  = [%+.1f, %+.1f, %+.1f] mm | norm=%.1f mm\n",
+                 tcp_from_contact_mm(0),
+                 tcp_from_contact_mm(1),
+                 tcp_from_contact_mm(2),
+                 tcp_from_contact_mm.norm());
+          if (last_valid_post_align_axis_valid) {
+            printf("last_valid_axis: t=%.1f s | edge=%.1f mm | axis_from_edge=[%+.1f, %+.1f, %+.1f] mm | pitch=%.1f mm/rad | dir=[%+.3f, %+.3f, %+.3f]\n",
+                   last_valid_post_align_axis_time,
+                   1000.0 * last_valid_post_align_axis_edge_distance,
+                   1000.0 * last_valid_post_align_axis_point_from_edge(0),
+                   1000.0 * last_valid_post_align_axis_point_from_edge(1),
+                   1000.0 * last_valid_post_align_axis_point_from_edge(2),
+                   1000.0 * last_valid_post_align_screw_pitch,
+                   last_valid_post_align_axis_dir(0),
+                   last_valid_post_align_axis_dir(1),
+                   last_valid_post_align_axis_dir(2));
           } else {
-            printf("\nPost-align time reached: %.1f s, actual_tip = %.1f deg\n",
-                   post_align_time, actual_tip_deg);
+            printf("axis=slow | edge_norm=%.1f mm\n", edge_from_contact_mm.norm());
           }
-          printf("first_contact_search = %.1f mm, first_force = %.1f N\n",
-                 1000.0 * first_contact_search_distance,
-                 first_contact_force_delta);
-          printVec3Mm("p_contact_1", first_contact_point);
-          printVec3Mm("p_after_align", p_EE);
-          printVec3Mm("p_edge_after_align", tool_contact_point);
-          printVec3Mm("p_edge_after_minus_contact_1", tool_contact_point - first_contact_point);
-          printVec3Mm("p_after_minus_contact_1", p_EE - first_contact_point);
-          printVec3Mm("surface_point_updated", surface_point_runtime);
           printf("phase: %s\n", phaseName(phase));
         }
       }
@@ -703,6 +767,9 @@ int main() {
       final_p_d = desired.p_d;
       final_e_p = e_p;
       final_e_R = e_R;
+      final_pdot = pdot;
+      final_omega = omega;
+      final_tool_contact_point = tool_contact_point;
       final_q = q_current;
 
       Array7 tau_array = vec7ToArray(tau_cmd);
@@ -727,6 +794,33 @@ int main() {
     }
     printJointStartEndTableDeg(q_start, final_q);
 
+    if (last_valid_post_align_axis_valid) {
+      final_instant_pole_to_edge = last_valid_post_align_axis_point_from_edge;
+      final_instant_axis_dir = last_valid_post_align_axis_dir;
+      final_instant_screw_pitch = last_valid_post_align_screw_pitch;
+      final_instant_edge_axis_distance = last_valid_post_align_axis_edge_distance;
+      final_instant_axis_time = last_valid_post_align_axis_time;
+      final_instant_pole_valid = true;
+    } else {
+      final_instant_pole_valid =
+          computeInstantaneousPoleFromTcp(final_pdot, final_omega, &final_instant_pole_from_tcp);
+      final_instant_pole_base = final_p_EE + final_instant_pole_from_tcp;
+      final_instant_pole_to_edge = final_instant_pole_base - final_tool_contact_point;
+      final_instant_axis_dir =
+          final_instant_pole_valid ? final_omega.normalized() : Vec3::Zero();
+      final_instant_screw_pitch =
+          final_instant_pole_valid
+              ? instantaneousScrewPitch(final_pdot, final_omega)
+              : 0.0;
+      final_instant_edge_axis_distance =
+          final_instant_pole_valid
+              ? pointDistanceToAxis(
+                    final_tool_contact_point,
+                    final_instant_pole_base,
+                    final_omega)
+              : 0.0;
+    }
+
     // After the control loop finishes, write the logged data to a CSV file and print the final summary of the experiment results.
     writeLogToCsv(log_data, params.csv_file_name);
     printFinalSummary(
@@ -734,6 +828,12 @@ int main() {
         final_p_EE,
         final_e_p,
         final_e_R,
+        final_instant_pole_to_edge,
+        final_instant_axis_dir,
+        final_instant_screw_pitch,
+        final_instant_edge_axis_distance,
+        final_instant_axis_time,
+        final_instant_pole_valid,
         params.csv_file_name);
 
   } catch (const franka::Exception& e) {
