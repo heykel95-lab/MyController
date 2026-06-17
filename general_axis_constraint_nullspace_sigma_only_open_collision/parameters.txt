@@ -162,46 +162,46 @@ post_contact_moment_threshold = 60.0
 #   preload force approx post_contact_Kp_z * post_contact_normal_push
 # Starts higher so a real downward force is felt immediately at phase entry,
 # not only after several seconds of ramp.
-post_contact_normal_push = 0.016
+post_contact_normal_push = 0.018
 
 # During post_contact_align, keep pushing slightly deeper into the surface
 # over time. This grows the preload/contact moment at the pressed edge,
 # which is what should passively tip the tool flat. Total push is clamped by
 # post_contact_max_push.
-post_contact_push_speed = 0.008
-post_contact_max_push = 0.029
+post_contact_push_speed = 0.010
+post_contact_max_push = 0.031
 
 # Translational spring used only during post_contact_align, in the base
 # frame [x0, y0, z0]. z0 (downward, into the table) is intentionally stiff
 # so the preload above generates a real contact moment at the pressed edge:
-# 4500 N/m * 0.016 m = 72 N immediately, ramping to 4500 N/m * 0.029 m =
-# 130.5 N peak. Real Cartesian safety limit is collision_force_acc/nom
-# (180 N, see below) -- collision_cartesian_force_threshold (45 N) is NOT
-# actually enforced by this controller. 130.5 N peak leaves ~49.5 N margin.
-# x0 and y0 are made even softer than before (still compliant, lower than
-# the previous 150 N/m) so the tool can slide freely sideways as it tips,
-# in case that lateral spring was part of what stopped it short of flat.
+# 5500 N/m * 0.018 m = 99 N immediately, ramping to 5500 N/m * 0.031 m =
+# 170.5 N peak. Real Cartesian safety limit is collision_force_acc/nom
+# (200 N, see below) -- collision_cartesian_force_threshold (45 N) is NOT
+# actually enforced by this controller. 170.5 N peak leaves ~29.5 N margin.
+# x0 and y0 stay soft so the tool can slide freely sideways as it tips.
 post_contact_Kp_x = 40.0
 post_contact_Kp_y = 40.0
-post_contact_Kp_z = 4500.0
+post_contact_Kp_z = 5500.0
 post_contact_Dp_x = 10.0
 post_contact_Dp_y = 10.0
-post_contact_Dp_z = 145.0
+post_contact_Dp_z = 175.0
 
 # Rotational spring/damping used only during post_contact_align, surface
 # frame [normal, tangent1, tangent2]. The orientation target is the pose
 # held at first contact (no scripted rotation). normal (yaw about the push
 # axis) stays constrained so the tool can't spin freely; tangent1/tangent2
-# (the tipping directions) are set to zero stiffness -- fully free, the
-# minimum possible -- relying only on light damping to avoid wild
-# oscillation, so the real contact moment from the edge preload above can
-# passively rotate the tool flat with no spring resisting it.
+# (the tipping directions) are at zero stiffness -- already the minimum
+# possible, since negative stiffness would actively destabilize rather than
+# soften further. Damping is the only remaining knob and is now reduced to
+# near-zero too, just enough to avoid an undamped oscillation, so the real
+# contact moment from the edge preload above can passively rotate the tool
+# flat with almost nothing resisting it.
 post_contact_KR_normal = 8.0
 post_contact_KR_tangent1 = 0.0
 post_contact_KR_tangent2 = 0.0
 post_contact_DR_normal = 4.0
-post_contact_DR_tangent1 = 0.05
-post_contact_DR_tangent2 = 0.05
+post_contact_DR_tangent1 = 0.01
+post_contact_DR_tangent2 = 0.01
 
 # After post-contact alignment, use the real contact/search surface for
 # surface impedance. With manual downward search this means a horizontal table
@@ -417,5 +417,5 @@ nullspace_tau_max = 1.0
 # collision_cartesian_moment_threshold above are NOT wired into that call.
 collision_torque_acc = 120.0
 collision_torque_nom = 120.0
-collision_force_acc = 180.0
-collision_force_nom = 180.0
+collision_force_acc = 200.0
+collision_force_nom = 200.0

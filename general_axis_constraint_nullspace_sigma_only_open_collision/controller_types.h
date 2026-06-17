@@ -48,10 +48,10 @@ struct Parameters {
   double alignment_contact_force_threshold = 5.0;
   Vec3 contact_search_Kp_diag = Vec3(150.0, 150.0, 150.0);
   Vec3 contact_search_Dp_diag = Vec3(25.0, 25.0, 25.0);
-  Vec3 post_contact_Kp_diag = Vec3(40.0, 40.0, 4500.0);
-  Vec3 post_contact_Dp_diag = Vec3(10.0, 10.0, 145.0);
+  Vec3 post_contact_Kp_diag = Vec3(40.0, 40.0, 5500.0);
+  Vec3 post_contact_Dp_diag = Vec3(10.0, 10.0, 175.0);
   Vec3 post_contact_KR_diag = Vec3(8.0, 0.0, 0.0);
-  Vec3 post_contact_DR_diag = Vec3(4.0, 0.05, 0.05);
+  Vec3 post_contact_DR_diag = Vec3(4.0, 0.01, 0.01);
 
   bool constrain_rotation_about_surface_normal = true;
   bool constrain_rotation_about_surface_tangent1 = true;
