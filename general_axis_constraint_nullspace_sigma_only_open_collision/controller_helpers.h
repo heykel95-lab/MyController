@@ -89,6 +89,39 @@ inline double pointDistanceToAxis(
   return (point - axis_point).cross(axis_direction / axis_norm).norm();
 }
 
+inline double suggestedPositiveGain(
+    double wrench_component,
+    double motion_component,
+    double min_gain,
+    double max_gain) {
+  const double min_motion = 1e-6;
+  double gain = max_gain;
+  if (std::abs(motion_component) > min_motion) {
+    gain = std::abs(wrench_component / motion_component);
+  }
+  return std::max(min_gain, std::min(max_gain, gain));
+}
+
+inline Vec3 suggestedPositiveGains(
+    const Vec3& wrench,
+    const Vec3& motion,
+    double min_gain,
+    double max_gain) {
+  return Vec3(
+      suggestedPositiveGain(wrench(0), motion(0), min_gain, max_gain),
+      suggestedPositiveGain(wrench(1), motion(1), min_gain, max_gain),
+      suggestedPositiveGain(wrench(2), motion(2), min_gain, max_gain));
+}
+
+inline Vec3 desiredAxisLinearMotionFromTcp(
+    const Vec3& axis_from_tcp,
+    const Vec3& axis_dir,
+    double pitch) {
+  const Vec3 axis_unit =
+      (axis_dir.norm() > 1e-9) ? axis_dir.normalized() : Vec3(1.0, 0.0, 0.0);
+  return -axis_unit.cross(axis_from_tcp) + pitch * axis_unit;
+}
+
 inline Vec3 orientationError(const Mat3& R_current, const Mat3& R_desired) {
   Mat3 R_error = R_current.transpose() * R_desired;
   Eigen::AngleAxisd angle_axis(R_error);

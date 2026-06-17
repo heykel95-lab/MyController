@@ -108,6 +108,14 @@ inline Parameters readParameters(const std::string& filename) {
   p.robot_ip = getString("robot_ip", p.robot_ip);
   p.experiment_duration = getDouble("experiment_duration", p.experiment_duration);
   p.csv_file_name = getString("csv_file_name", p.csv_file_name);
+  p.log_every_n_cycles =
+      std::max(1, static_cast<int>(getDouble("log_every_n_cycles", p.log_every_n_cycles)));
+  p.max_log_rows =
+      std::max(0, static_cast<int>(getDouble("max_log_rows", p.max_log_rows)));
+  p.open_gripper_before_run = getBool("open_gripper_before_run", p.open_gripper_before_run);
+  p.require_gripper_open = getBool("require_gripper_open", p.require_gripper_open);
+  p.gripper_open_width = getDouble("gripper_open_width", p.gripper_open_width);
+  p.gripper_open_speed = getDouble("gripper_open_speed", p.gripper_open_speed);
 
   p.hold_mode = getBool("hold_mode", p.hold_mode);
   p.hold_mode = getBool("use_current_pose", p.hold_mode);
@@ -178,6 +186,24 @@ inline Parameters readParameters(const std::string& filename) {
   p.use_virtual_center_after_contact =
       getBool("use_virtual_center_after_contact", p.use_virtual_center_after_contact);
   p.vcr_offset = getDouble("vcr_offset", p.vcr_offset);
+  p.suggest_gains_from_desired_axis =
+      getBool("suggest_gains_from_desired_axis", p.suggest_gains_from_desired_axis);
+  p.desired_axis_from_edge(0) =
+      getDouble("desired_axis_from_edge_x", p.desired_axis_from_edge(0));
+  p.desired_axis_from_edge(1) =
+      getDouble("desired_axis_from_edge_y", p.desired_axis_from_edge(1));
+  p.desired_axis_from_edge(2) =
+      getDouble("desired_axis_from_edge_z", p.desired_axis_from_edge(2));
+  p.desired_axis_dir(0) = getDouble("desired_axis_dir_x", p.desired_axis_dir(0));
+  p.desired_axis_dir(1) = getDouble("desired_axis_dir_y", p.desired_axis_dir(1));
+  p.desired_axis_dir(2) = getDouble("desired_axis_dir_z", p.desired_axis_dir(2));
+  p.desired_axis_pitch = getDouble("desired_axis_pitch", p.desired_axis_pitch);
+  p.suggested_gain_omega_ref =
+      getDouble("suggested_gain_omega_ref", p.suggested_gain_omega_ref);
+  p.suggested_gain_angle_ref =
+      getDouble("suggested_gain_angle_ref", p.suggested_gain_angle_ref);
+  p.suggested_gain_min = getDouble("suggested_gain_min", p.suggested_gain_min);
+  p.suggested_gain_max = getDouble("suggested_gain_max", p.suggested_gain_max);
 
   p.use_contact_search = getBool("use_contact_search", p.use_contact_search);
   p.contact_search_use_surface_normal =

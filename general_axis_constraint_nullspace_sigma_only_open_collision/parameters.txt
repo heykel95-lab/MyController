@@ -2,12 +2,21 @@
 
 robot_ip = 172.16.0.2
 
+# Open the Franka hand after q_init and before contact search.
+# This commands the fully open width as late as possible before contact.
+open_gripper_before_run = 1
+require_gripper_open = 1
+gripper_open_width = 0.080
+gripper_open_speed = 0.050
+
 # Time mode:
 #   experiment_duration = 0.0  -> run indefinitely until e + Enter
 #   experiment_duration > 0.0  -> automatic stop after this time [s]
 experiment_duration = 0.0
 
 csv_file_name = general_axis_constraint_nullspace_sigma_only_open_collision_log.csv
+log_every_n_cycles = 1
+max_log_rows = 120000
 
 # 1 = static holding/compliance test
 # 0 = smooth relative trajectory test
@@ -215,6 +224,36 @@ use_search_direction_surface_after_alignment = 1
 # vcr_offset < 0.0 -> below the surface.
 use_virtual_center_after_contact = 0
 vcr_offset = 0.0
+
+# ------------------------------------------------------------------
+# Suggested gains from a desired instantaneous axis
+# ------------------------------------------------------------------
+# This is diagnostic only: it prints suggested post-contact stiffness/damping
+# values at the end of post_contact_align, but it does not apply them.
+#
+# Desired axis is expressed in the robot base frame, relative to the active
+# tool edge:
+#   axis_point = p_edge + desired_axis_from_edge
+#   axis_line(s) = axis_point + s * desired_axis_dir
+#
+# The default below is the last measured useful axis from the medium
+# sideways-compliance run.
+suggest_gains_from_desired_axis = 1
+desired_axis_from_edge_x = -0.0043
+desired_axis_from_edge_y = -0.0388
+desired_axis_from_edge_z = 0.1094
+desired_axis_dir_x = -0.982
+desired_axis_dir_y = 0.169
+desired_axis_dir_z = 0.083
+desired_axis_pitch = 0.0066
+
+# Reference motion scale used to turn the desired axis direction into actual
+# gain numbers. The axis shape is independent of this scale, but the printed
+# gains are not.
+suggested_gain_omega_ref = 0.20
+suggested_gain_angle_ref = 0.10
+suggested_gain_min = 0.01
+suggested_gain_max = 8000.0
 
 # ------------------------------------------------------------------
 # Automatic contact search for the virtual surface point

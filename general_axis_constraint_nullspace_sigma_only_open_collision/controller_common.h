@@ -19,6 +19,7 @@
 
 #include <franka/duration.h>
 #include <franka/exception.h>
+#include <franka/gripper.h>
 #include <franka/model.h>
 #include <franka/robot.h>
 #include <franka/robot_state.h>
@@ -40,6 +41,7 @@ template <typename MatrixType>
 using Map = Eigen::Map<MatrixType>;
 
 using Robot = franka::Robot;
+using Gripper = franka::Gripper;
 using RobotState = franka::RobotState;
 using Model = franka::Model;
 using Torques = franka::Torques;

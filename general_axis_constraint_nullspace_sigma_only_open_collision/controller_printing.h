@@ -104,12 +104,26 @@ inline void printParameters(const Parameters& params) {
          params.q_init_case.c_str(),
          params.use_contact_search ? "on" : "off",
          params.orientation_test_only ? "on" : "off");
+  printf("gripper_open: %s | width=%.1f mm | require=%s\n",
+         params.open_gripper_before_run ? "on" : "off",
+         1000.0 * params.gripper_open_width,
+         params.require_gripper_open ? "yes" : "no");
+  printf("logging: every %d cycles | max_rows=%d\n",
+         params.log_every_n_cycles,
+         params.max_log_rows);
   printf("search_direction: %s\n",
          params.contact_search_use_surface_normal ? "-surface_normal" : "manual");
   printf("phases: %s | virtual_center: %s | vcr_offset: %.1f mm\n",
          params.use_phase_sequence ? "on" : "off",
          params.use_virtual_center_after_contact ? "on" : "off",
          1000.0 * params.vcr_offset);
+  printf("gain_suggestion: %s | omega_ref=%.2f rad/s | angle_ref=%.2f rad\n",
+         params.suggest_gains_from_desired_axis ? "on" : "off",
+         params.suggested_gain_omega_ref,
+         params.suggested_gain_angle_ref);
+  printVec3Mm("desired_axis_from_edge", params.desired_axis_from_edge);
+  printVec3("desired_axis_dir", normalizedOrFallback(params.desired_axis_dir, Vec3(1.0, 0.0, 0.0)));
+  printf("desired_axis_pitch = %.1f mm/rad\n", 1000.0 * params.desired_axis_pitch);
   printVec3("surface_n", params.surface_normal);
   if (params.use_surface_tilt_angle) {
     printf("surface_tilt_angle: %.1f deg\n", params.surface_tilt_angle_deg);
@@ -161,6 +175,9 @@ inline void printFinalSummary(
     const Vec3& final_e_R,
     const Vec3& final_instant_pole_to_edge,
     const Vec3& final_instant_axis_dir,
+    const Vec3& desired_axis_from_edge,
+    const Vec3& desired_axis_dir,
+    double desired_axis_pitch,
     double final_instant_screw_pitch,
     double final_instant_edge_axis_distance,
     double final_instant_axis_time,
@@ -174,7 +191,7 @@ inline void printFinalSummary(
   printVec3Deg("e_R", final_e_R);
   printf("rotation_error = %.2f deg\n", (180.0 / M_PI) * final_e_R.norm());
   if (final_instant_pole_valid) {
-    printf("last_valid_axis: t=%.1f s | edge=%.2f mm | axis_point_from_edge=[%+.1f, %+.1f, %+.1f] mm | pitch=%.2f mm/rad | dir=[%+.3f, %+.3f, %+.3f]\n",
+    printf("best_valid_axis: t=%.3f s | edge=%.2f mm | axis_point_from_edge=[%+.1f, %+.1f, %+.1f] mm | pitch=%.2f mm/rad | dir=[%+.3f, %+.3f, %+.3f]\n",
            final_instant_axis_time,
            1000.0 * final_instant_edge_axis_distance,
            1000.0 * final_instant_pole_to_edge(0),
@@ -184,6 +201,24 @@ inline void printFinalSummary(
            final_instant_axis_dir(0),
            final_instant_axis_dir(1),
            final_instant_axis_dir(2));
+    const Vec3 desired_axis_dir_unit =
+        normalizedOrFallback(desired_axis_dir, Vec3(1.0, 0.0, 0.0));
+    const Vec3 axis_point_error = final_instant_pole_to_edge - desired_axis_from_edge;
+    const double axis_dir_dot =
+        std::abs(std::max(
+            -1.0,
+            std::min(1.0, final_instant_axis_dir.dot(desired_axis_dir_unit))));
+    const double axis_dir_error_deg = (180.0 / M_PI) * std::acos(axis_dir_dot);
+    const double desired_axis_edge_distance =
+        pointDistanceToAxis(Vec3::Zero(), desired_axis_from_edge, desired_axis_dir_unit);
+    printf("axis_error_vs_desired: point=[%+.1f, %+.1f, %+.1f] mm | point_norm=%.1f mm | dir_error=%.1f deg | edge_error=%+.1f mm | pitch_error=%+.1f mm/rad\n",
+           1000.0 * axis_point_error(0),
+           1000.0 * axis_point_error(1),
+           1000.0 * axis_point_error(2),
+           1000.0 * axis_point_error.norm(),
+           axis_dir_error_deg,
+           1000.0 * (final_instant_edge_axis_distance - desired_axis_edge_distance),
+           1000.0 * (final_instant_screw_pitch - desired_axis_pitch));
   } else {
     printf("instant_axis: slow_rotation\n");
   }

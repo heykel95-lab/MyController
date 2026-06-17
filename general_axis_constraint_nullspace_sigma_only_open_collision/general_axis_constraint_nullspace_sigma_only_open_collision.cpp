@@ -51,6 +51,7 @@ int main() {
       fprintf(stderr, "Please recover/unlock the robot manually in Franka Desk.\n");
       return -1;
     }
+
     // Configure the collision behavior according to parameters.txt.
     configureCollisionBehavior(robot, params);
 
@@ -67,6 +68,31 @@ int main() {
     robot.control(motion_generator);
 
     printf("q_init reached.\n");
+
+    if (params.open_gripper_before_run) {
+      try {
+        printf("Opening gripper after q_init to %.1f mm...\n",
+               1000.0 * params.gripper_open_width);
+        Gripper gripper(params.robot_ip);
+        const bool gripper_opened =
+            gripper.move(params.gripper_open_width, params.gripper_open_speed);
+        if (!gripper_opened) {
+          fprintf(stderr, "Gripper open command returned false.\n");
+          if (params.require_gripper_open) {
+            fprintf(stderr, "Stopping because require_gripper_open = 1.\n");
+            return -1;
+          }
+        } else {
+          printf("Gripper commanded open and holding width.\n");
+        }
+      } catch (const franka::Exception& e) {
+        fprintf(stderr, "Gripper open failed: %s\n", e.what());
+        if (params.require_gripper_open) {
+          fprintf(stderr, "Stopping because require_gripper_open = 1.\n");
+          return -1;
+        }
+      }
+    }
 
     // Load the robot model, which is needed for the controller and nullspace optimization.
     // The model contains the robot's kinematics and dynamics, and is used to compute the Jacobian, Coriolis forces, etc.
@@ -224,9 +250,15 @@ int main() {
     printf("\n=== Run ===\n");
     printf("phase: %s\n", phaseName(phase));
 
-    // The log_data vector will store the data for each control cycle, which will be written to a CSV file at the end of the experiment.
+    // Keep logging bounded so the realtime callback never reallocates on long/manual runs.
+    const int log_every_n_cycles = std::max(1, params.log_every_n_cycles);
+    const std::size_t max_log_rows = static_cast<std::size_t>(std::max(0, params.max_log_rows));
     std::vector<LogData> log_data;
-    log_data.reserve(static_cast<std::size_t>(params.experiment_duration * 1500.0));
+    log_data.resize(max_log_rows);
+    std::size_t control_cycle_count = 0;
+    std::size_t log_write_index = 0;
+    std::size_t log_rows_written = 0;
+    bool log_buffer_wrapped = false;
     // The time variable is used to keep track of the elapsed time since the start of the control loop, and is updated in each cycle based on the period provided by libfranka.
     double time = 0.0;
 
@@ -253,6 +285,9 @@ int main() {
     double last_valid_post_align_axis_edge_distance = 0.0;
     double last_valid_post_align_screw_pitch = 0.0;
     double last_valid_post_align_axis_time = 0.0;
+    double last_valid_post_align_omega_norm = 0.0;
+    Vec3 last_valid_post_align_force_delta = Vec3::Zero();
+    Vec3 last_valid_post_align_moment_delta = Vec3::Zero();
     bool last_valid_post_align_axis_valid = false;
 
     // Print the starting message and instructions for the user before entering the control loop.
@@ -444,26 +479,37 @@ int main() {
         const double post_align_time = time - phase_start_time;
         const double post_moment_delta_norm = (external_moment - contact_moment_bias).norm();
         const double post_force_delta_norm = (external_force - contact_force_bias).norm();
+        Vec3 instant_pole_from_tcp = Vec3::Zero();
+        const bool instant_pole_valid =
+            computeInstantaneousPoleFromTcp(pdot, omega, &instant_pole_from_tcp);
+        const Vec3 instant_pole_base = p_EE + instant_pole_from_tcp;
+        const Vec3 instant_axis_point_from_edge =
+            instant_pole_base - tool_contact_point;
+        const Vec3 instant_axis_dir =
+            instant_pole_valid ? omega.normalized() : Vec3::Zero();
+        const double instant_screw_pitch =
+            instant_pole_valid ? instantaneousScrewPitch(pdot, omega) : 0.0;
+        const double instant_edge_axis_distance =
+            instant_pole_valid
+                ? pointDistanceToAxis(tool_contact_point, instant_pole_base, omega)
+                : 0.0;
+        if (instant_pole_valid && omega.norm() > last_valid_post_align_omega_norm) {
+          last_valid_post_align_axis_point_from_edge = instant_axis_point_from_edge;
+          last_valid_post_align_axis_dir = instant_axis_dir;
+          last_valid_post_align_axis_edge_distance = instant_edge_axis_distance;
+          last_valid_post_align_screw_pitch = instant_screw_pitch;
+          last_valid_post_align_axis_time = post_align_time;
+          last_valid_post_align_omega_norm = omega.norm();
+          last_valid_post_align_force_delta = external_force - contact_force_bias;
+          last_valid_post_align_moment_delta = external_moment - contact_moment_bias;
+          last_valid_post_align_axis_valid = true;
+        }
         if (time >= next_post_align_debug_time) {
           // actual_tip_deg: measured rotation away from the orientation held
           // at first contact -- shows whether/how much the tool has
           // passively tipped so far, not just where it is now.
           const double actual_tip_deg =
               (180.0 / M_PI) * orientationError(R_EE, R_contact_start).norm();
-          Vec3 instant_pole_from_tcp = Vec3::Zero();
-          const bool instant_pole_valid =
-              computeInstantaneousPoleFromTcp(pdot, omega, &instant_pole_from_tcp);
-          const Vec3 instant_pole_base = p_EE + instant_pole_from_tcp;
-          const Vec3 instant_axis_point_from_edge =
-              instant_pole_base - tool_contact_point;
-          const Vec3 instant_axis_dir =
-              instant_pole_valid ? omega.normalized() : Vec3::Zero();
-          const double instant_screw_pitch =
-              instant_pole_valid ? instantaneousScrewPitch(pdot, omega) : 0.0;
-          const double instant_edge_axis_distance =
-              instant_pole_valid
-                  ? pointDistanceToAxis(tool_contact_point, instant_pole_base, omega)
-                  : 0.0;
           const Vec3 edge_from_contact_mm =
               1000.0 * (tool_contact_point - first_contact_point);
           printf("align: t=%4.1f s | edge=[%5.1f %5.1f %5.1f] mm | |edge|=%5.1f mm | tip=%4.1f deg | F=%5.1f N | M=%5.1f Nm",
@@ -476,13 +522,8 @@ int main() {
                  post_force_delta_norm,
                  post_moment_delta_norm);
           if (instant_pole_valid) {
-            last_valid_post_align_axis_point_from_edge = instant_axis_point_from_edge;
-            last_valid_post_align_axis_dir = instant_axis_dir;
-            last_valid_post_align_axis_edge_distance = instant_edge_axis_distance;
-            last_valid_post_align_screw_pitch = instant_screw_pitch;
-            last_valid_post_align_axis_time = post_align_time;
-            last_valid_post_align_axis_valid = true;
-            printf(" | axis_edge=%5.1f mm | axis_from_edge=[%+5.1f %+5.1f %+5.1f] mm | pitch=%6.1f mm/rad\n",
+            printf(" | w=%5.3f rad/s | axis_edge=%5.1f mm | axis_from_edge=[%+5.1f %+5.1f %+5.1f] mm | pitch=%6.1f mm/rad\n",
+                   omega.norm(),
                    1000.0 * instant_edge_axis_distance,
                    1000.0 * instant_axis_point_from_edge(0),
                    1000.0 * instant_axis_point_from_edge(1),
@@ -528,8 +569,30 @@ int main() {
                  tcp_from_contact_mm(2),
                  tcp_from_contact_mm.norm());
           if (last_valid_post_align_axis_valid) {
-            printf("last_valid_axis: t=%.1f s | edge=%.1f mm | axis_from_edge=[%+.1f, %+.1f, %+.1f] mm | pitch=%.1f mm/rad | dir=[%+.3f, %+.3f, %+.3f]\n",
+            const Vec3 desired_axis_dir =
+                normalizedOrFallback(params.desired_axis_dir, Vec3(1.0, 0.0, 0.0));
+            const Vec3 axis_point_error =
+                last_valid_post_align_axis_point_from_edge -
+                params.desired_axis_from_edge;
+            const double axis_dir_dot =
+                std::abs(std::max(
+                    -1.0,
+                    std::min(1.0, last_valid_post_align_axis_dir.dot(desired_axis_dir))));
+            const double axis_dir_error_deg =
+                (180.0 / M_PI) * std::acos(axis_dir_dot);
+            const double desired_axis_edge_distance =
+                pointDistanceToAxis(
+                    Vec3::Zero(),
+                    params.desired_axis_from_edge,
+                    desired_axis_dir);
+            const double axis_edge_error =
+                last_valid_post_align_axis_edge_distance -
+                desired_axis_edge_distance;
+            const double pitch_error =
+                last_valid_post_align_screw_pitch - params.desired_axis_pitch;
+            printf("best_valid_axis: t=%.3f s | w=%.3f rad/s | edge=%.1f mm | axis_from_edge=[%+.1f, %+.1f, %+.1f] mm | pitch=%.1f mm/rad | dir=[%+.3f, %+.3f, %+.3f]\n",
                    last_valid_post_align_axis_time,
+                   last_valid_post_align_omega_norm,
                    1000.0 * last_valid_post_align_axis_edge_distance,
                    1000.0 * last_valid_post_align_axis_point_from_edge(0),
                    1000.0 * last_valid_post_align_axis_point_from_edge(1),
@@ -538,8 +601,104 @@ int main() {
                    last_valid_post_align_axis_dir(0),
                    last_valid_post_align_axis_dir(1),
                    last_valid_post_align_axis_dir(2));
+            printf("axis_error_vs_desired: point=[%+.1f, %+.1f, %+.1f] mm | point_norm=%.1f mm | dir_error=%.1f deg | edge_error=%+.1f mm | pitch_error=%+.1f mm/rad\n",
+                   1000.0 * axis_point_error(0),
+                   1000.0 * axis_point_error(1),
+                   1000.0 * axis_point_error(2),
+                   1000.0 * axis_point_error.norm(),
+                   axis_dir_error_deg,
+                   1000.0 * axis_edge_error,
+                   1000.0 * pitch_error);
           } else {
             printf("axis=slow | edge_norm=%.1f mm\n", edge_from_contact_mm.norm());
+          }
+          if (params.suggest_gains_from_desired_axis) {
+            const Vec3 axis_dir =
+                normalizedOrFallback(params.desired_axis_dir, Vec3(1.0, 0.0, 0.0));
+            const Vec3 desired_axis_from_tcp =
+                (tool_contact_point - p_EE) + params.desired_axis_from_edge;
+            const Vec3 desired_motion_per_rad =
+                desiredAxisLinearMotionFromTcp(
+                    desired_axis_from_tcp,
+                    axis_dir,
+                    params.desired_axis_pitch);
+            const Vec3 desired_v =
+                params.suggested_gain_omega_ref * desired_motion_per_rad;
+            const Vec3 desired_omega =
+                params.suggested_gain_omega_ref * axis_dir;
+            const Vec3 desired_dp =
+                params.suggested_gain_angle_ref * desired_motion_per_rad;
+            const Vec3 desired_dphi =
+                params.suggested_gain_angle_ref * axis_dir;
+            const Vec3 contact_force_delta =
+                last_valid_post_align_axis_valid
+                    ? last_valid_post_align_force_delta
+                    : (external_force - contact_force_bias);
+            const Vec3 contact_moment_delta =
+                last_valid_post_align_axis_valid
+                    ? last_valid_post_align_moment_delta
+                    : (external_moment - contact_moment_bias);
+            const Vec3 desired_dphi_surface = R_surface.transpose() * desired_dphi;
+            const Vec3 desired_omega_surface = R_surface.transpose() * desired_omega;
+            const Vec3 contact_moment_surface = R_surface.transpose() * contact_moment_delta;
+            const Vec3 suggested_Kp =
+                suggestedPositiveGains(
+                    contact_force_delta,
+                    desired_dp,
+                    params.suggested_gain_min,
+                    params.suggested_gain_max);
+            const Vec3 suggested_Dp =
+                suggestedPositiveGains(
+                    contact_force_delta,
+                    desired_v,
+                    params.suggested_gain_min,
+                    params.suggested_gain_max);
+            const Vec3 suggested_KR =
+                suggestedPositiveGains(
+                    contact_moment_surface,
+                    desired_dphi_surface,
+                    params.suggested_gain_min,
+                    params.suggested_gain_max);
+            const Vec3 suggested_DR =
+                suggestedPositiveGains(
+                    contact_moment_surface,
+                    desired_omega_surface,
+                    params.suggested_gain_min,
+                    params.suggested_gain_max);
+            printf("=== Suggested gains for desired axis ===\n");
+            printf("desired_axis_from_edge = [%+.1f, %+.1f, %+.1f] mm | dir=[%+.3f, %+.3f, %+.3f] | pitch=%.1f mm/rad\n",
+                   1000.0 * params.desired_axis_from_edge(0),
+                   1000.0 * params.desired_axis_from_edge(1),
+                   1000.0 * params.desired_axis_from_edge(2),
+                   axis_dir(0),
+                   axis_dir(1),
+                   axis_dir(2),
+                   1000.0 * params.desired_axis_pitch);
+            printf("wrench_used_at_axis_t=%.3f s: F=[%+.1f, %+.1f, %+.1f] N | M_surface=[%+.1f, %+.1f, %+.1f] Nm\n",
+                   last_valid_post_align_axis_valid ? last_valid_post_align_axis_time : post_align_time,
+                   contact_force_delta(0),
+                   contact_force_delta(1),
+                   contact_force_delta(2),
+                   contact_moment_surface(0),
+                   contact_moment_surface(1),
+                   contact_moment_surface(2));
+            printf("post_contact_Kp_base_suggested = [%.1f, %.1f, %.1f] N/m\n",
+                   suggested_Kp(0),
+                   suggested_Kp(1),
+                   suggested_Kp(2));
+            printf("post_contact_Dp_base_suggested = [%.1f, %.1f, %.1f] Ns/m\n",
+                   suggested_Dp(0),
+                   suggested_Dp(1),
+                   suggested_Dp(2));
+            printf("post_contact_KR_surface_suggested = [%.2f, %.2f, %.2f] Nm/rad\n",
+                   suggested_KR(0),
+                   suggested_KR(1),
+                   suggested_KR(2));
+            printf("post_contact_DR_surface_suggested = [%.2f, %.2f, %.2f] Nms/rad\n",
+                   suggested_DR(0),
+                   suggested_DR(1),
+                   suggested_DR(2));
+            printf("note: max values mean the desired motion component is near zero; keep tipping KR low for passive rotation.\n");
           }
           printf("phase: %s\n", phaseName(phase));
         }
@@ -749,19 +908,30 @@ int main() {
 
       Vec7 tau_cmd = tau_task + tau_nullspace + coriolis;
 
-      log_data.push_back(makeLogRow(
-          time,
-          p_EE,
-          desired.p_d,
-          p_end,
-          e_p,
-          e_R,
-          pdot,
-          desired.pdot_d,
-          omega,
-          f,
-          m,
-          tau_cmd));
+      ++control_cycle_count;
+      if ((control_cycle_count % static_cast<std::size_t>(log_every_n_cycles)) == 0) {
+        if (max_log_rows > 0) {
+          log_data[log_write_index] = makeLogRow(
+              time,
+              p_EE,
+              desired.p_d,
+              p_end,
+              e_p,
+              e_R,
+              pdot,
+              desired.pdot_d,
+              omega,
+              f,
+              m,
+              tau_cmd);
+          log_write_index = (log_write_index + 1) % max_log_rows;
+          if (log_rows_written < max_log_rows) {
+            ++log_rows_written;
+          } else {
+            log_buffer_wrapped = true;
+          }
+        }
+      }
 
       final_p_EE = p_EE;
       final_p_d = desired.p_d;
@@ -821,8 +991,29 @@ int main() {
               : 0.0;
     }
 
+    std::vector<LogData> ordered_log_data;
+    ordered_log_data.reserve(log_rows_written);
+    if (log_buffer_wrapped) {
+      ordered_log_data.insert(
+          ordered_log_data.end(),
+          log_data.begin() + static_cast<std::ptrdiff_t>(log_write_index),
+          log_data.end());
+      ordered_log_data.insert(
+          ordered_log_data.end(),
+          log_data.begin(),
+          log_data.begin() + static_cast<std::ptrdiff_t>(log_write_index));
+      printf("Log buffer wrapped: kept latest %zu rows, sampled every %d control cycles.\n",
+             log_rows_written,
+             log_every_n_cycles);
+    } else {
+      ordered_log_data.insert(
+          ordered_log_data.end(),
+          log_data.begin(),
+          log_data.begin() + static_cast<std::ptrdiff_t>(log_rows_written));
+    }
+
     // After the control loop finishes, write the logged data to a CSV file and print the final summary of the experiment results.
-    writeLogToCsv(log_data, params.csv_file_name);
+    writeLogToCsv(ordered_log_data, params.csv_file_name);
     printFinalSummary(
         final_p_d,
         final_p_EE,
@@ -830,6 +1021,9 @@ int main() {
         final_e_R,
         final_instant_pole_to_edge,
         final_instant_axis_dir,
+        params.desired_axis_from_edge,
+        params.desired_axis_dir,
+        params.desired_axis_pitch,
         final_instant_screw_pitch,
         final_instant_edge_axis_distance,
         final_instant_axis_time,

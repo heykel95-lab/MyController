@@ -6,6 +6,12 @@ struct Parameters {
   std::string robot_ip = "172.16.0.2";
   double experiment_duration = 10.0;
   std::string csv_file_name = "general_axis_constraint_nullspace_sigma_only_open_collision_log.csv";
+  int log_every_n_cycles = 5;
+  int max_log_rows = 120000;
+  bool open_gripper_before_run = true;
+  bool require_gripper_open = true;
+  double gripper_open_width = 0.08;
+  double gripper_open_speed = 0.05;
 
   bool hold_mode = true;
 
@@ -36,6 +42,14 @@ struct Parameters {
   bool use_search_direction_surface_after_alignment = true;
   bool use_virtual_center_after_contact = false;
   double vcr_offset = 0.0;
+  bool suggest_gains_from_desired_axis = true;
+  Vec3 desired_axis_from_edge = Vec3(-0.0043, -0.0388, 0.1094);
+  Vec3 desired_axis_dir = Vec3(-0.982, 0.169, 0.083);
+  double desired_axis_pitch = 0.0066;
+  double suggested_gain_omega_ref = 0.20;
+  double suggested_gain_angle_ref = 0.10;
+  double suggested_gain_min = 0.01;
+  double suggested_gain_max = 8000.0;
 
   bool use_contact_search = false;
   bool contact_search_use_surface_normal = true;
