@@ -35,6 +35,9 @@ struct Parameters {
   double orient_phase_error_threshold = 0.03;
   double post_contact_align_min_time = 0.3;
   double post_contact_align_duration = 15.0;
+  double post_contact_align_debug_period = 0.10;
+  double post_contact_best_axis_min_time = 0.60;
+  double post_contact_best_axis_min_omega = 0.12;
   double post_contact_moment_threshold = 60.0;
   double post_contact_normal_push = 0.0;
   double post_contact_push_speed = 0.0;
@@ -43,9 +46,9 @@ struct Parameters {
   bool use_virtual_center_after_contact = false;
   double vcr_offset = 0.0;
   bool suggest_gains_from_desired_axis = true;
-  Vec3 desired_axis_from_edge = Vec3(-0.0043, -0.0388, 0.1094);
-  Vec3 desired_axis_dir = Vec3(-0.982, 0.169, 0.083);
-  double desired_axis_pitch = 0.0066;
+  Vec3 desired_axis_from_edge = Vec3(0.0144, 0.0094, -0.0064);
+  Vec3 desired_axis_dir = Vec3(-0.919, -0.390, -0.053);
+  double desired_axis_pitch = -0.0146;
   double suggested_gain_omega_ref = 0.20;
   double suggested_gain_angle_ref = 0.10;
   double suggested_gain_min = 0.01;
@@ -57,6 +60,10 @@ struct Parameters {
   double contact_search_speed = 0.005;
   double contact_search_max_distance = 0.02;
   double contact_search_min_distance = 0.0;
+  double contact_search_first_touch_min_distance = 0.0;
+  double contact_search_debug_period = 0.10;
+  bool contact_search_use_directional_force = true;
+  double contact_search_confirm_time = 0.05;
   double contact_force_threshold = 5.0;
   bool detect_contact_during_alignment = true;
   double alignment_contact_force_threshold = 5.0;
@@ -118,10 +125,16 @@ struct Parameters {
 
 struct LogData {
   double time;
+  int phase;
 
   Vec3 p_EE;
   Vec3 p_d;
   Vec3 p_end;
+  Vec3 tool_contact_point;
+  Vec3 first_contact_tcp;
+  Vec3 first_contact_point;
+  Vec3 edge_target;
+  Vec3 tool_contact_offset_ee;
 
   Vec3 e_p;
   Vec3 e_R;
@@ -132,6 +145,11 @@ struct LogData {
 
   Vec3 f;
   Vec3 m;
+  Vec3 external_force;
+  Vec3 external_moment;
+  Vec3 contact_force_bias;
+  Vec3 contact_moment_bias;
+  double post_contact_push;
 
   Vec7 tau_cmd;
 };

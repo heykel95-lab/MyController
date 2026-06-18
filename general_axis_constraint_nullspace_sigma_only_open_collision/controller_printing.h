@@ -113,14 +113,19 @@ inline void printParameters(const Parameters& params) {
          params.max_log_rows);
   printf("search_direction: %s\n",
          params.contact_search_use_surface_normal ? "-surface_normal" : "manual");
+  printf("search_debug: %.3f s | force_signal: %s | confirm: %.3f s\n",
+         params.contact_search_debug_period,
+         params.contact_search_use_directional_force ? "directional" : "norm",
+         params.contact_search_confirm_time);
+  printf("search_min: %.1f mm | first_touch_min: %.1f mm\n",
+         1000.0 * params.contact_search_min_distance,
+         1000.0 * params.contact_search_first_touch_min_distance);
   printf("phases: %s | virtual_center: %s | vcr_offset: %.1f mm\n",
          params.use_phase_sequence ? "on" : "off",
          params.use_virtual_center_after_contact ? "on" : "off",
          1000.0 * params.vcr_offset);
-  printf("gain_suggestion: %s | omega_ref=%.2f rad/s | angle_ref=%.2f rad\n",
-         params.suggest_gains_from_desired_axis ? "on" : "off",
-         params.suggested_gain_omega_ref,
-         params.suggested_gain_angle_ref);
+  printf("gain_suggestion: %s | source=current_best_axis, desired_fallback | method=actual_error_and_residual_damping\n",
+         params.suggest_gains_from_desired_axis ? "on" : "off");
   printVec3Mm("desired_axis_from_edge", params.desired_axis_from_edge);
   printVec3("desired_axis_dir", normalizedOrFallback(params.desired_axis_dir, Vec3(1.0, 0.0, 0.0)));
   printf("desired_axis_pitch = %.1f mm/rad\n", 1000.0 * params.desired_axis_pitch);
@@ -144,9 +149,13 @@ inline void printParameters(const Parameters& params) {
          params.contact_force_threshold,
          params.alignment_contact_force_threshold,
          params.post_contact_moment_threshold);
-  printf("orient_tol: %.1f deg | post_align: %.1f s\n",
+  printf("orient_tol: %.1f deg | post_align: %.1f s | align_debug: %.3f s\n",
          (180.0 / M_PI) * params.orient_phase_error_threshold,
-         params.post_contact_align_duration);
+         params.post_contact_align_duration,
+         params.post_contact_align_debug_period);
+  printf("best_axis_gate: min_time=%.3f s | min_omega=%.3f rad/s\n",
+         params.post_contact_best_axis_min_time,
+         params.post_contact_best_axis_min_omega);
   printf("post_push: %.1f mm + %.1f mm/s, max %.1f mm\n",
          1000.0 * params.post_contact_normal_push,
          1000.0 * params.post_contact_push_speed,

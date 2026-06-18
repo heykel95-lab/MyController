@@ -155,6 +155,18 @@ post_contact_align_min_time = 2.0
 # without holding the high preload for the old 15 s window.
 post_contact_align_duration = 8.0
 
+# Live terminal print period for the post_contact_align "align:" line [s].
+# Keep this throttled; every-cycle data is already written to CSV.
+post_contact_align_debug_period = 0.10
+
+# Ignore the first transient screw-axis samples when choosing the measured
+# "best" axis for comparison and gain suggestion. Among stable samples, the
+# code picks the axis with the smallest distance to the active contact edge.
+# If no sample passes this stable-window gate, the code still keeps the best
+# measured transient fallback and labels it as transient_fallback.
+post_contact_best_axis_min_time = 0.60
+post_contact_best_axis_min_omega = 0.12
+
 # Moment change that means the tool has settled/made firm contact, for
 # example the second tool edge touching down after passively tipping flat
 # [Nm]. Early-exit threshold for post_contact_align; only checked once
@@ -185,9 +197,10 @@ post_contact_max_push = 0.031
 # 170.5 N peak. Real Cartesian safety limit is collision_force_acc/nom
 # (200 N, see below) -- collision_cartesian_force_threshold (45 N) is NOT
 # actually enforced by this controller. 170.5 N peak leaves ~29.5 N margin.
-# Medium x0/y0 stiffness for the sideways-compliance pole test. This should
-# show whether the instantaneous screw axis changes when lateral motion is
-# less constrained, while keeping more support than the original 40 N/m case.
+# Medium x0/y0 stiffness for the sideways-compliance pole test. The direct
+# one-sample suggested-gain test caused a reflex stop at post_align t=0.1 s
+# because it combined high stiffness with almost zero damping, so these gains
+# are kept as the safer validated post-contact baseline.
 post_contact_Kp_x = 120.0
 post_contact_Kp_y = 120.0
 post_contact_Kp_z = 5500.0
@@ -199,12 +212,8 @@ post_contact_Dp_z = 175.0
 # frame [normal, tangent1, tangent2]. The orientation target is the pose
 # held at first contact (no scripted rotation). normal (yaw about the push
 # axis) stays constrained so the tool can't spin freely; tangent1/tangent2
-# (the tipping directions) are at zero stiffness -- already the minimum
-# possible, since negative stiffness would actively destabilize rather than
-# soften further. Damping is the only remaining knob and is now reduced to
-# near-zero too, just enough to avoid an undamped oscillation, so the real
-# contact moment from the edge preload above can passively rotate the tool
-# flat with almost nothing resisting it.
+# (the tipping directions) stay very soft so the real contact moment from the
+# edge preload can passively rotate the tool flat.
 post_contact_KR_normal = 8.0
 post_contact_KR_tangent1 = 0.0
 post_contact_KR_tangent2 = 0.0
@@ -226,30 +235,33 @@ use_virtual_center_after_contact = 0
 vcr_offset = 0.0
 
 # ------------------------------------------------------------------
-# Suggested gains from a desired instantaneous axis
+# Suggested gains from the measured best instantaneous axis
 # ------------------------------------------------------------------
 # This is diagnostic only: it prints suggested post-contact stiffness/damping
 # values at the end of post_contact_align, but it does not apply them.
 #
+# The gain suggestion uses the current run's measured best axis. If no valid
+# best axis was measured, it falls back to the desired axis below.
+#
 # Desired axis is expressed in the robot base frame, relative to the active
-# tool edge:
+# tool edge. This is mainly the previous run's best axis, used as the target
+# for comparison and as the next-run desired axis:
 #   axis_point = p_edge + desired_axis_from_edge
 #   axis_line(s) = axis_point + s * desired_axis_dir
 #
-# The default below is the last measured useful axis from the medium
-# sideways-compliance run.
+# The default below is the previous measured best axis.
 suggest_gains_from_desired_axis = 1
-desired_axis_from_edge_x = -0.0043
-desired_axis_from_edge_y = -0.0388
-desired_axis_from_edge_z = 0.1094
-desired_axis_dir_x = -0.982
-desired_axis_dir_y = 0.169
-desired_axis_dir_z = 0.083
-desired_axis_pitch = 0.0066
+desired_axis_from_edge_x = 0.0200
+desired_axis_from_edge_y = 0.0247
+desired_axis_from_edge_z = 0.0015
+desired_axis_dir_x = -0.639
+desired_axis_dir_y = -0.767
+desired_axis_dir_z = -0.056
+desired_axis_pitch = -0.0192
 
-# Reference motion scale used to turn the desired axis direction into actual
-# gain numbers. The axis shape is independent of this scale, but the printed
-# gains are not.
+# Legacy reference-motion settings. They are kept for file compatibility, but
+# the current suggestion computes K/KR from actual error since first touch and
+# computes D/DR from the residual wrench after subtracting stiffness.
 suggested_gain_omega_ref = 0.20
 suggested_gain_angle_ref = 0.10
 suggested_gain_min = 0.01
@@ -288,11 +300,20 @@ contact_search_direction_z = -1.0
 contact_search_speed = 0.1
 contact_search_max_distance = 0.540
 
-# Ignore force-trigger contact before this downward travel distance [m].
-# The last false trigger happened at 0.300 m.
-contact_search_min_distance = 0.430
+# Minimum downward travel before first-touch contact detection [m].
+# The last runs showed real contact beginning around 0.251-0.252 m.
+contact_search_min_distance = 0.240
 
-# Contact trigger threshold during translational search.
+# First-touch reference/gain calculation uses the same gate as the phase switch.
+contact_search_first_touch_min_distance = 0.240
+
+# Live terminal print period for the contact-search force/moment line [s].
+# Every-cycle wrench data is also written to CSV when log_every_n_cycles = 1.
+contact_search_debug_period = 0.10
+
+# First-touch and phase switch use dF_bias dot contact_search_direction when enabled.
+contact_search_use_directional_force = 1
+contact_search_confirm_time = 0.05
 contact_force_threshold = 12.0
 
 # Force safety trigger during the first orientation-alignment phase.
@@ -300,7 +321,9 @@ contact_force_threshold = 12.0
 detect_contact_during_alignment = 1
 alignment_contact_force_threshold = 12.0
 
-# Softer Cartesian gains used only during contact search.
+# Soft Cartesian gains used only during contact search. Keep these much lower
+# than post_contact gains because the conservative phase-switch gate can keep
+# searching after first physical touch.
 contact_search_Kp_x = 150.0
 contact_search_Kp_y = 150.0
 contact_search_Kp_z = 150.0

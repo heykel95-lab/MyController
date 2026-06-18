@@ -199,10 +199,21 @@ int main() {
     double contact_time = 0.0;
     Mat3 R_contact_start = R_d_surface;
     Mat3 R_after_contact_align = R_d_surface;
+    Vec3 first_contact_tcp = p_start;
     Vec3 first_contact_point = p_start;
+    Vec3 first_touch_candidate_tcp = p_start;
+    Vec3 first_touch_candidate_point = p_start;
+    Vec3 first_touch_candidate_force = external_force_start;
+    Vec3 first_touch_candidate_moment = initial_external_wrench.tail<3>();
     Vec3 active_tool_contact_offset_ee = params.tool_contact_point_ee;
     double first_contact_search_distance = 0.0;
     double first_contact_force_delta = 0.0;
+    double first_touch_candidate_time = 0.0;
+    double first_touch_candidate_distance = 0.0;
+    double first_touch_candidate_signal = 0.0;
+    bool first_touch_candidate_saved = false;
+    double contact_search_candidate_start_time = -1.0;
+    double next_contact_search_debug_time = 0.0;
     double next_post_align_debug_time = 0.0;
 
     auto forceContactDetected = [&](const Vec3& force,
@@ -282,13 +293,22 @@ int main() {
     double next_orientation_debug_time = 0.0;
     Vec3 last_valid_post_align_axis_point_from_edge = Vec3::Zero();
     Vec3 last_valid_post_align_axis_dir = Vec3::Zero();
+    Vec3 last_valid_post_align_edge_from_tcp = Vec3::Zero();
     double last_valid_post_align_axis_edge_distance = 0.0;
     double last_valid_post_align_screw_pitch = 0.0;
     double last_valid_post_align_axis_time = 0.0;
     double last_valid_post_align_omega_norm = 0.0;
     Vec3 last_valid_post_align_force_delta = Vec3::Zero();
     Vec3 last_valid_post_align_moment_delta = Vec3::Zero();
+    Vec3 last_valid_post_align_external_force = Vec3::Zero();
+    Vec3 last_valid_post_align_external_moment = Vec3::Zero();
+    Vec3 last_valid_post_align_p_EE = Vec3::Zero();
+    Vec3 last_valid_post_align_tool_contact_point = Vec3::Zero();
+    Mat3 last_valid_post_align_R_EE = Mat3::Identity();
+    Vec3 last_valid_post_align_pdot = Vec3::Zero();
+    Vec3 last_valid_post_align_omega = Vec3::Zero();
     bool last_valid_post_align_axis_valid = false;
+    bool last_valid_post_align_axis_stable = false;
 
     // Print the starting message and instructions for the user before entering the control loop.
     printf("Starting impedance controller:\n");
@@ -420,6 +440,8 @@ int main() {
         }
       }
       const Vec3 tool_contact_point = p_EE + R_EE * tool_contact_offset_ee;
+      Vec3 edge_target_debug = first_contact_point;
+      double post_contact_push_debug = 0.0;
 
       const Vec3 e_R_to_surface =
           applyRotationalAxisMask(params, orientationError(R_EE, R_d_phase), R_surface);
@@ -441,6 +463,7 @@ int main() {
       if (alignment_contact_detected) {
         active_tool_contact_offset_ee = tool_contact_offset_ee;
         surface_point_runtime = tool_contact_point;
+        first_contact_tcp = p_EE;
         first_contact_point = tool_contact_point;
         contact_found = true;
         contact_time = time;
@@ -467,6 +490,8 @@ int main() {
             ? ControlPhase::kSearchFirstContact
             : ControlPhase::kSurfaceImpedance;
         phase_start_time = time;
+        contact_search_candidate_start_time = -1.0;
+        next_contact_search_debug_time = time;
         contact_force_bias = external_force;
         contact_moment_bias = external_moment;
         printf("\nOrientation reached: axis_error = %.2f deg, full_error = %.2f deg\n",
@@ -493,18 +518,46 @@ int main() {
             instant_pole_valid
                 ? pointDistanceToAxis(tool_contact_point, instant_pole_base, omega)
                 : 0.0;
-        if (instant_pole_valid && omega.norm() > last_valid_post_align_omega_norm) {
+        const double omega_norm = omega.norm();
+        const bool best_axis_candidate_valid =
+            instant_pole_valid &&
+            omega_norm >= params.post_contact_best_axis_min_omega;
+        const bool best_axis_candidate_stable =
+            post_align_time >= params.post_contact_best_axis_min_time;
+        bool update_best_axis = false;
+        if (best_axis_candidate_valid) {
+          if (best_axis_candidate_stable) {
+            update_best_axis =
+                !last_valid_post_align_axis_valid ||
+                !last_valid_post_align_axis_stable ||
+                instant_edge_axis_distance < last_valid_post_align_axis_edge_distance;
+          } else if (!last_valid_post_align_axis_valid &&
+                     omega_norm > last_valid_post_align_omega_norm) {
+            update_best_axis = true;
+          }
+        }
+        if (update_best_axis) {
           last_valid_post_align_axis_point_from_edge = instant_axis_point_from_edge;
           last_valid_post_align_axis_dir = instant_axis_dir;
+          last_valid_post_align_edge_from_tcp = tool_contact_point - p_EE;
           last_valid_post_align_axis_edge_distance = instant_edge_axis_distance;
           last_valid_post_align_screw_pitch = instant_screw_pitch;
           last_valid_post_align_axis_time = post_align_time;
-          last_valid_post_align_omega_norm = omega.norm();
+          last_valid_post_align_omega_norm = omega_norm;
           last_valid_post_align_force_delta = external_force - contact_force_bias;
           last_valid_post_align_moment_delta = external_moment - contact_moment_bias;
+          last_valid_post_align_external_force = external_force;
+          last_valid_post_align_external_moment = external_moment;
+          last_valid_post_align_p_EE = p_EE;
+          last_valid_post_align_tool_contact_point = tool_contact_point;
+          last_valid_post_align_R_EE = R_EE;
+          last_valid_post_align_pdot = pdot;
+          last_valid_post_align_omega = omega;
           last_valid_post_align_axis_valid = true;
+          last_valid_post_align_axis_stable = best_axis_candidate_stable;
         }
-        if (time >= next_post_align_debug_time) {
+        if (params.post_contact_align_debug_period > 0.0 &&
+            time >= next_post_align_debug_time) {
           // actual_tip_deg: measured rotation away from the orientation held
           // at first contact -- shows whether/how much the tool has
           // passively tipped so far, not just where it is now.
@@ -532,7 +585,8 @@ int main() {
           } else {
             printf(" | axis=slow\n");
           }
-          next_post_align_debug_time = time + 1.0;
+          next_post_align_debug_time =
+              time + params.post_contact_align_debug_period;
         }
         const bool moment_contact_reached =
             post_align_time >= params.post_contact_align_min_time &&
@@ -590,90 +644,221 @@ int main() {
                 desired_axis_edge_distance;
             const double pitch_error =
                 last_valid_post_align_screw_pitch - params.desired_axis_pitch;
-            printf("best_valid_axis: t=%.3f s | w=%.3f rad/s | edge=%.1f mm | axis_from_edge=[%+.1f, %+.1f, %+.1f] mm | pitch=%.1f mm/rad | dir=[%+.3f, %+.3f, %+.3f]\n",
+            printf("=== Best axis compare ===\n");
+            printf("Previous desired/best:\n");
+            printf("axis_from_edge = [%+.1f, %+.1f, %+.1f] mm\n",
+                   1000.0 * params.desired_axis_from_edge(0),
+                   1000.0 * params.desired_axis_from_edge(1),
+                   1000.0 * params.desired_axis_from_edge(2));
+            printf("dir = [%+.3f, %+.3f, %+.3f]\n",
+                   desired_axis_dir(0),
+                   desired_axis_dir(1),
+                   desired_axis_dir(2));
+            printf("pitch = %+.1f mm/rad\n",
+                   1000.0 * params.desired_axis_pitch);
+            printf("New measured best:\n");
+            printf("source = %s | t = %.3f s | w = %.3f rad/s | edge = %.1f mm\n",
+                   last_valid_post_align_axis_stable ? "stable_window" : "transient_fallback",
                    last_valid_post_align_axis_time,
                    last_valid_post_align_omega_norm,
-                   1000.0 * last_valid_post_align_axis_edge_distance,
+                   1000.0 * last_valid_post_align_axis_edge_distance);
+            printf("axis_from_edge = [%+.1f, %+.1f, %+.1f] mm\n",
                    1000.0 * last_valid_post_align_axis_point_from_edge(0),
                    1000.0 * last_valid_post_align_axis_point_from_edge(1),
-                   1000.0 * last_valid_post_align_axis_point_from_edge(2),
-                   1000.0 * last_valid_post_align_screw_pitch,
+                   1000.0 * last_valid_post_align_axis_point_from_edge(2));
+            printf("dir = [%+.3f, %+.3f, %+.3f]\n",
                    last_valid_post_align_axis_dir(0),
                    last_valid_post_align_axis_dir(1),
                    last_valid_post_align_axis_dir(2));
-            printf("axis_error_vs_desired: point=[%+.1f, %+.1f, %+.1f] mm | point_norm=%.1f mm | dir_error=%.1f deg | edge_error=%+.1f mm | pitch_error=%+.1f mm/rad\n",
-                   1000.0 * axis_point_error(0),
-                   1000.0 * axis_point_error(1),
-                   1000.0 * axis_point_error(2),
-                   1000.0 * axis_point_error.norm(),
-                   axis_dir_error_deg,
-                   1000.0 * axis_edge_error,
-                   1000.0 * pitch_error);
+            printf("pitch = %+.1f mm/rad\n",
+                   1000.0 * last_valid_post_align_screw_pitch);
+            printf("Difference:\n");
+            printf("point_norm = %.1f mm\n", 1000.0 * axis_point_error.norm());
+            printf("dir_error = %.1f deg\n", axis_dir_error_deg);
+            printf("edge_error = %+.1f mm\n", 1000.0 * axis_edge_error);
+            printf("pitch_error = %+.1f mm/rad\n", 1000.0 * pitch_error);
+            printf("Use current best as next desired:\n");
+            printf("desired_axis_from_edge_x = %.4f\n",
+                   last_valid_post_align_axis_point_from_edge(0));
+            printf("desired_axis_from_edge_y = %.4f\n",
+                   last_valid_post_align_axis_point_from_edge(1));
+            printf("desired_axis_from_edge_z = %.4f\n",
+                   last_valid_post_align_axis_point_from_edge(2));
+            printf("desired_axis_dir_x = %.3f\n",
+                   last_valid_post_align_axis_dir(0));
+            printf("desired_axis_dir_y = %.3f\n",
+                   last_valid_post_align_axis_dir(1));
+            printf("desired_axis_dir_z = %.3f\n",
+                   last_valid_post_align_axis_dir(2));
+            printf("desired_axis_pitch = %.4f\n",
+                   last_valid_post_align_screw_pitch);
           } else {
             printf("axis=slow | edge_norm=%.1f mm\n", edge_from_contact_mm.norm());
           }
           if (params.suggest_gains_from_desired_axis) {
-            const Vec3 axis_dir =
-                normalizedOrFallback(params.desired_axis_dir, Vec3(1.0, 0.0, 0.0));
-            const Vec3 desired_axis_from_tcp =
-                (tool_contact_point - p_EE) + params.desired_axis_from_edge;
-            const Vec3 desired_motion_per_rad =
-                desiredAxisLinearMotionFromTcp(
-                    desired_axis_from_tcp,
-                    axis_dir,
-                    params.desired_axis_pitch);
-            const Vec3 desired_v =
-                params.suggested_gain_omega_ref * desired_motion_per_rad;
-            const Vec3 desired_omega =
-                params.suggested_gain_omega_ref * axis_dir;
-            const Vec3 desired_dp =
-                params.suggested_gain_angle_ref * desired_motion_per_rad;
-            const Vec3 desired_dphi =
-                params.suggested_gain_angle_ref * axis_dir;
+            const bool use_best_axis_for_suggestion =
+                last_valid_post_align_axis_valid;
+            const Vec3 suggestion_axis_dir =
+                use_best_axis_for_suggestion
+                    ? normalizedOrFallback(
+                          last_valid_post_align_axis_dir,
+                          Vec3(1.0, 0.0, 0.0))
+                    : normalizedOrFallback(
+                          params.desired_axis_dir,
+                          Vec3(1.0, 0.0, 0.0));
+            const Vec3 suggestion_axis_from_edge =
+                use_best_axis_for_suggestion
+                    ? last_valid_post_align_axis_point_from_edge
+                    : params.desired_axis_from_edge;
+            const double suggestion_axis_pitch =
+                use_best_axis_for_suggestion
+                    ? last_valid_post_align_screw_pitch
+                    : params.desired_axis_pitch;
+            const Vec3 gain_force_reference =
+                first_touch_candidate_saved ? first_touch_candidate_force : contact_force_bias;
+            const Vec3 gain_moment_reference =
+                first_touch_candidate_saved ? first_touch_candidate_moment : contact_moment_bias;
+            const Vec3 gain_point_reference =
+                first_touch_candidate_saved ? first_touch_candidate_point : first_contact_point;
+            const Mat3 gain_rotation_reference = R_contact_start;
+            const Vec3 gain_sample_point =
+                last_valid_post_align_axis_valid
+                    ? last_valid_post_align_tool_contact_point
+                    : tool_contact_point;
+            const Mat3 gain_sample_rotation =
+                last_valid_post_align_axis_valid
+                    ? last_valid_post_align_R_EE
+                    : R_EE;
+            const Vec3 gain_sample_pdot =
+                last_valid_post_align_axis_valid
+                    ? last_valid_post_align_pdot
+                    : pdot;
+            const Vec3 gain_sample_omega =
+                last_valid_post_align_axis_valid
+                    ? last_valid_post_align_omega
+                    : omega;
             const Vec3 contact_force_delta =
-                last_valid_post_align_axis_valid
-                    ? last_valid_post_align_force_delta
-                    : (external_force - contact_force_bias);
+                (last_valid_post_align_axis_valid
+                     ? last_valid_post_align_external_force
+                     : external_force) -
+                gain_force_reference;
             const Vec3 contact_moment_delta =
-                last_valid_post_align_axis_valid
-                    ? last_valid_post_align_moment_delta
-                    : (external_moment - contact_moment_bias);
-            const Vec3 desired_dphi_surface = R_surface.transpose() * desired_dphi;
-            const Vec3 desired_omega_surface = R_surface.transpose() * desired_omega;
+                (last_valid_post_align_axis_valid
+                     ? last_valid_post_align_external_moment
+                     : external_moment) -
+                gain_moment_reference;
+            const Vec3 actual_dp = gain_sample_point - gain_point_reference;
+            const Vec3 actual_dphi =
+                orientationError(gain_rotation_reference, gain_sample_rotation);
+            const Vec3 actual_dphi_surface = R_surface.transpose() * actual_dphi;
+            const Vec3 actual_omega_surface = R_surface.transpose() * gain_sample_omega;
             const Vec3 contact_moment_surface = R_surface.transpose() * contact_moment_delta;
+            auto signedRawGains = [](const Vec3& wrench, const Vec3& motion) {
+              Vec3 gains = Vec3::Zero();
+              for (int i = 0; i < 3; ++i) {
+                if (std::abs(motion(i)) > 1e-6) {
+                  gains(i) = wrench(i) / motion(i);
+                }
+              }
+              return gains;
+            };
+            const Vec3 raw_signed_Kp =
+                signedRawGains(contact_force_delta, actual_dp);
+            const Vec3 raw_signed_KR =
+                signedRawGains(contact_moment_surface, actual_dphi_surface);
+            const Vec3 force_damping_residual =
+                contact_force_delta - raw_signed_Kp.cwiseProduct(actual_dp);
+            const Vec3 moment_damping_residual =
+                contact_moment_surface - raw_signed_KR.cwiseProduct(actual_dphi_surface);
             const Vec3 suggested_Kp =
                 suggestedPositiveGains(
                     contact_force_delta,
-                    desired_dp,
+                    actual_dp,
                     params.suggested_gain_min,
                     params.suggested_gain_max);
             const Vec3 suggested_Dp =
                 suggestedPositiveGains(
-                    contact_force_delta,
-                    desired_v,
+                    force_damping_residual,
+                    gain_sample_pdot,
                     params.suggested_gain_min,
                     params.suggested_gain_max);
             const Vec3 suggested_KR =
                 suggestedPositiveGains(
                     contact_moment_surface,
-                    desired_dphi_surface,
+                    actual_dphi_surface,
                     params.suggested_gain_min,
                     params.suggested_gain_max);
             const Vec3 suggested_DR =
                 suggestedPositiveGains(
-                    contact_moment_surface,
-                    desired_omega_surface,
+                    moment_damping_residual,
+                    actual_omega_surface,
                     params.suggested_gain_min,
                     params.suggested_gain_max);
-            printf("=== Suggested gains for desired axis ===\n");
-            printf("desired_axis_from_edge = [%+.1f, %+.1f, %+.1f] mm | dir=[%+.3f, %+.3f, %+.3f] | pitch=%.1f mm/rad\n",
-                   1000.0 * params.desired_axis_from_edge(0),
-                   1000.0 * params.desired_axis_from_edge(1),
-                   1000.0 * params.desired_axis_from_edge(2),
-                   axis_dir(0),
-                   axis_dir(1),
-                   axis_dir(2),
-                   1000.0 * params.desired_axis_pitch);
+            printf("=== Gain compare ===\n");
+            printf("suggestion_axis_source: %s\n",
+                   use_best_axis_for_suggestion
+                       ? (last_valid_post_align_axis_stable
+                              ? "current_best_axis_stable_window"
+                              : "current_best_axis_transient_fallback")
+                       : "desired_axis_fallback");
+            printf("suggestion_axis_from_edge = [%+.1f, %+.1f, %+.1f] mm\n",
+                   1000.0 * suggestion_axis_from_edge(0),
+                   1000.0 * suggestion_axis_from_edge(1),
+                   1000.0 * suggestion_axis_from_edge(2));
+            printf("suggestion_axis_dir = [%+.3f, %+.3f, %+.3f]\n",
+                   suggestion_axis_dir(0),
+                   suggestion_axis_dir(1),
+                   suggestion_axis_dir(2));
+            printf("suggestion_axis_pitch = %+.1f mm/rad\n",
+                   1000.0 * suggestion_axis_pitch);
+            printf("actual_error_used: dp=[%+.1f, %+.1f, %+.1f] mm | dphi_surface=[%+.3f, %+.3f, %+.3f] rad\n",
+                   1000.0 * actual_dp(0),
+                   1000.0 * actual_dp(1),
+                   1000.0 * actual_dp(2),
+                   actual_dphi_surface(0),
+                   actual_dphi_surface(1),
+                   actual_dphi_surface(2));
+            printf("actual_velocity_used: v=[%+.4f, %+.4f, %+.4f] m/s | omega_surface=[%+.4f, %+.4f, %+.4f] rad/s\n",
+                   gain_sample_pdot(0),
+                   gain_sample_pdot(1),
+                   gain_sample_pdot(2),
+                   actual_omega_surface(0),
+                   actual_omega_surface(1),
+                   actual_omega_surface(2));
+            printf("Current post-contact gains:\n");
+            printf("Kp = [%.0f, %.0f, %.0f]\n",
+                   params.post_contact_Kp_diag(0),
+                   params.post_contact_Kp_diag(1),
+                   params.post_contact_Kp_diag(2));
+            printf("Dp = [%.0f, %.0f, %.0f]\n",
+                   params.post_contact_Dp_diag(0),
+                   params.post_contact_Dp_diag(1),
+                   params.post_contact_Dp_diag(2));
+            printf("KR = [%.4g, %.4g, %.4g]\n",
+                   params.post_contact_KR_diag(0),
+                   params.post_contact_KR_diag(1),
+                   params.post_contact_KR_diag(2));
+            printf("DR = [%.4g, %.4g, %.4g]\n",
+                   params.post_contact_DR_diag(0),
+                   params.post_contact_DR_diag(1),
+                   params.post_contact_DR_diag(2));
+            printf("Suggested:\n");
+            printf("Kp = [%.0f, %.0f, %.0f]\n",
+                   suggested_Kp(0),
+                   suggested_Kp(1),
+                   suggested_Kp(2));
+            printf("Dp = [%.0f, %.0f, %.0f]\n",
+                   suggested_Dp(0),
+                   suggested_Dp(1),
+                   suggested_Dp(2));
+            printf("KR = [%.4g, %.4g, %.4g]\n",
+                   suggested_KR(0),
+                   suggested_KR(1),
+                   suggested_KR(2));
+            printf("DR = [%.4g, %.4g, %.4g]\n",
+                   suggested_DR(0),
+                   suggested_DR(1),
+                   suggested_DR(2));
             printf("wrench_used_at_axis_t=%.3f s: F=[%+.1f, %+.1f, %+.1f] N | M_surface=[%+.1f, %+.1f, %+.1f] Nm\n",
                    last_valid_post_align_axis_valid ? last_valid_post_align_axis_time : post_align_time,
                    contact_force_delta(0),
@@ -682,23 +867,16 @@ int main() {
                    contact_moment_surface(0),
                    contact_moment_surface(1),
                    contact_moment_surface(2));
-            printf("post_contact_Kp_base_suggested = [%.1f, %.1f, %.1f] N/m\n",
-                   suggested_Kp(0),
-                   suggested_Kp(1),
-                   suggested_Kp(2));
-            printf("post_contact_Dp_base_suggested = [%.1f, %.1f, %.1f] Ns/m\n",
-                   suggested_Dp(0),
-                   suggested_Dp(1),
-                   suggested_Dp(2));
-            printf("post_contact_KR_surface_suggested = [%.2f, %.2f, %.2f] Nm/rad\n",
-                   suggested_KR(0),
-                   suggested_KR(1),
-                   suggested_KR(2));
-            printf("post_contact_DR_surface_suggested = [%.2f, %.2f, %.2f] Nms/rad\n",
-                   suggested_DR(0),
-                   suggested_DR(1),
-                   suggested_DR(2));
-            printf("note: max values mean the desired motion component is near zero; keep tipping KR low for passive rotation.\n");
+            printf("damping_residual: F_res=[%+.2f, %+.2f, %+.2f] N | M_res_surface=[%+.2f, %+.2f, %+.2f] Nm\n",
+                   force_damping_residual(0),
+                   force_damping_residual(1),
+                   force_damping_residual(2),
+                   moment_damping_residual(0),
+                   moment_damping_residual(1),
+                   moment_damping_residual(2));
+            printf("gain_reference: %s\n",
+                   first_touch_candidate_saved ? "first_touch_candidate" : "phase_switch_bias");
+            printf("note: K/KR use real error from first touch; D/DR use residual wrench after stiffness subtraction, so one-sample damping can be near zero or unreliable.\n");
           }
           printf("phase: %s\n", phaseName(phase));
         }
@@ -724,35 +902,97 @@ int main() {
         desired.p_d = p_start + search_distance * contact_search_direction;
         desired.pdot_d = params.contact_search_speed * contact_search_direction;
 
-        // Contact trigger only, not force control:
-        //
-        //   if search_distance [m] >= contact_search_min_distance [m]
-        //   and force change exceeds the threshold,
-        //   the current TCP position becomes the point of the virtual surface.
-        //
-        // The minimum distance prevents an early false trigger before the TCP is
-        // near the expected table height.
-        //
-        // After this one-time event, the controller switches back to pure
-        // surface impedance.
-
-        // Search is translational: the first contact point is detected by
-        // force only. Moment comparison is reserved for post_contact_align,
-        // where the tool rotates after the first contact.
+        // Contact trigger only, not force control. The phase switch happens at
+        // the confirmed first-touch candidate, detected from force along the
+        // search direction after the minimum travel gate.
+        // Moment comparison is reserved for post_contact_align, where the
+        // tool rotates after the first contact.
         double search_force_delta_norm = 0.0;
         const bool contact_distance_reached =
             search_distance >= params.contact_search_min_distance;
+        const bool first_touch_distance_reached =
+            search_distance >= params.contact_search_first_touch_min_distance;
         const Vec3 force_delta_from_start = external_force - external_force_start;
-        const bool search_contact_detected =
-            contact_distance_reached &&
-            (force_delta_from_start.norm() >= params.contact_force_threshold);
         search_force_delta_norm = force_delta_from_start.norm();
+        const Vec3 force_delta_from_bias = external_force - contact_force_bias;
+        const Vec3 moment_delta_from_bias = external_moment - contact_moment_bias;
+        const double force_along_search =
+            force_delta_from_bias.dot(contact_search_direction);
+        const double search_force_signal =
+            params.contact_search_use_directional_force
+                ? force_along_search
+                : force_delta_from_bias.norm();
+        const bool force_threshold_reached =
+            search_force_signal >= params.contact_force_threshold;
+        if (!first_touch_candidate_saved &&
+            first_touch_distance_reached &&
+            force_threshold_reached) {
+          if (contact_search_candidate_start_time < 0.0) {
+            contact_search_candidate_start_time = time;
+          }
+        } else if (!first_touch_candidate_saved) {
+          contact_search_candidate_start_time = -1.0;
+        }
+        const double contact_search_candidate_time =
+            (contact_search_candidate_start_time >= 0.0)
+                ? (time - contact_search_candidate_start_time)
+                : 0.0;
+        bool first_touch_candidate_just_saved = false;
+        if (!first_touch_candidate_saved &&
+            contact_search_candidate_start_time >= 0.0 &&
+            contact_search_candidate_time >= params.contact_search_confirm_time) {
+          first_touch_candidate_saved = true;
+          first_touch_candidate_just_saved = true;
+          first_touch_candidate_time = time - phase_start_time;
+          first_touch_candidate_distance = search_distance;
+          first_touch_candidate_signal = search_force_signal;
+          first_touch_candidate_tcp = p_EE;
+          first_touch_candidate_point = tool_contact_point;
+          first_touch_candidate_force = external_force;
+          first_touch_candidate_moment = external_moment;
+          printf("\nFirst-touch candidate saved: search = %.1f mm, force_signal = %.1f N, confirmed = %.3f s\n",
+                 1000.0 * first_touch_candidate_distance,
+                 first_touch_candidate_signal,
+                 contact_search_candidate_time);
+          printVec3Mm("first_touch_p_EE", first_touch_candidate_tcp);
+          printVec3Mm("first_touch_point", first_touch_candidate_point);
+        }
+        const bool search_contact_detected =
+            first_touch_candidate_just_saved;
+        if (params.contact_search_debug_period > 0.0 &&
+            time >= next_contact_search_debug_time) {
+          printf("search: t=%4.2f s | dist=%6.1f mm | min=%s | touch_min=%s | signal=%5.1f N | cand=%4.2f s | touch=%s | dF_start=[%+5.1f %+5.1f %+5.1f] N | |dF_start|=%5.1f N | dF_bias=[%+5.1f %+5.1f %+5.1f] N | |dF_bias|=%5.1f N | F_dir=%5.1f N | dM_bias=[%+5.1f %+5.1f %+5.1f] Nm | |dM_bias|=%5.1f Nm\n",
+                 time - phase_start_time,
+                 1000.0 * search_distance,
+                 contact_distance_reached ? "yes" : " no",
+                 first_touch_distance_reached ? "yes" : " no",
+                 search_force_signal,
+                 contact_search_candidate_time,
+                 first_touch_candidate_saved ? "yes" : " no",
+                 force_delta_from_start(0),
+                 force_delta_from_start(1),
+                 force_delta_from_start(2),
+                 search_force_delta_norm,
+                 force_delta_from_bias(0),
+                 force_delta_from_bias(1),
+                 force_delta_from_bias(2),
+                 force_delta_from_bias.norm(),
+                 force_along_search,
+                 moment_delta_from_bias(0),
+                 moment_delta_from_bias(1),
+                 moment_delta_from_bias(2),
+                 moment_delta_from_bias.norm());
+          next_contact_search_debug_time =
+              time + params.contact_search_debug_period;
+        }
         if (search_contact_detected) {
+          const double search_phase_elapsed = time - phase_start_time;
           active_tool_contact_offset_ee = tool_contact_offset_ee;
           surface_point_runtime = tool_contact_point;
+          first_contact_tcp = p_EE;
           first_contact_point = tool_contact_point;
           first_contact_search_distance = search_distance;
-          first_contact_force_delta = search_force_delta_norm;
+          first_contact_force_delta = search_force_signal;
           contact_found = true;
           contact_time = time;
           R_contact_start = R_EE;
@@ -763,9 +1003,41 @@ int main() {
           next_post_align_debug_time = time;
           contact_force_bias = external_force;
           contact_moment_bias = external_moment;
-          printf("\nContact found: search = %.1f mm, force_delta = %.1f N\n",
+          printf("\nContact found: search = %.1f mm, force_signal = %.1f N, confirmed = %.3f s\n",
                  1000.0 * search_distance,
-                 search_force_delta_norm);
+                 search_force_signal,
+                 contact_search_candidate_time);
+          if (first_touch_candidate_saved) {
+            printf("first_touch_reference: search = %.1f mm | signal = %.1f N | dt_before_switch = %.3f s\n",
+                   1000.0 * first_touch_candidate_distance,
+                   first_touch_candidate_signal,
+                   search_phase_elapsed - first_touch_candidate_time);
+          } else {
+            printf("first_touch_reference: not saved before switch\n");
+          }
+          printf("switch_wrench: F_abs=[%+.1f, %+.1f, %+.1f] N | dF_start=[%+.1f, %+.1f, %+.1f] N | dF_bias=[%+.1f, %+.1f, %+.1f] N | M_abs=[%+.1f, %+.1f, %+.1f] Nm | dM_bias=[%+.1f, %+.1f, %+.1f] Nm\n",
+                 external_force(0),
+                 external_force(1),
+                 external_force(2),
+                 force_delta_from_start(0),
+                 force_delta_from_start(1),
+                 force_delta_from_start(2),
+                 force_delta_from_bias(0),
+                 force_delta_from_bias(1),
+                 force_delta_from_bias(2),
+                 external_moment(0),
+                 external_moment(1),
+                 external_moment(2),
+                 moment_delta_from_bias(0),
+                 moment_delta_from_bias(1),
+                 moment_delta_from_bias(2));
+          printf("post_align_bias: F_bias=[%+.1f, %+.1f, %+.1f] N | M_bias=[%+.1f, %+.1f, %+.1f] Nm\n",
+                 contact_force_bias(0),
+                 contact_force_bias(1),
+                 contact_force_bias(2),
+                 contact_moment_bias(0),
+                 contact_moment_bias(1),
+                 contact_moment_bias(2));
           printVec3Mm("active_edge_ee", active_tool_contact_offset_ee);
           printVec3Mm("p_EE_at_contact", p_EE);
           printVec3Mm("p_contact_1", first_contact_point);
@@ -796,6 +1068,8 @@ int main() {
         const double post_contact_push = postContactPush(params, post_align_time);
         const Vec3 edge_target =
             first_contact_point + post_contact_push * contact_search_direction;
+        edge_target_debug = edge_target;
+        post_contact_push_debug = post_contact_push;
         desired.p_d = edge_target - R_contact_start * tool_contact_offset_ee;
         desired.pdot_d.setZero();
       } else {
@@ -913,9 +1187,15 @@ int main() {
         if (max_log_rows > 0) {
           log_data[log_write_index] = makeLogRow(
               time,
+              static_cast<int>(phase),
               p_EE,
               desired.p_d,
               p_end,
+              tool_contact_point,
+              first_contact_tcp,
+              first_contact_point,
+              edge_target_debug,
+              tool_contact_offset_ee,
               e_p,
               e_R,
               pdot,
@@ -923,6 +1203,11 @@ int main() {
               omega,
               f,
               m,
+              external_force,
+              external_moment,
+              contact_force_bias,
+              contact_moment_bias,
+              post_contact_push_debug,
               tau_cmd);
           log_write_index = (log_write_index + 1) % max_log_rows;
           if (log_rows_written < max_log_rows) {
