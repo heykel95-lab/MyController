@@ -61,18 +61,20 @@ inline void printVec7Deg(const char* label, const Vec7& v) {
          rad_to_deg * v(6));
 }
 
-// Formats a per-axis gain suggestion, replacing axes where the configured
-// gain is below gain_threshold with "n/a": on a passive axis (commanded
-// stiffness ~0), the measured wrench there comes from real contact
-// mechanics, not from the spring law the suggestion is fit against, so a
-// numeric suggestion would not be a meaningful gain.
+// Formats a per-axis gain suggestion, replacing an axis with "n/a" when
+// either: the configured gain there is below gain_threshold (a passive axis,
+// where the measured wrench comes from real contact mechanics, not from the
+// spring law the suggestion is fit against), or fit_valid says that axis's
+// fit was ill-conditioned (position/velocity too collinear over the sampled
+// window to separate K from D).
 inline std::string formatSuggestedGains(const Vec3& suggested,
                                          const Vec3& configured,
                                          double gain_threshold,
-                                         const char* value_format) {
+                                         const char* value_format,
+                                         const bool fit_valid[3]) {
   char value[3][32];
   for (int i = 0; i < 3; ++i) {
-    if (std::abs(configured(i)) < gain_threshold) {
+    if (std::abs(configured(i)) < gain_threshold || !fit_valid[i]) {
       snprintf(value[i], sizeof(value[i]), "n/a");
     } else {
       snprintf(value[i], sizeof(value[i]), value_format, suggested(i));

@@ -89,6 +89,58 @@ inline double pointDistanceToAxis(
   return (point - axis_point).cross(axis_direction / axis_norm).norm();
 }
 
+// The single screw axis (Chasles' theorem) that exactly describes a finite
+// rigid-body displacement between two poses of the same body-fixed
+// reference point -- as opposed to an instantaneous pole from one cycle's
+// velocity, which only describes the motion at that instant and is
+// sensitive to per-cycle velocity noise. This depends only on the start and
+// end configuration of the whole motion, so it is the rigorous version of
+// "one axis that describes the whole motion even though it changes":
+// rotating by angle about axis_dir through axis_point, then translating by
+// pitch*angle along axis_dir, taking p_start/R_start exactly to p_end/R_end.
+struct FiniteScrewAxis {
+  Vec3 axis_point_from_start = Vec3::Zero();
+  Vec3 axis_dir = Vec3::Zero();
+  double pitch = 0.0;
+  double angle = 0.0;
+  bool valid = false;
+};
+
+inline FiniteScrewAxis computeFiniteScrewAxis(
+    const Vec3& p_start,
+    const Mat3& R_start,
+    const Vec3& p_end,
+    const Mat3& R_end) {
+  FiniteScrewAxis result;
+  // R_rel maps a vector expressed in the start orientation to the same
+  // body-fixed vector expressed in the end orientation, in base coordinates:
+  // (p_end - axis_point) = R_rel * (p_start - axis_point).
+  const Mat3 R_rel = R_end * R_start.transpose();
+  const Eigen::AngleAxisd angle_axis(R_rel);
+  const double theta = angle_axis.angle();
+  result.angle = theta;
+  // Below this angle the net rotation is too small to fix an axis location;
+  // the displacement is dominated by translation, not rotation, and the
+  // formula below divides by sin(theta/2).
+  constexpr double kMinUsefulAngle = 1e-3;
+  if (theta < kMinUsefulAngle) {
+    return result;
+  }
+  const Vec3 n_hat = angle_axis.axis();
+  const Vec3 d = p_end - p_start;
+  const double h_theta = n_hat.dot(d);
+  result.pitch = h_theta / theta;
+  // g is the component of the displacement perpendicular to the axis -- the
+  // part that has to come from rotating about an axis offset from p_start,
+  // not from translation along the axis itself.
+  const Vec3 g = d - h_theta * n_hat;
+  result.axis_point_from_start =
+      0.5 * g + 0.5 * (std::cos(0.5 * theta) / std::sin(0.5 * theta)) * n_hat.cross(g);
+  result.axis_dir = n_hat;
+  result.valid = true;
+  return result;
+}
+
 inline double suggestedPositiveGain(
     double wrench_component,
     double motion_component,
@@ -111,6 +163,62 @@ inline Vec3 suggestedPositiveGains(
       suggestedPositiveGain(wrench(0), motion(0), min_gain, max_gain),
       suggestedPositiveGain(wrench(1), motion(1), min_gain, max_gain),
       suggestedPositiveGain(wrench(2), motion(2), min_gain, max_gain));
+}
+
+// Running sums for an ordinary-least-squares fit of wrench = K*x + D*v over
+// many samples collected while a phase runs, instead of reading K and D off
+// a single (wrench, x, v) snapshot. A single sample can only ever produce a
+// residual of exactly zero for the gain it was fit from, which is why a
+// one-shot fit cannot identify damping; many samples taken at different
+// points in the transient can.
+struct LinearFitAccumulator {
+  Vec3 Sxx = Vec3::Zero();
+  Vec3 Sxv = Vec3::Zero();
+  Vec3 Svv = Vec3::Zero();
+  Vec3 Sxf = Vec3::Zero();
+  Vec3 Svf = Vec3::Zero();
+  long sample_count = 0;
+
+  void addSample(const Vec3& x, const Vec3& v, const Vec3& f) {
+    Sxx += x.cwiseProduct(x);
+    Sxv += x.cwiseProduct(v);
+    Svv += v.cwiseProduct(v);
+    Sxf += x.cwiseProduct(f);
+    Svf += v.cwiseProduct(f);
+    ++sample_count;
+  }
+};
+
+// Solves the per-axis 2x2 normal equations for K (paired with x) and D
+// (paired with v). x and v must vary independently over the sampled window
+// for K and D to be separable: if x(t) and v(t) are proportional throughout
+// (e.g. a single free decay mode, as in a passively settling rotation with
+// no forced excitation), the system is singular and K/D cannot be told
+// apart from this data at all, no matter how many samples are collected.
+// min_r_squared gates on exactly that: it is 1 - (correlation between x and
+// v)^2, so it is ~0 when x and v are nearly collinear.
+inline void fitStiffnessDamping(
+    const LinearFitAccumulator& fit,
+    double min_r_squared,
+    Vec3* K,
+    Vec3* D,
+    bool valid[3]) {
+  for (int i = 0; i < 3; ++i) {
+    const double Sxx = fit.Sxx(i);
+    const double Sxv = fit.Sxv(i);
+    const double Svv = fit.Svv(i);
+    const double scale = Sxx * Svv;
+    const double det = scale - Sxv * Sxv;
+    if (scale <= 1e-18 || det / scale < min_r_squared) {
+      (*K)(i) = 0.0;
+      (*D)(i) = 0.0;
+      valid[i] = false;
+      continue;
+    }
+    (*K)(i) = (fit.Sxf(i) * Svv - fit.Svf(i) * Sxv) / det;
+    (*D)(i) = (Sxx * fit.Svf(i) - Sxv * fit.Sxf(i)) / det;
+    valid[i] = true;
+  }
 }
 
 inline Vec3 desiredAxisLinearMotionFromTcp(

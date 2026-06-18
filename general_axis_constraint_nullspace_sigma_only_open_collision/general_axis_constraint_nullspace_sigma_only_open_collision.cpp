@@ -294,14 +294,10 @@ int main() {
     double last_valid_post_align_screw_pitch = 0.0;
     double last_valid_post_align_axis_time = 0.0;
     double last_valid_post_align_omega_norm = 0.0;
-    Vec3 last_valid_post_align_external_force = Vec3::Zero();
-    Vec3 last_valid_post_align_external_moment = Vec3::Zero();
-    Mat3 last_valid_post_align_R_EE = Mat3::Identity();
-    Vec3 last_valid_post_align_pdot = Vec3::Zero();
-    Vec3 last_valid_post_align_omega = Vec3::Zero();
-    Vec3 last_valid_post_align_e_p = Vec3::Zero();
     bool last_valid_post_align_axis_valid = false;
     bool last_valid_post_align_axis_stable = false;
+    LinearFitAccumulator fit_pos;
+    LinearFitAccumulator fit_rot;
 
     // Print the starting message and instructions for the user before entering the control loop.
     printf("Starting impedance controller:\n");
@@ -514,6 +510,27 @@ int main() {
             postContactPush(params, post_align_time) * contact_search_direction;
         const Vec3 e_p_post_align =
             (edge_target_this_cycle - R_contact_start * tool_contact_offset_ee) - p_EE;
+        // Real commanded rotation error for this cycle, same convention the
+        // main control law uses (orientationError(current, desired)) -- the
+        // old single-sample gain fit had this backwards.
+        const Vec3 e_R_post_align = applyRotationalAxisMask(
+            params, orientationError(R_EE, R_contact_start), R_surface);
+        const Vec3 e_R_post_align_surface = R_surface.transpose() * e_R_post_align;
+        const Vec3 omega_post_align_surface = R_surface.transpose() * omega;
+        const Vec3 gain_force_reference =
+            first_touch_candidate_saved ? first_touch_candidate_force : contact_force_bias;
+        const Vec3 gain_moment_reference =
+            first_touch_candidate_saved ? first_touch_candidate_moment : contact_moment_bias;
+        // Accumulate this cycle into the whole-phase least-squares fit of
+        // wrench = K*error + D*velocity. One sample can only ever explain
+        // itself exactly (zero residual), which is why a single snapshot
+        // cannot identify damping; collecting samples across the whole
+        // transient (high-velocity early, near-static late) can.
+        fit_pos.addSample(e_p_post_align, pdot, external_force - gain_force_reference);
+        fit_rot.addSample(
+            e_R_post_align_surface,
+            omega_post_align_surface,
+            R_surface.transpose() * (external_moment - gain_moment_reference));
         Vec3 instant_pole_from_tcp = Vec3::Zero();
         const bool instant_pole_valid =
             computeInstantaneousPoleFromTcp(pdot, omega, &instant_pole_from_tcp);
@@ -554,12 +571,6 @@ int main() {
           last_valid_post_align_screw_pitch = instant_screw_pitch;
           last_valid_post_align_axis_time = post_align_time;
           last_valid_post_align_omega_norm = omega_norm;
-          last_valid_post_align_external_force = external_force;
-          last_valid_post_align_external_moment = external_moment;
-          last_valid_post_align_R_EE = R_EE;
-          last_valid_post_align_pdot = pdot;
-          last_valid_post_align_omega = omega;
-          last_valid_post_align_e_p = e_p_post_align;
           last_valid_post_align_axis_valid = true;
           last_valid_post_align_axis_stable = best_axis_candidate_stable;
         }
@@ -613,6 +624,28 @@ int main() {
                  tcp_from_contact_mm(1),
                  tcp_from_contact_mm(2),
                  tcp_from_contact_mm.norm());
+          // One exact axis for the whole alignment motion (Chasles'
+          // theorem), computed only from the start and end edge pose --
+          // unlike the per-cycle instantaneous pole below, this isn't an
+          // average of noisy samples and isn't sensitive to which cycle
+          // happened to look "cleanest".
+          const FiniteScrewAxis finite_axis = computeFiniteScrewAxis(
+              first_contact_point, R_contact_start, tool_contact_point, R_EE);
+          printf("=== Finite screw axis (start to end of alignment) ===\n");
+          if (finite_axis.valid) {
+            printf("angle=%.1f deg | axis_from_edge=[%+.1f, %+.1f, %+.1f] mm | dir=[%+.3f, %+.3f, %+.3f] | pitch=%+.1f mm/rad\n",
+                   (180.0 / M_PI) * finite_axis.angle,
+                   1000.0 * finite_axis.axis_point_from_start(0),
+                   1000.0 * finite_axis.axis_point_from_start(1),
+                   1000.0 * finite_axis.axis_point_from_start(2),
+                   finite_axis.axis_dir(0),
+                   finite_axis.axis_dir(1),
+                   finite_axis.axis_dir(2),
+                   1000.0 * finite_axis.pitch);
+          } else {
+            printf("angle=%.1f deg: too small for a well-defined axis location\n",
+                   (180.0 / M_PI) * finite_axis.angle);
+          }
           if (last_valid_post_align_axis_valid) {
             const Vec3 desired_axis_dir =
                 normalizedOrFallback(params.desired_axis_dir, Vec3(1.0, 0.0, 0.0));
@@ -705,78 +738,30 @@ int main() {
                 use_best_axis_for_suggestion
                     ? last_valid_post_align_screw_pitch
                     : params.desired_axis_pitch;
-            const Vec3 gain_force_reference =
-                first_touch_candidate_saved ? first_touch_candidate_force : contact_force_bias;
-            const Vec3 gain_moment_reference =
-                first_touch_candidate_saved ? first_touch_candidate_moment : contact_moment_bias;
-            const Mat3 gain_rotation_reference = R_contact_start;
-            const Vec3 gain_sample_e_p =
-                last_valid_post_align_axis_valid
-                    ? last_valid_post_align_e_p
-                    : e_p_post_align;
-            const Mat3 gain_sample_rotation =
-                last_valid_post_align_axis_valid
-                    ? last_valid_post_align_R_EE
-                    : R_EE;
-            const Vec3 gain_sample_pdot =
-                last_valid_post_align_axis_valid
-                    ? last_valid_post_align_pdot
-                    : pdot;
-            const Vec3 gain_sample_omega =
-                last_valid_post_align_axis_valid
-                    ? last_valid_post_align_omega
-                    : omega;
-            const Vec3 contact_force_delta =
-                (last_valid_post_align_axis_valid
-                     ? last_valid_post_align_external_force
-                     : external_force) -
-                gain_force_reference;
-            const Vec3 contact_moment_delta =
-                (last_valid_post_align_axis_valid
-                     ? last_valid_post_align_external_moment
-                     : external_moment) -
-                gain_moment_reference;
-            const Vec3 actual_dphi =
-                orientationError(gain_rotation_reference, gain_sample_rotation);
-            const Vec3 actual_dphi_surface = R_surface.transpose() * actual_dphi;
-            const Vec3 actual_omega_surface = R_surface.transpose() * gain_sample_omega;
-            const Vec3 contact_moment_surface = R_surface.transpose() * contact_moment_delta;
-            // Residual against the gains actually commanded (not a gain refit
-            // from this same sample), so the leftover wrench used for the
-            // damping suggestion is independent of the stiffness suggestion
-            // below. Fitting and then subtracting the same single-sample fit
-            // always leaves ~0 residual, which is why this used to force the
-            // suggested damping to the gain floor.
-            const Vec3 force_damping_residual =
-                contact_force_delta -
-                params.post_contact_Kp_diag.cwiseProduct(gain_sample_e_p);
-            const Vec3 moment_damping_residual =
-                contact_moment_surface -
-                params.post_contact_KR_diag.cwiseProduct(actual_dphi_surface);
-            const Vec3 suggested_Kp =
-                suggestedPositiveGains(
-                    contact_force_delta,
-                    gain_sample_e_p,
-                    params.suggested_gain_min,
-                    params.suggested_gain_max);
-            const Vec3 suggested_Dp =
-                suggestedPositiveGains(
-                    force_damping_residual,
-                    gain_sample_pdot,
-                    params.suggested_gain_min,
-                    params.suggested_gain_max);
-            const Vec3 suggested_KR =
-                suggestedPositiveGains(
-                    contact_moment_surface,
-                    actual_dphi_surface,
-                    params.suggested_gain_min,
-                    params.suggested_gain_max);
-            const Vec3 suggested_DR =
-                suggestedPositiveGains(
-                    moment_damping_residual,
-                    actual_omega_surface,
-                    params.suggested_gain_min,
-                    params.suggested_gain_max);
+            // Least-squares fit of wrench = K*error + D*velocity over every
+            // cycle of this post_contact_align run (see fit_pos/fit_rot
+            // accumulation above), instead of reading K and D off one
+            // instant. min_r_squared rejects an axis where error and
+            // velocity were too collinear across the window to separate K
+            // from D at all (e.g. a single free decay with no excitation).
+            const double min_r_squared = 0.01;
+            Vec3 fit_pos_K, fit_pos_D, fit_rot_K, fit_rot_D;
+            bool fit_pos_valid[3];
+            bool fit_rot_valid[3];
+            fitStiffnessDamping(fit_pos, min_r_squared, &fit_pos_K, &fit_pos_D, fit_pos_valid);
+            fitStiffnessDamping(fit_rot, min_r_squared, &fit_rot_K, &fit_rot_D, fit_rot_valid);
+            auto clampGain = [&](double g) {
+              return std::max(params.suggested_gain_min,
+                               std::min(params.suggested_gain_max, std::abs(g)));
+            };
+            const Vec3 suggested_Kp(
+                clampGain(fit_pos_K(0)), clampGain(fit_pos_K(1)), clampGain(fit_pos_K(2)));
+            const Vec3 suggested_Dp(
+                clampGain(fit_pos_D(0)), clampGain(fit_pos_D(1)), clampGain(fit_pos_D(2)));
+            const Vec3 suggested_KR(
+                clampGain(fit_rot_K(0)), clampGain(fit_rot_K(1)), clampGain(fit_rot_K(2)));
+            const Vec3 suggested_DR(
+                clampGain(fit_rot_D(0)), clampGain(fit_rot_D(1)), clampGain(fit_rot_D(2)));
             printf("=== Gain compare ===\n");
             printf("suggestion_axis_source: %s\n",
                    use_best_axis_for_suggestion
@@ -794,20 +779,17 @@ int main() {
                    suggestion_axis_dir(2));
             printf("suggestion_axis_pitch = %+.1f mm/rad\n",
                    1000.0 * suggestion_axis_pitch);
-            printf("actual_error_used: e_p=[%+.1f, %+.1f, %+.1f] mm | dphi_surface=[%+.3f, %+.3f, %+.3f] rad\n",
-                   1000.0 * gain_sample_e_p(0),
-                   1000.0 * gain_sample_e_p(1),
-                   1000.0 * gain_sample_e_p(2),
-                   actual_dphi_surface(0),
-                   actual_dphi_surface(1),
-                   actual_dphi_surface(2));
-            printf("actual_velocity_used: v=[%+.4f, %+.4f, %+.4f] m/s | omega_surface=[%+.4f, %+.4f, %+.4f] rad/s\n",
-                   gain_sample_pdot(0),
-                   gain_sample_pdot(1),
-                   gain_sample_pdot(2),
-                   actual_omega_surface(0),
-                   actual_omega_surface(1),
-                   actual_omega_surface(2));
+            printf("fit_samples: n=%ld over %.1f s\n",
+                   fit_pos.sample_count,
+                   post_align_time);
+            printf("fit_valid (r^2 >= %.2f): Kp/Dp=[%s, %s, %s] | KR/DR=[%s, %s, %s]\n",
+                   min_r_squared,
+                   fit_pos_valid[0] ? "yes" : "no",
+                   fit_pos_valid[1] ? "yes" : "no",
+                   fit_pos_valid[2] ? "yes" : "no",
+                   fit_rot_valid[0] ? "yes" : "no",
+                   fit_rot_valid[1] ? "yes" : "no",
+                   fit_rot_valid[2] ? "yes" : "no");
             printf("Current post-contact gains:\n");
             printf("Kp = [%.0f, %.0f, %.0f]\n",
                    params.post_contact_Kp_diag(0),
@@ -831,37 +813,22 @@ int main() {
             // there is dominated by contact mechanics, not the spring law,
             // so no numeric K/D suggestion is shown for it.
             const double passive_axis_gain_threshold = 1.0;
-            printf("Suggested:\n");
+            printf("Suggested (least-squares fit over the whole post_contact_align window):\n");
             printf("Kp = %s\n",
                    formatSuggestedGains(suggested_Kp, params.post_contact_Kp_diag,
-                                         passive_axis_gain_threshold, "%.0f").c_str());
+                                         passive_axis_gain_threshold, "%.0f", fit_pos_valid).c_str());
             printf("Dp = %s\n",
                    formatSuggestedGains(suggested_Dp, params.post_contact_Kp_diag,
-                                         passive_axis_gain_threshold, "%.0f").c_str());
+                                         passive_axis_gain_threshold, "%.0f", fit_pos_valid).c_str());
             printf("KR = %s\n",
                    formatSuggestedGains(suggested_KR, params.post_contact_KR_diag,
-                                         passive_axis_gain_threshold, "%.4g").c_str());
+                                         passive_axis_gain_threshold, "%.4g", fit_rot_valid).c_str());
             printf("DR = %s\n",
                    formatSuggestedGains(suggested_DR, params.post_contact_KR_diag,
-                                         passive_axis_gain_threshold, "%.4g").c_str());
-            printf("wrench_used_at_axis_t=%.3f s: F=[%+.1f, %+.1f, %+.1f] N | M_surface=[%+.1f, %+.1f, %+.1f] Nm\n",
-                   last_valid_post_align_axis_valid ? last_valid_post_align_axis_time : post_align_time,
-                   contact_force_delta(0),
-                   contact_force_delta(1),
-                   contact_force_delta(2),
-                   contact_moment_surface(0),
-                   contact_moment_surface(1),
-                   contact_moment_surface(2));
-            printf("damping_residual: F_res=[%+.2f, %+.2f, %+.2f] N | M_res_surface=[%+.2f, %+.2f, %+.2f] Nm\n",
-                   force_damping_residual(0),
-                   force_damping_residual(1),
-                   force_damping_residual(2),
-                   moment_damping_residual(0),
-                   moment_damping_residual(1),
-                   moment_damping_residual(2));
+                                         passive_axis_gain_threshold, "%.4g", fit_rot_valid).c_str());
             printf("gain_reference: %s\n",
                    first_touch_candidate_saved ? "first_touch_candidate" : "phase_switch_bias");
-            printf("note: Kp/KR are fit from this sample's real commanded error (e_p includes the post_contact_push ramp, not just distance moved since first touch); Dp/DR are fit from the wrench left over after subtracting your *configured* Kp/KR from that same error (not a refit), so they stay comparable to your real gains. Axes with configured K/KR below %.0f are passive and shown as n/a.\n",
+            printf("note: Kp/Dp/KR/DR are fit jointly (not Kp first then a residual) from every cycle's real commanded error and velocity across the whole phase, so they are not forced toward zero damping the way a single-sample fit is. Axes with configured K/KR below %.0f are passive and shown as n/a; axes with error and velocity too collinear to separate K from D (e.g. one undriven decay) are also n/a.\n",
                    passive_axis_gain_threshold);
           }
           printf("phase: %s\n", phaseName(phase));
