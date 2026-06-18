@@ -200,11 +200,11 @@ post_contact_max_push = 0.031
 # one-sample suggested-gain test caused a reflex stop at post_align t=0.1 s
 # because it combined high stiffness with almost zero damping, so these gains
 # are kept as the safer validated post-contact baseline.
-post_contact_Kp_x = 120.0
-post_contact_Kp_y = 120.0
+post_contact_Kp_x = 40.0
+post_contact_Kp_y = 40.0
 post_contact_Kp_z = 5500.0
-post_contact_Dp_x = 25.0
-post_contact_Dp_y = 25.0
+post_contact_Dp_x = 10.0
+post_contact_Dp_y = 10.0
 post_contact_Dp_z = 175.0
 
 # Rotational spring/damping used only during post_contact_align, surface
@@ -308,7 +308,7 @@ contact_search_first_touch_min_distance = 0.240
 
 # First-touch and phase switch use dF_bias dot contact_search_direction when enabled.
 contact_search_use_directional_force = 1
-contact_search_confirm_time = 0.05
+contact_search_confirm_time = 0.0
 contact_force_threshold = 12.0
 
 # Force safety trigger during the first orientation-alignment phase.
