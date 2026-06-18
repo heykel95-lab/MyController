@@ -8,6 +8,7 @@ struct Parameters {
   std::string csv_file_name = "general_axis_constraint_nullspace_sigma_only_open_collision_log.csv";
   int log_every_n_cycles = 5;
   int max_log_rows = 120000;
+  double debug_period = 0.20;
   bool open_gripper_before_run = true;
   bool require_gripper_open = true;
   double gripper_open_width = 0.08;
@@ -35,7 +36,6 @@ struct Parameters {
   double orient_phase_error_threshold = 0.03;
   double post_contact_align_min_time = 0.3;
   double post_contact_align_duration = 15.0;
-  double post_contact_align_debug_period = 0.10;
   double post_contact_best_axis_min_time = 0.60;
   double post_contact_best_axis_min_omega = 0.12;
   double post_contact_moment_threshold = 60.0;
@@ -61,7 +61,6 @@ struct Parameters {
   double contact_search_max_distance = 0.02;
   double contact_search_min_distance = 0.0;
   double contact_search_first_touch_min_distance = 0.0;
-  double contact_search_debug_period = 0.10;
   bool contact_search_use_directional_force = true;
   double contact_search_confirm_time = 0.05;
   double contact_force_threshold = 5.0;

@@ -18,6 +18,9 @@ csv_file_name = general_axis_constraint_nullspace_sigma_only_open_collision_log.
 log_every_n_cycles = 1
 max_log_rows = 120000
 
+# Terminal debug print period, shared by all phases [s].
+debug_period = 0.20
+
 # 1 = static holding/compliance test
 # 0 = smooth relative trajectory test
 hold_mode = 1
@@ -154,10 +157,6 @@ post_contact_align_min_time = 2.0
 # The no-sideways test settled by about 2-3 s; 8 s keeps a larger safety margin
 # without holding the high preload for the old 15 s window.
 post_contact_align_duration = 8.0
-
-# Live terminal print period for the post_contact_align "align:" line [s].
-# Keep this throttled; every-cycle data is already written to CSV.
-post_contact_align_debug_period = 0.10
 
 # Ignore the first transient screw-axis samples when choosing the measured
 # "best" axis for comparison and gain suggestion. Among stable samples, the
@@ -306,10 +305,6 @@ contact_search_min_distance = 0.240
 
 # First-touch reference/gain calculation uses the same gate as the phase switch.
 contact_search_first_touch_min_distance = 0.240
-
-# Live terminal print period for the contact-search force/moment line [s].
-# Every-cycle wrench data is also written to CSV when log_every_n_cycles = 1.
-contact_search_debug_period = 0.10
 
 # First-touch and phase switch use dF_bias dot contact_search_direction when enabled.
 contact_search_use_directional_force = 1

@@ -94,87 +94,56 @@ inline void printJointStartEndTableDeg(const Vec7& q_start, const Vec7& q_final)
 }
 
 inline void printParameters(const Parameters& params) {
-  printf("\n=== Controller setup ===\n");
-  if (params.experiment_duration <= 0.0) {
-    printf("time: indefinite, stop with e + Enter\n");
-  } else {
-    printf("time: %.1f s, or stop with e + Enter\n", params.experiment_duration);
-  }
-  printf("q_init: %s | contact: %s | orientation_test: %s\n",
-         params.q_init_case.c_str(),
+  printf("\n=== Setup ===\n");
+  printf("phase_sequence: %s | contact_search: %s | orientation_test: %s\n",
+         params.use_phase_sequence ? "on" : "off",
          params.use_contact_search ? "on" : "off",
          params.orientation_test_only ? "on" : "off");
-  printf("gripper_open: %s | width=%.1f mm | require=%s\n",
-         params.open_gripper_before_run ? "on" : "off",
-         1000.0 * params.gripper_open_width,
-         params.require_gripper_open ? "yes" : "no");
-  printf("logging: every %d cycles | max_rows=%d\n",
-         params.log_every_n_cycles,
-         params.max_log_rows);
-  printf("search_direction: %s\n",
-         params.contact_search_use_surface_normal ? "-surface_normal" : "manual");
-  printf("search_debug: %.3f s | force_signal: %s | confirm: %.3f s\n",
-         params.contact_search_debug_period,
-         params.contact_search_use_directional_force ? "directional" : "norm",
-         params.contact_search_confirm_time);
-  printf("search_min: %.1f mm | first_touch_min: %.1f mm\n",
-         1000.0 * params.contact_search_min_distance,
-         1000.0 * params.contact_search_first_touch_min_distance);
-  printf("phases: %s | virtual_center: %s | vcr_offset: %.1f mm\n",
-         params.use_phase_sequence ? "on" : "off",
-         params.use_virtual_center_after_contact ? "on" : "off",
-         1000.0 * params.vcr_offset);
-  printf("gain_suggestion: %s | source=current_best_axis, desired_fallback | method=actual_error_and_residual_damping\n",
-         params.suggest_gains_from_desired_axis ? "on" : "off");
-  printVec3Mm("desired_axis_from_edge", params.desired_axis_from_edge);
-  printVec3("desired_axis_dir", normalizedOrFallback(params.desired_axis_dir, Vec3(1.0, 0.0, 0.0)));
-  printf("desired_axis_pitch = %.1f mm/rad\n", 1000.0 * params.desired_axis_pitch);
-  printVec3("surface_n", params.surface_normal);
-  if (params.use_surface_tilt_angle) {
-    printf("surface_tilt_angle: %.1f deg\n", params.surface_tilt_angle_deg);
-  }
-  printVec3("surface_t1", params.surface_tangent1);
-  printVec3("tool_axis_ee", params.tool_axis_ee);
-  printf("tool_axis_target_sign = %.0f\n",
-         (params.tool_axis_target_sign >= 0.0) ? 1.0 : -1.0);
-  printf("edge_point_control: %s | auto_edge: %s\n",
-         params.use_tool_contact_point_control ? "on" : "off",
-         params.auto_select_tool_contact_edge ? "on" : "off");
-  printVec3Mm("tool_contact_point_ee", params.tool_contact_point_ee);
-  printf("rot_axes [normal, tangent1, tangent2] = [%d, %d, %d]\n",
-         params.constrain_rotation_about_surface_normal ? 1 : 0,
-         params.constrain_rotation_about_surface_tangent1 ? 1 : 0,
-         params.constrain_rotation_about_surface_tangent2 ? 1 : 0);
-  printf("contact thresholds: search %.1f N, align %.1f N, post %.1f Nm\n",
+  printf("force/moment limits: search=%.1f N | align=%.1f N | post_moment=%.1f Nm\n",
          params.contact_force_threshold,
          params.alignment_contact_force_threshold,
          params.post_contact_moment_threshold);
-  printf("orient_tol: %.1f deg | post_align: %.1f s | align_debug: %.3f s\n",
-         (180.0 / M_PI) * params.orient_phase_error_threshold,
+  printf("post_align_duration=%.1f s | debug_period=%.2f s\n",
          params.post_contact_align_duration,
-         params.post_contact_align_debug_period);
-  printf("best_axis_gate: min_time=%.3f s | min_omega=%.3f rad/s\n",
-         params.post_contact_best_axis_min_time,
-         params.post_contact_best_axis_min_omega);
-  printf("post_push: %.1f mm + %.1f mm/s, max %.1f mm\n",
-         1000.0 * params.post_contact_normal_push,
-         1000.0 * params.post_contact_push_speed,
-         1000.0 * params.post_contact_max_push);
-  printVec3("post_Kp", params.post_contact_Kp_diag);
-  printVec3("post_Dp", params.post_contact_Dp_diag);
-  printVec3("post_KR [normal, tangent1, tangent2]", params.post_contact_KR_diag);
-  printVec3("post_DR [normal, tangent1, tangent2]", params.post_contact_DR_diag);
-  printf("contact_surface_after_align: %s\n",
-         params.use_search_direction_surface_after_alignment ? "on" : "off");
-  printVec3("Kp", params.Kp_diag);
-  printVec3("Dp", params.Dp_diag);
-  printVec3("KR", params.KR_diag);
-  printVec3("DR", params.DR_diag);
-  printf("nullspace: k_start=%.2f damping=%.2f k_sigma=%.2f tau_max=%.2f Nm\n",
-         params.nullspace_k_start,
-         params.nullspace_damping,
-         params.nullspace_k_sigma,
-         params.nullspace_tau_max);
+         params.debug_period);
+}
+
+// One short, fixed-format debug line per phase, all sharing the same
+// "t=... | name=value" style so the live output is easy to scan no matter
+// which phase the controller is in.
+
+inline void printOrientDebug(double phase_time,
+                              double axis_error_deg,
+                              double rot_error_deg) {
+  printf("orient:     t=%5.1f s | axis_err=%5.1f deg | rot_err=%5.1f deg\n",
+         phase_time, axis_error_deg, rot_error_deg);
+}
+
+inline void printSearchDebug(double phase_time,
+                              double distance_mm,
+                              double force_n,
+                              double force_limit_n,
+                              bool touch_saved) {
+  printf("search:     t=%5.1f s | distance=%6.1f mm | force=%5.1f N (limit %.1f) | touch=%s\n",
+         phase_time, distance_mm, force_n, force_limit_n, touch_saved ? "yes" : "no");
+}
+
+inline void printAlignDebug(double phase_time,
+                             double tip_deg,
+                             double force_n,
+                             double moment_nm,
+                             double moment_limit_nm,
+                             double edge_mm) {
+  printf("align:      t=%5.1f s | tip=%5.1f deg | force=%5.1f N | moment=%5.1f Nm (limit %.1f) | edge=%5.1f mm\n",
+         phase_time, tip_deg, force_n, moment_nm, moment_limit_nm, edge_mm);
+}
+
+inline void printImpedanceDebug(double phase_time,
+                                 double force_n,
+                                 double pos_error_mm,
+                                 double rot_error_deg) {
+  printf("impedance:  t=%5.1f s | force=%5.1f N | pos_err=%5.1f mm | rot_err=%5.1f deg\n",
+         phase_time, force_n, pos_error_mm, rot_error_deg);
 }
 
 inline void printFinalSummary(

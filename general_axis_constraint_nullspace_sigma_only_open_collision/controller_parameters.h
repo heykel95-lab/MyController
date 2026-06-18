@@ -112,6 +112,7 @@ inline Parameters readParameters(const std::string& filename) {
       std::max(1, static_cast<int>(getDouble("log_every_n_cycles", p.log_every_n_cycles)));
   p.max_log_rows =
       std::max(0, static_cast<int>(getDouble("max_log_rows", p.max_log_rows)));
+  p.debug_period = getDouble("debug_period", p.debug_period);
   p.open_gripper_before_run = getBool("open_gripper_before_run", p.open_gripper_before_run);
   p.require_gripper_open = getBool("require_gripper_open", p.require_gripper_open);
   p.gripper_open_width = getDouble("gripper_open_width", p.gripper_open_width);
@@ -170,8 +171,6 @@ inline Parameters readParameters(const std::string& filename) {
       getDouble("post_contact_align_min_time", p.post_contact_align_min_time);
   p.post_contact_align_duration =
       getDouble("post_contact_align_duration", p.post_contact_align_duration);
-  p.post_contact_align_debug_period =
-      getDouble("post_contact_align_debug_period", p.post_contact_align_debug_period);
   p.post_contact_best_axis_min_time =
       std::max(0.0, getDouble("post_contact_best_axis_min_time",
                               p.post_contact_best_axis_min_time));
@@ -227,8 +226,6 @@ inline Parameters readParameters(const std::string& filename) {
   p.contact_search_first_touch_min_distance =
       getDouble("contact_search_first_touch_min_distance",
                 p.contact_search_first_touch_min_distance);
-  p.contact_search_debug_period =
-      getDouble("contact_search_debug_period", p.contact_search_debug_period);
   p.contact_search_use_directional_force =
       getBool("contact_search_use_directional_force", p.contact_search_use_directional_force);
   p.contact_search_confirm_time =

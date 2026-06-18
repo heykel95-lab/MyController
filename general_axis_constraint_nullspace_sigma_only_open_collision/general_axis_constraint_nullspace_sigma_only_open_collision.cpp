@@ -213,8 +213,7 @@ int main() {
     double first_touch_candidate_signal = 0.0;
     bool first_touch_candidate_saved = false;
     double contact_search_candidate_start_time = -1.0;
-    double next_contact_search_debug_time = 0.0;
-    double next_post_align_debug_time = 0.0;
+    double next_debug_time = 0.0;
 
     auto forceContactDetected = [&](const Vec3& force,
                                     double force_threshold,
@@ -290,7 +289,6 @@ int main() {
     double final_instant_axis_time = 0.0;
     bool final_instant_pole_valid = false;
     Vec7 final_q = q_start;
-    double next_orientation_debug_time = 0.0;
     Vec3 last_valid_post_align_axis_point_from_edge = Vec3::Zero();
     Vec3 last_valid_post_align_axis_dir = Vec3::Zero();
     Vec3 last_valid_post_align_edge_from_tcp = Vec3::Zero();
@@ -451,6 +449,14 @@ int main() {
           -1.0,
           std::min(1.0, tool_axis_current.dot(tool_axis_target)));
       const double tool_axis_alignment_error = std::acos(tool_axis_dot);
+      if (orienting_to_surface &&
+          params.debug_period > 0.0 &&
+          time >= next_debug_time) {
+        printOrientDebug(time - phase_start_time,
+                          (180.0 / M_PI) * tool_axis_alignment_error,
+                          (180.0 / M_PI) * e_R_to_surface.norm());
+        next_debug_time = time + params.debug_period;
+      }
       double force_delta_norm = 0.0;
       const bool alignment_contact_detected =
           orienting_to_surface &&
@@ -474,10 +480,8 @@ int main() {
         phase_start_time = time;
         contact_force_bias = external_force_start;
         contact_moment_bias = external_moment;
-        printf("\nContact during alignment: force = %.1f N\n", force_delta_norm);
-        printVec3Mm("active_edge_ee", active_tool_contact_offset_ee);
-        printVec3Mm("surface_point", surface_point_runtime);
-        printVec3Mm("p_contact_1", first_contact_point);
+        printf("\nContact during alignment: force=%.1f N\n", force_delta_norm);
+        printVec3Mm("contact_point", first_contact_point);
         printf("phase: %s\n", phaseName(phase));
       }
 
@@ -491,12 +495,11 @@ int main() {
             : ControlPhase::kSurfaceImpedance;
         phase_start_time = time;
         contact_search_candidate_start_time = -1.0;
-        next_contact_search_debug_time = time;
+        next_debug_time = time;
         contact_force_bias = external_force;
         contact_moment_bias = external_moment;
-        printf("\nOrientation reached: axis_error = %.2f deg, full_error = %.2f deg\n",
-               (180.0 / M_PI) * tool_axis_alignment_error,
-               (180.0 / M_PI) * e_R_to_surface.norm());
+        printf("\nOrientation reached: axis_err=%.1f deg\n",
+               (180.0 / M_PI) * tool_axis_alignment_error);
         printf("phase: %s\n", phaseName(phase));
       }
 
@@ -556,37 +559,21 @@ int main() {
           last_valid_post_align_axis_valid = true;
           last_valid_post_align_axis_stable = best_axis_candidate_stable;
         }
-        if (params.post_contact_align_debug_period > 0.0 &&
-            time >= next_post_align_debug_time) {
+        if (params.debug_period > 0.0 && time >= next_debug_time) {
           // actual_tip_deg: measured rotation away from the orientation held
           // at first contact -- shows whether/how much the tool has
           // passively tipped so far, not just where it is now.
           const double actual_tip_deg =
               (180.0 / M_PI) * orientationError(R_EE, R_contact_start).norm();
-          const Vec3 edge_from_contact_mm =
-              1000.0 * (tool_contact_point - first_contact_point);
-          printf("align: t=%4.1f s | edge=[%5.1f %5.1f %5.1f] mm | |edge|=%5.1f mm | tip=%4.1f deg | F=%5.1f N | M=%5.1f Nm",
-                 post_align_time,
-                 edge_from_contact_mm(0),
-                 edge_from_contact_mm(1),
-                 edge_from_contact_mm(2),
-                 edge_from_contact_mm.norm(),
-                 actual_tip_deg,
-                 post_force_delta_norm,
-                 post_moment_delta_norm);
-          if (instant_pole_valid) {
-            printf(" | w=%5.3f rad/s | axis_edge=%5.1f mm | axis_from_edge=[%+5.1f %+5.1f %+5.1f] mm | pitch=%6.1f mm/rad\n",
-                   omega.norm(),
-                   1000.0 * instant_edge_axis_distance,
-                   1000.0 * instant_axis_point_from_edge(0),
-                   1000.0 * instant_axis_point_from_edge(1),
-                   1000.0 * instant_axis_point_from_edge(2),
-                   1000.0 * instant_screw_pitch);
-          } else {
-            printf(" | axis=slow\n");
-          }
-          next_post_align_debug_time =
-              time + params.post_contact_align_debug_period;
+          const double edge_from_contact_mm =
+              1000.0 * (tool_contact_point - first_contact_point).norm();
+          printAlignDebug(post_align_time,
+                           actual_tip_deg,
+                           post_force_delta_norm,
+                           post_moment_delta_norm,
+                           params.post_contact_moment_threshold,
+                           edge_from_contact_mm);
+          next_debug_time = time + params.debug_period;
         }
         const bool moment_contact_reached =
             post_align_time >= params.post_contact_align_min_time &&
@@ -907,15 +894,9 @@ int main() {
         // search direction after the minimum travel gate.
         // Moment comparison is reserved for post_contact_align, where the
         // tool rotates after the first contact.
-        double search_force_delta_norm = 0.0;
-        const bool contact_distance_reached =
-            search_distance >= params.contact_search_min_distance;
         const bool first_touch_distance_reached =
             search_distance >= params.contact_search_first_touch_min_distance;
-        const Vec3 force_delta_from_start = external_force - external_force_start;
-        search_force_delta_norm = force_delta_from_start.norm();
         const Vec3 force_delta_from_bias = external_force - contact_force_bias;
-        const Vec3 moment_delta_from_bias = external_moment - contact_moment_bias;
         const double force_along_search =
             force_delta_from_bias.dot(contact_search_direction);
         const double search_force_signal =
@@ -950,40 +931,20 @@ int main() {
           first_touch_candidate_point = tool_contact_point;
           first_touch_candidate_force = external_force;
           first_touch_candidate_moment = external_moment;
-          printf("\nFirst-touch candidate saved: search = %.1f mm, force_signal = %.1f N, confirmed = %.3f s\n",
+          printf("\nFirst-touch candidate saved: dist=%.1f mm | force=%.1f N | confirmed=%.3f s\n",
                  1000.0 * first_touch_candidate_distance,
                  first_touch_candidate_signal,
                  contact_search_candidate_time);
-          printVec3Mm("first_touch_p_EE", first_touch_candidate_tcp);
-          printVec3Mm("first_touch_point", first_touch_candidate_point);
         }
         const bool search_contact_detected =
             first_touch_candidate_just_saved;
-        if (params.contact_search_debug_period > 0.0 &&
-            time >= next_contact_search_debug_time) {
-          printf("search: t=%4.2f s | dist=%6.1f mm | min=%s | touch_min=%s | signal=%5.1f N | cand=%4.2f s | touch=%s | dF_start=[%+5.1f %+5.1f %+5.1f] N | |dF_start|=%5.1f N | dF_bias=[%+5.1f %+5.1f %+5.1f] N | |dF_bias|=%5.1f N | F_dir=%5.1f N | dM_bias=[%+5.1f %+5.1f %+5.1f] Nm | |dM_bias|=%5.1f Nm\n",
-                 time - phase_start_time,
-                 1000.0 * search_distance,
-                 contact_distance_reached ? "yes" : " no",
-                 first_touch_distance_reached ? "yes" : " no",
-                 search_force_signal,
-                 contact_search_candidate_time,
-                 first_touch_candidate_saved ? "yes" : " no",
-                 force_delta_from_start(0),
-                 force_delta_from_start(1),
-                 force_delta_from_start(2),
-                 search_force_delta_norm,
-                 force_delta_from_bias(0),
-                 force_delta_from_bias(1),
-                 force_delta_from_bias(2),
-                 force_delta_from_bias.norm(),
-                 force_along_search,
-                 moment_delta_from_bias(0),
-                 moment_delta_from_bias(1),
-                 moment_delta_from_bias(2),
-                 moment_delta_from_bias.norm());
-          next_contact_search_debug_time =
-              time + params.contact_search_debug_period;
+        if (params.debug_period > 0.0 && time >= next_debug_time) {
+          printSearchDebug(time - phase_start_time,
+                            1000.0 * search_distance,
+                            search_force_signal,
+                            params.contact_force_threshold,
+                            first_touch_candidate_saved);
+          next_debug_time = time + params.debug_period;
         }
         if (search_contact_detected) {
           const double search_phase_elapsed = time - phase_start_time;
@@ -1000,50 +961,19 @@ int main() {
               ? ControlPhase::kPostContactAlign
               : ControlPhase::kSurfaceImpedance;
           phase_start_time = time;
-          next_post_align_debug_time = time;
+          next_debug_time = time;
           contact_force_bias = external_force;
           contact_moment_bias = external_moment;
-          printf("\nContact found: search = %.1f mm, force_signal = %.1f N, confirmed = %.3f s\n",
+          printf("\nContact found: dist=%.1f mm | force=%.1f N | confirmed=%.3f s\n",
                  1000.0 * search_distance,
                  search_force_signal,
                  contact_search_candidate_time);
           if (first_touch_candidate_saved) {
-            printf("first_touch_reference: search = %.1f mm | signal = %.1f N | dt_before_switch = %.3f s\n",
+            printf("first_touch_reference: dist=%.1f mm | dt_before_switch=%.3f s\n",
                    1000.0 * first_touch_candidate_distance,
-                   first_touch_candidate_signal,
                    search_phase_elapsed - first_touch_candidate_time);
-          } else {
-            printf("first_touch_reference: not saved before switch\n");
           }
-          printf("switch_wrench: F_abs=[%+.1f, %+.1f, %+.1f] N | dF_start=[%+.1f, %+.1f, %+.1f] N | dF_bias=[%+.1f, %+.1f, %+.1f] N | M_abs=[%+.1f, %+.1f, %+.1f] Nm | dM_bias=[%+.1f, %+.1f, %+.1f] Nm\n",
-                 external_force(0),
-                 external_force(1),
-                 external_force(2),
-                 force_delta_from_start(0),
-                 force_delta_from_start(1),
-                 force_delta_from_start(2),
-                 force_delta_from_bias(0),
-                 force_delta_from_bias(1),
-                 force_delta_from_bias(2),
-                 external_moment(0),
-                 external_moment(1),
-                 external_moment(2),
-                 moment_delta_from_bias(0),
-                 moment_delta_from_bias(1),
-                 moment_delta_from_bias(2));
-          printf("post_align_bias: F_bias=[%+.1f, %+.1f, %+.1f] N | M_bias=[%+.1f, %+.1f, %+.1f] Nm\n",
-                 contact_force_bias(0),
-                 contact_force_bias(1),
-                 contact_force_bias(2),
-                 contact_moment_bias(0),
-                 contact_moment_bias(1),
-                 contact_moment_bias(2));
-          printVec3Mm("active_edge_ee", active_tool_contact_offset_ee);
-          printVec3Mm("p_EE_at_contact", p_EE);
-          printVec3Mm("p_contact_1", first_contact_point);
-          printVec3Mm("post_align_target",
-                      first_contact_point +
-                          params.post_contact_normal_push * contact_search_direction);
+          printVec3Mm("contact_point", first_contact_point);
           printf("phase: %s\n", phaseName(phase));
         // If the maximum search distance is reached without detecting contact, stop the controller and log the final data.
         } else if (search_distance >= params.contact_search_max_distance) {
@@ -1110,7 +1040,6 @@ int main() {
                         ? R_after_contact_align
                         : (use_surface_orientation ? R_d_surface : R_d)));
       Vec3 e_R = applyRotationalAxisMask(params, orientationError(R_EE, R_d_used), R_surface);
-      const Vec3 e_R_surface = R_surface.transpose() * e_R;
 
       if (phase == ControlPhase::kSurfaceImpedance && params.use_virtual_center_after_contact) {
         // Virtual center of rotation for the post-contact alignment phase:
@@ -1124,6 +1053,16 @@ int main() {
         const Vec3 p_c = surface_point_runtime + params.vcr_offset * R_surface.col(0);
         const Vec3 r_c = p_EE - p_c;
         e_p = e_p - e_R.cross(r_c);
+      }
+
+      if (phase == ControlPhase::kSurfaceImpedance &&
+          params.debug_period > 0.0 &&
+          time >= next_debug_time) {
+        printImpedanceDebug(impedance_time,
+                             (external_force - contact_force_bias).norm(),
+                             1000.0 * e_p.norm(),
+                             (180.0 / M_PI) * e_R.norm());
+        next_debug_time = time + params.debug_period;
       }
 
       // Defining the stiffness and damping matrices to be used in the impedance control law,
@@ -1157,15 +1096,6 @@ int main() {
       // by mapping the task-space wrench through the Jacobian transpose.
 
       Vec7 tau_task = J.transpose() * wrench;
-      if (params.orientation_test_only && time >= next_orientation_debug_time) {
-        printf("\norientation_debug:\n");
-        printf("time_s = %.3f\n", time);
-        printVec3Deg("e_R_base", e_R);
-        printVec3Deg("e_R_surface", e_R_surface);
-        printVec3("m_cmd_Nm", m);
-        printf("tau_task_norm_Nm = %.6f\n", tau_task.norm());
-        next_orientation_debug_time += 0.5;
-      }
       // During contact search, keep the nullspace torque off.
       // The search phase should only move the TCP downward to find the table.
       // After contact is found, the normal surface impedance starts and the
