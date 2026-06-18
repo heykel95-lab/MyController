@@ -9,6 +9,7 @@ struct Parameters {
   int log_every_n_cycles = 5;
   int max_log_rows = 120000;
   double debug_period = 0.20;
+  bool print_impedance_debug = true;
   bool open_gripper_before_run = true;
   bool require_gripper_open = true;
   double gripper_open_width = 0.08;

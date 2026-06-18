@@ -113,6 +113,7 @@ inline Parameters readParameters(const std::string& filename) {
   p.max_log_rows =
       std::max(0, static_cast<int>(getDouble("max_log_rows", p.max_log_rows)));
   p.debug_period = getDouble("debug_period", p.debug_period);
+  p.print_impedance_debug = getBool("print_impedance_debug", p.print_impedance_debug);
   p.open_gripper_before_run = getBool("open_gripper_before_run", p.open_gripper_before_run);
   p.require_gripper_open = getBool("require_gripper_open", p.require_gripper_open);
   p.gripper_open_width = getDouble("gripper_open_width", p.gripper_open_width);

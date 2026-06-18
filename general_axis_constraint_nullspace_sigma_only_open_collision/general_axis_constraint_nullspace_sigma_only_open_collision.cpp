@@ -582,12 +582,20 @@ int main() {
               (180.0 / M_PI) * orientationError(R_EE, R_contact_start).norm();
           const double edge_from_contact_mm =
               1000.0 * (tool_contact_point - first_contact_point).norm();
+          const Vec3 pole_nearest_edge_from_edge =
+              instant_pole_valid
+                  ? Vec3(nearestPointOnAxis(tool_contact_point, instant_pole_base, omega) -
+                         tool_contact_point)
+                  : Vec3::Zero();
           printAlignDebug(post_align_time,
                            actual_tip_deg,
                            post_force_delta_norm,
                            post_moment_delta_norm,
                            params.post_contact_moment_threshold,
-                           edge_from_contact_mm);
+                           edge_from_contact_mm,
+                           instant_pole_valid,
+                           1000.0 * pole_nearest_edge_from_edge,
+                           1000.0 * instant_edge_axis_distance);
           next_debug_time = time + params.debug_period;
         }
         const bool moment_contact_reached =
@@ -631,9 +639,8 @@ int main() {
           // happened to look "cleanest".
           const FiniteScrewAxis finite_axis = computeFiniteScrewAxis(
               first_contact_point, R_contact_start, tool_contact_point, R_EE);
-          printf("=== Finite screw axis (start to end of alignment) ===\n");
           if (finite_axis.valid) {
-            printf("angle=%.1f deg | axis_from_edge=[%+.1f, %+.1f, %+.1f] mm | dir=[%+.3f, %+.3f, %+.3f] | pitch=%+.1f mm/rad\n",
+            printf("finite_axis: angle=%.1f deg | axis_from_edge=[%+.1f, %+.1f, %+.1f] mm | dir=[%+.3f, %+.3f, %+.3f] | pitch=%+.1f mm/rad\n",
                    (180.0 / M_PI) * finite_axis.angle,
                    1000.0 * finite_axis.axis_point_from_start(0),
                    1000.0 * finite_axis.axis_point_from_start(1),
@@ -643,9 +650,11 @@ int main() {
                    finite_axis.axis_dir(2),
                    1000.0 * finite_axis.pitch);
           } else {
-            printf("angle=%.1f deg: too small for a well-defined axis location\n",
+            printf("finite_axis: angle=%.1f deg, too small for a well-defined axis\n",
                    (180.0 / M_PI) * finite_axis.angle);
           }
+
+          printf("\n=== Best axis compare ===\n");
           if (last_valid_post_align_axis_valid) {
             const Vec3 desired_axis_dir =
                 normalizedOrFallback(params.desired_axis_dir, Vec3(1.0, 0.0, 0.0));
@@ -668,76 +677,59 @@ int main() {
                 desired_axis_edge_distance;
             const double pitch_error =
                 last_valid_post_align_screw_pitch - params.desired_axis_pitch;
-            printf("=== Best axis compare ===\n");
-            printf("Previous desired/best:\n");
-            printf("axis_from_edge = [%+.1f, %+.1f, %+.1f] mm\n",
+            printf("target:   axis_from_edge=[%+.1f, %+.1f, %+.1f] mm | dir=[%+.3f, %+.3f, %+.3f] | pitch=%+.1f mm/rad\n",
                    1000.0 * params.desired_axis_from_edge(0),
                    1000.0 * params.desired_axis_from_edge(1),
-                   1000.0 * params.desired_axis_from_edge(2));
-            printf("dir = [%+.3f, %+.3f, %+.3f]\n",
+                   1000.0 * params.desired_axis_from_edge(2),
                    desired_axis_dir(0),
                    desired_axis_dir(1),
-                   desired_axis_dir(2));
-            printf("pitch = %+.1f mm/rad\n",
+                   desired_axis_dir(2),
                    1000.0 * params.desired_axis_pitch);
-            printf("New measured best:\n");
-            printf("source = %s | t = %.3f s | w = %.3f rad/s | edge = %.1f mm\n",
-                   last_valid_post_align_axis_stable ? "stable_window" : "transient_fallback",
-                   last_valid_post_align_axis_time,
-                   last_valid_post_align_omega_norm,
-                   1000.0 * last_valid_post_align_axis_edge_distance);
-            printf("axis_from_edge = [%+.1f, %+.1f, %+.1f] mm\n",
+            printf("measured: axis_from_edge=[%+.1f, %+.1f, %+.1f] mm | dir=[%+.3f, %+.3f, %+.3f] | pitch=%+.1f mm/rad  (%s, t=%.2fs, w=%.2f rad/s)\n",
                    1000.0 * last_valid_post_align_axis_point_from_edge(0),
                    1000.0 * last_valid_post_align_axis_point_from_edge(1),
-                   1000.0 * last_valid_post_align_axis_point_from_edge(2));
-            printf("dir = [%+.3f, %+.3f, %+.3f]\n",
+                   1000.0 * last_valid_post_align_axis_point_from_edge(2),
                    last_valid_post_align_axis_dir(0),
                    last_valid_post_align_axis_dir(1),
-                   last_valid_post_align_axis_dir(2));
-            printf("pitch = %+.1f mm/rad\n",
-                   1000.0 * last_valid_post_align_screw_pitch);
-            printf("Difference:\n");
-            printf("point_norm = %.1f mm\n", 1000.0 * axis_point_error.norm());
-            printf("dir_error = %.1f deg\n", axis_dir_error_deg);
-            printf("edge_error = %+.1f mm\n", 1000.0 * axis_edge_error);
-            printf("pitch_error = %+.1f mm/rad\n", 1000.0 * pitch_error);
-            printf("Use current best as next desired:\n");
-            printf("desired_axis_from_edge_x = %.4f\n",
-                   last_valid_post_align_axis_point_from_edge(0));
-            printf("desired_axis_from_edge_y = %.4f\n",
-                   last_valid_post_align_axis_point_from_edge(1));
-            printf("desired_axis_from_edge_z = %.4f\n",
-                   last_valid_post_align_axis_point_from_edge(2));
-            printf("desired_axis_dir_x = %.3f\n",
-                   last_valid_post_align_axis_dir(0));
-            printf("desired_axis_dir_y = %.3f\n",
-                   last_valid_post_align_axis_dir(1));
-            printf("desired_axis_dir_z = %.3f\n",
-                   last_valid_post_align_axis_dir(2));
-            printf("desired_axis_pitch = %.4f\n",
-                   last_valid_post_align_screw_pitch);
+                   last_valid_post_align_axis_dir(2),
+                   1000.0 * last_valid_post_align_screw_pitch,
+                   last_valid_post_align_axis_stable ? "stable" : "transient_fallback",
+                   last_valid_post_align_axis_time,
+                   last_valid_post_align_omega_norm);
+            printf("diff:     point=%.1f mm | dir=%.1f deg | edge=%+.1f mm | pitch=%+.1f mm/rad\n",
+                   1000.0 * axis_point_error.norm(),
+                   axis_dir_error_deg,
+                   1000.0 * axis_edge_error,
+                   1000.0 * pitch_error);
+
+            // Auto-update desired_axis_* in parameters.txt to this run's
+            // measured axis, so the next run is always compared against the
+            // one just before it.
+            char edge_x[32], edge_y[32], edge_z[32];
+            char dir_x[32], dir_y[32], dir_z[32];
+            char pitch_buf[32];
+            snprintf(edge_x, sizeof(edge_x), "%.4f", last_valid_post_align_axis_point_from_edge(0));
+            snprintf(edge_y, sizeof(edge_y), "%.4f", last_valid_post_align_axis_point_from_edge(1));
+            snprintf(edge_z, sizeof(edge_z), "%.4f", last_valid_post_align_axis_point_from_edge(2));
+            snprintf(dir_x, sizeof(dir_x), "%.3f", last_valid_post_align_axis_dir(0));
+            snprintf(dir_y, sizeof(dir_y), "%.3f", last_valid_post_align_axis_dir(1));
+            snprintf(dir_z, sizeof(dir_z), "%.3f", last_valid_post_align_axis_dir(2));
+            snprintf(pitch_buf, sizeof(pitch_buf), "%.4f", last_valid_post_align_screw_pitch);
+            updateParameterValues(
+                "parameters.txt",
+                {{"desired_axis_from_edge_x", edge_x},
+                 {"desired_axis_from_edge_y", edge_y},
+                 {"desired_axis_from_edge_z", edge_z},
+                 {"desired_axis_dir_x", dir_x},
+                 {"desired_axis_dir_y", dir_y},
+                 {"desired_axis_dir_z", dir_z},
+                 {"desired_axis_pitch", pitch_buf}});
+            printf("(target auto-updated to this run's measured axis for next time)\n");
           } else {
-            printf("axis=slow | edge_norm=%.1f mm\n", edge_from_contact_mm.norm());
+            printf("no stable rotation measured | edge_norm=%.1f mm\n", edge_from_contact_mm.norm());
           }
+
           if (params.suggest_gains_from_desired_axis) {
-            const bool use_best_axis_for_suggestion =
-                last_valid_post_align_axis_valid;
-            const Vec3 suggestion_axis_dir =
-                use_best_axis_for_suggestion
-                    ? normalizedOrFallback(
-                          last_valid_post_align_axis_dir,
-                          Vec3(1.0, 0.0, 0.0))
-                    : normalizedOrFallback(
-                          params.desired_axis_dir,
-                          Vec3(1.0, 0.0, 0.0));
-            const Vec3 suggestion_axis_from_edge =
-                use_best_axis_for_suggestion
-                    ? last_valid_post_align_axis_point_from_edge
-                    : params.desired_axis_from_edge;
-            const double suggestion_axis_pitch =
-                use_best_axis_for_suggestion
-                    ? last_valid_post_align_screw_pitch
-                    : params.desired_axis_pitch;
             // Least-squares fit of wrench = K*error + D*velocity over every
             // cycle of this post_contact_align run (see fit_pos/fit_rot
             // accumulation above), instead of reading K and D off one
@@ -763,33 +755,6 @@ int main() {
             const Vec3 suggested_DR(
                 clampGain(fit_rot_D(0)), clampGain(fit_rot_D(1)), clampGain(fit_rot_D(2)));
             printf("=== Gain compare ===\n");
-            printf("suggestion_axis_source: %s\n",
-                   use_best_axis_for_suggestion
-                       ? (last_valid_post_align_axis_stable
-                              ? "current_best_axis_stable_window"
-                              : "current_best_axis_transient_fallback")
-                       : "desired_axis_fallback");
-            printf("suggestion_axis_from_edge = [%+.1f, %+.1f, %+.1f] mm\n",
-                   1000.0 * suggestion_axis_from_edge(0),
-                   1000.0 * suggestion_axis_from_edge(1),
-                   1000.0 * suggestion_axis_from_edge(2));
-            printf("suggestion_axis_dir = [%+.3f, %+.3f, %+.3f]\n",
-                   suggestion_axis_dir(0),
-                   suggestion_axis_dir(1),
-                   suggestion_axis_dir(2));
-            printf("suggestion_axis_pitch = %+.1f mm/rad\n",
-                   1000.0 * suggestion_axis_pitch);
-            printf("fit_samples: n=%ld over %.1f s\n",
-                   fit_pos.sample_count,
-                   post_align_time);
-            printf("fit_valid (r^2 >= %.2f): Kp/Dp=[%s, %s, %s] | KR/DR=[%s, %s, %s]\n",
-                   min_r_squared,
-                   fit_pos_valid[0] ? "yes" : "no",
-                   fit_pos_valid[1] ? "yes" : "no",
-                   fit_pos_valid[2] ? "yes" : "no",
-                   fit_rot_valid[0] ? "yes" : "no",
-                   fit_rot_valid[1] ? "yes" : "no",
-                   fit_rot_valid[2] ? "yes" : "no");
             printf("Current post-contact gains:\n");
             printf("Kp = [%.0f, %.0f, %.0f]\n",
                    params.post_contact_Kp_diag(0),
@@ -813,7 +778,7 @@ int main() {
             // there is dominated by contact mechanics, not the spring law,
             // so no numeric K/D suggestion is shown for it.
             const double passive_axis_gain_threshold = 1.0;
-            printf("Suggested (least-squares fit over the whole post_contact_align window):\n");
+            printf("Suggested (least-squares fit over the whole post_contact_align window) (n/a = free/passive axis):\n");
             printf("Kp = %s\n",
                    formatSuggestedGains(suggested_Kp, params.post_contact_Kp_diag,
                                          passive_axis_gain_threshold, "%.0f", fit_pos_valid).c_str());
@@ -828,8 +793,6 @@ int main() {
                                          passive_axis_gain_threshold, "%.4g", fit_rot_valid).c_str());
             printf("gain_reference: %s\n",
                    first_touch_candidate_saved ? "first_touch_candidate" : "phase_switch_bias");
-            printf("note: Kp/Dp/KR/DR are fit jointly (not Kp first then a residual) from every cycle's real commanded error and velocity across the whole phase, so they are not forced toward zero damping the way a single-sample fit is. Axes with configured K/KR below %.0f are passive and shown as n/a; axes with error and velocity too collinear to separate K from D (e.g. one undriven decay) are also n/a.\n",
-                   passive_axis_gain_threshold);
           }
           printf("phase: %s\n", phaseName(phase));
         }
@@ -1020,6 +983,7 @@ int main() {
       }
 
       if (phase == ControlPhase::kSurfaceImpedance &&
+          params.print_impedance_debug &&
           params.debug_period > 0.0 &&
           time >= next_debug_time) {
         printImpedanceDebug(impedance_time,

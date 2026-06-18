@@ -1,17 +1,12 @@
 # Parameters for general_axis_constraint_enter_stop_clean.cpp
 
+# ====================================================================
+# General / run settings
+# ====================================================================
 robot_ip = 172.16.0.2
 
-# Open the Franka hand after q_init and before contact search.
-# This commands the fully open width as late as possible before contact.
-open_gripper_before_run = 1
-require_gripper_open = 1
-gripper_open_width = 0.080
-gripper_open_speed = 0.050
-
-# Time mode:
-#   experiment_duration = 0.0  -> run indefinitely until e + Enter
-#   experiment_duration > 0.0  -> automatic stop after this time [s]
+# experiment_duration = 0.0 -> run indefinitely until e + Enter
+# experiment_duration > 0.0 -> automatic stop after this time [s]
 experiment_duration = 0.0
 
 csv_file_name = general_axis_constraint_nullspace_sigma_only_open_collision_log.csv
@@ -21,286 +16,137 @@ max_log_rows = 120000
 # Terminal debug print period, shared by all phases [s].
 debug_period = 0.20
 
-# 1 = static holding/compliance test
-# 0 = smooth relative trajectory test
+# 1 = print the per-cycle "impedance:" debug line during kSurfaceImpedance.
+print_impedance_debug = 0
+
+# 1 = static holding/compliance test, 0 = smooth relative trajectory test.
 hold_mode = 1
 
-# ------------------------------------------------------------------
-# Surface constraint mode
-# ------------------------------------------------------------------
-# constraint_enabled = 1:
-#
-# The constrained surface is a plane:
-#
-#   n^T * (p - p_surface) = 0
-#
-# surface_normal defines n in the robot base frame.
-# use_start_as_surface_point = 1 uses the start TCP position as p_surface.
-# This is safest because the surface is never far from the initial robot pose.
-#
-# The impedance gains are chosen in the surface frame:
-#
-#   normal   = surface normal direction
-#   tangent1 = first tangent direction
-#   tangent2 = second tangent direction
-#
-# Then the code transforms them to the robot base frame:
-#
-#   K_base = R_surface * K_surface * R_surface^T
-#
-# The same mode covers axis-aligned and inclined planes:
-#   Y-Z plane: surface_normal = [1, 0, 0]
-#   X-Z plane: surface_normal = [0, 1, 0]
-#   X-Y plane: surface_normal = [0, 0, 1]
-#
-# Inclined surfaces use the same mode with an inclined normal.
-#
-# Current example, horizontal table:
-#   surface_normal = [0, 0, 1]
-#
-# Old Y-Z plane example:
-#   surface_normal = [1, 0, 0]
+# Open the Franka hand after q_init and before contact search, as late as
+# possible before contact.
+open_gripper_before_run = 1
+require_gripper_open = 1
+gripper_open_width = 0.080
+gripper_open_speed = 0.050
+
+# ====================================================================
+# Safety: Franka collision/reflex thresholds
+# ====================================================================
+# These are the ones actually applied via robot.setCollisionBehavior().
+# Torque thresholds are joint-side [Nm], force thresholds are Cartesian
+# [N/Nm], each set equal across all 7/6 axes. Finite, not a safety bypass --
+# increase only under professor/lab supervision.
+use_custom_collision_behavior = 1
+collision_torque_acc = 120.0
+collision_torque_nom = 120.0
+collision_force_acc = 240.0
+collision_force_nom = 240.0
+
+# Legacy/unused: kept for file compatibility only. NOT wired into
+# robot.setCollisionBehavior() -- changing these has no effect.
+collision_joint_torque_threshold = 45.0
+collision_cartesian_force_threshold = 45.0
+collision_cartesian_moment_threshold = 30.0
+
+# ====================================================================
+# Surface definition (shared by every phase)
+# ====================================================================
+# The constrained surface is a plane: n^T * (p - p_surface) = 0.
+# use_start_as_surface_point = 1 uses the start TCP position as p_surface
+# (safest, since the surface is never far from the initial robot pose).
 constraint_enabled = 1
 use_start_as_surface_point = 1
-
 surface_point_x = 0.0
 surface_point_y = 0.0
 surface_point_z = 0.0
 
-# Nominal virtual surface tilt angle [deg].
-# The normal is computed as:
-#   surface_normal = [0, -sin(angle), cos(angle)]
-# angle = 0 deg gives a horizontal table normal [0, 0, 1].
+# Surface normal n = [0, -sin(angle), cos(angle)]. angle = 0 -> horizontal
+# table normal [0, 0, 1].
 use_surface_tilt_angle = 1
 surface_tilt_angle_deg = 15.0
 
-# Manual normal is only used when use_surface_tilt_angle = 0.
+# Manual normal, only used when use_surface_tilt_angle = 0.
 surface_normal_x = 0.0
 surface_normal_y = -0.342
 surface_normal_z = 0.940
 
-#surface_normal_x = 0.0
-#surface_normal_y = 0.0
-#surface_normal_z = 1.0
-
-# Only tangent1 is entered by the user. The code removes any normal component:
-#   tangent1 = normalize(tangent1 - normal * dot(normal, tangent1))
-# and computes:
-#   tangent2 = normalize(normal x tangent1)
+# Only tangent1 is entered; the code orthogonalizes it against the normal
+# and computes tangent2 = normal x tangent1.
 surface_tangent1_x = 1.0
 surface_tangent1_y = 0.0
 surface_tangent1_z = 0.0
 
-# Physical tool axis in the EE frame. This is different from the surface frame.
-# The alignment phase enforces:
-#   R_desired * tool_axis_ee = tool_axis_target_sign * surface_normal
-# Usually tool_axis_target_sign = -1 means the tool points into the surface.
+# Physical tool axis in the EE frame (different from the surface frame).
+# Alignment enforces: R_desired * tool_axis_ee = tool_axis_target_sign * surface_normal.
+# tool_axis_target_sign = -1 means the tool points into the surface.
 tool_axis_ee_x = 0.0
 tool_axis_ee_y = 0.0
 tool_axis_ee_z = 1.0
 tool_axis_target_sign = -1.0
 
-# Contact point used during post_contact_align [m], expressed in the EE/TCP frame.
-# The controller keeps this edge point pressed while rotating:
-#   p_edge = p_EE + R_EE * tool_contact_point_ee
-# With auto_select_tool_contact_edge = 1, the code chooses +edge or -edge
-# at first contact, whichever is lower along contact_search_direction.
+# Contact point pressed/rotated about during post_contact_align [m], in the
+# EE/TCP frame: p_edge = p_EE + R_EE * tool_contact_point_ee.
+# auto_select_tool_contact_edge = 1 picks +edge or -edge at first contact,
+# whichever is lower along contact_search_direction.
 use_tool_contact_point_control = 1
 auto_select_tool_contact_edge = 1
 tool_contact_point_ee_x = 0.0
 tool_contact_point_ee_y = 0.040
 tool_contact_point_ee_z = 0.0
 
-# 1 = use a desired tool orientation parallel to the surface.
-# For the horizontal table, this makes tool z point downward along -base z.
-align_orientation_to_surface_after_contact = 1
-
-# 1 = test only the rotation part:
-#     hold the TCP position, rotate toward R_d_surface, and do not start contact search.
-# Set this back to 0 when the orientation control is verified.
-orientation_test_only = 0
-
-# Extra test rotation around surface tangent1 [deg], applied to the start orientation R_d.
-# For the horizontal table this is a pure test rotation around base x from the start pose.
-# If this is 0, orientation_test_only targets the horizontal surface orientation R_d_surface.
-# This is only used when orientation_test_only = 1.
-orientation_test_extra_tilt_deg = 0.0
-
-# ------------------------------------------------------------------
-# Phase sequence for tilted-tool alignment
-# ------------------------------------------------------------------
+# ====================================================================
+# Phase sequence overview
+# ====================================================================
 # use_phase_sequence = 1 runs the controller in this order:
-#   1. orient_to_surface:
-#      rotate the tool at the start position until R_EE is parallel to
-#      the virtual surface orientation R_d_surface.
-#   2. search_first_contact:
-#      translate in contact_search_direction while keeping R_EE near R_d_surface.
-#   3. post_contact_align:
-#      after first contact, keep pressing the contacted edge into the
-#      surface (stiff downward push) while holding a very soft rotational
-#      spring, so a real contact moment can passively tip the tool flat
-#      instead of the controller scripting the rotation.
-#   4. surface_impedance:
-#      normal constrained impedance experiment.
+#   1. orient_to_surface     -- rotate to match the virtual surface orientation.
+#   2. search_first_contact  -- translate along contact_search_direction until contact.
+#   3. post_contact_align    -- press the contacted edge into the surface
+#                                while holding a soft rotational spring, so
+#                                real contact moment passively tips the tool flat.
+#   4. surface_impedance     -- normal-constrained impedance hold/test.
 use_phase_sequence = 1
 
-# Minimum time spent in orient_to_surface before switching [s].
+# ====================================================================
+# Phase 1: orient_to_surface
+# ====================================================================
+# Minimum time before switching to search [s].
 orient_phase_min_time = 0.5
 
-# Orientation error threshold for switching from orient_to_surface to search [rad].
+# Orientation error threshold for switching to search [rad].
 orient_phase_error_threshold = 0.07
 
-# Minimum time before moment comparison can end post_contact_align [s].
-post_contact_align_min_time = 2.0
+# 1 = test only the rotation part (hold TCP, rotate toward R_d_surface, skip
+# contact search). Set back to 0 once orientation control is verified.
+orientation_test_only = 0
 
-# Maximum time spent in post_contact_align after first contact [s].
-# The no-sideways test settled by about 2-3 s; 8 s keeps a larger safety margin
-# without holding the high preload for the old 15 s window.
-post_contact_align_duration = 8.0
+# Extra test rotation around surface tangent1 [deg], applied to the start
+# orientation. Only used when orientation_test_only = 1.
+orientation_test_extra_tilt_deg = 0.0
 
-# Ignore the first transient screw-axis samples when choosing the measured
-# "best" axis for comparison and gain suggestion. Among stable samples, the
-# code picks the axis with the smallest distance to the active contact edge.
-# If no sample passes this stable-window gate, the code still keeps the best
-# measured transient fallback and labels it as transient_fallback.
-post_contact_best_axis_min_time = 0.60
-post_contact_best_axis_min_omega = 0.12
+# Force safety trigger during this phase (moment comparison is reserved for
+# post_contact_align after first contact).
+detect_contact_during_alignment = 1
+alignment_contact_force_threshold = 12.0
 
-# Moment change that means the tool has settled/made firm contact, for
-# example the second tool edge touching down after passively tipping flat
-# [Nm]. Early-exit threshold for post_contact_align; only checked once
-# post_contact_align_min_time has elapsed.
-# Raised because with the much higher preload force now in use, the steady
-# preload alone was already producing ~30 Nm at only 9.8 deg of actual tip --
-# the old 25 Nm threshold was firing before the tool finished flattening.
-post_contact_moment_threshold = 60.0
-
-# Small position offset into the real surface during post_contact_align [m].
-# This acts like a spring preload, pressing the selected edge down:
-#   preload force approx post_contact_Kp_z * post_contact_normal_push
-# Starts higher so a real downward force is felt immediately at phase entry,
-# not only after several seconds of ramp.
-post_contact_normal_push = 0.018
-
-# During post_contact_align, keep pushing slightly deeper into the surface
-# over time. This grows the preload/contact moment at the pressed edge,
-# which is what should passively tip the tool flat. Total push is clamped by
-# post_contact_max_push.
-post_contact_push_speed = 0.010
-post_contact_max_push = 0.031
-
-# Translational spring used only during post_contact_align, in the base
-# frame [x0, y0, z0]. z0 (downward, into the table) is intentionally stiff
-# so the preload above generates a real contact moment at the pressed edge:
-# 5500 N/m * 0.018 m = 99 N immediately, ramping to 5500 N/m * 0.031 m =
-# 170.5 N peak. Real Cartesian safety limit is collision_force_acc/nom
-# (200 N, see below) -- collision_cartesian_force_threshold (45 N) is NOT
-# actually enforced by this controller. 170.5 N peak leaves ~29.5 N margin.
-# Medium x0/y0 stiffness for the sideways-compliance pole test. The direct
-# one-sample suggested-gain test caused a reflex stop at post_align t=0.1 s
-# because it combined high stiffness with almost zero damping, so these gains
-# are kept as the safer validated post-contact baseline.
-post_contact_Kp_x = 40.0
-post_contact_Kp_y = 40.0
-post_contact_Kp_z = 5500.0
-post_contact_Dp_x = 10.0
-post_contact_Dp_y = 10.0
-post_contact_Dp_z = 175.0
-
-# Rotational spring/damping used only during post_contact_align, surface
-# frame [normal, tangent1, tangent2]. The orientation target is the pose
-# held at first contact (no scripted rotation). normal (yaw about the push
-# axis) stays constrained so the tool can't spin freely; tangent1/tangent2
-# (the tipping directions) stay very soft so the real contact moment from the
-# edge preload can passively rotate the tool flat.
-post_contact_KR_normal = 8.0
-post_contact_KR_tangent1 = 0.0
-post_contact_KR_tangent2 = 0.0
-post_contact_DR_normal = 4.0
-post_contact_DR_tangent1 = 0.01
-post_contact_DR_tangent2 = 0.01
-
-# After post-contact alignment, use the real contact/search surface for
-# surface impedance. With manual downward search this means a horizontal table
-# plane, so x/y can move while z stays constrained to the table.
-use_search_direction_surface_after_alignment = 1
-
-# Virtual center of rotation in the post-contact alignment phase:
-#   p_c = p_contact + vcr_offset * surface_normal
-# vcr_offset = 0.0 -> virtual center on the detected surface point.
-# vcr_offset > 0.0 -> above the surface along surface_normal.
-# vcr_offset < 0.0 -> below the surface.
-use_virtual_center_after_contact = 0
-vcr_offset = 0.0
-
-# ------------------------------------------------------------------
-# Suggested gains from the measured best instantaneous axis
-# ------------------------------------------------------------------
-# This is diagnostic only: it prints suggested post-contact stiffness/damping
-# values at the end of post_contact_align, but it does not apply them.
-#
-# The gain suggestion uses the current run's measured best axis. If no valid
-# best axis was measured, it falls back to the desired axis below.
-#
-# Desired axis is expressed in the robot base frame, relative to the active
-# tool edge. This is mainly the previous run's best axis, used as the target
-# for comparison and as the next-run desired axis:
-#   axis_point = p_edge + desired_axis_from_edge
-#   axis_line(s) = axis_point + s * desired_axis_dir
-#
-# The default below is the previous measured best axis.
-suggest_gains_from_desired_axis = 1
-desired_axis_from_edge_x = 0.0200
-desired_axis_from_edge_y = 0.0247
-desired_axis_from_edge_z = 0.0015
-desired_axis_dir_x = -0.639
-desired_axis_dir_y = -0.767
-desired_axis_dir_z = -0.056
-desired_axis_pitch = -0.0192
-
-# Legacy reference-motion settings. They are kept for file compatibility, but
-# the current suggestion computes K/KR from actual error since first touch and
-# computes D/DR from the residual wrench after subtracting stiffness.
-suggested_gain_omega_ref = 0.20
-suggested_gain_angle_ref = 0.10
-suggested_gain_min = 0.01
-suggested_gain_max = 8000.0
-
-# ------------------------------------------------------------------
-# Automatic contact search for the virtual surface point
-# ------------------------------------------------------------------
-# use_contact_search = 1:
-#   Before the surface impedance starts, the TCP moves slowly in
-#   contact_search_direction until contact is detected.
-#
-# Contact search is translational and uses estimated external force only:
-#
-#   ||F_ext - F_bias|| > contact_force_threshold
-#
-# This is not force control. After the trigger, the current TCP position
-# becomes the virtual surface point:
-#
-#   surface_point_runtime = p_contact
-#
-# Enabled for finding the horizontal table contact point.
+# ====================================================================
+# Phase 2: search_first_contact
+# ====================================================================
+# TCP moves slowly in contact_search_direction until
+# ||F_ext - F_bias|| > contact_force_threshold. Not force control -- once
+# triggered, the current TCP position becomes the virtual surface point.
 use_contact_search = 1
 
-# For a general surface, search along -surface_normal.
-# For a horizontal surface this is the same as base [0, 0, -1].
+# 1 = search along -surface_normal. 0 = use the manual direction below.
 contact_search_use_surface_normal = 0
-
-# Manual direction is only used when contact_search_use_surface_normal = 0.
 contact_search_direction_x = 0.0
 contact_search_direction_y = 0.0
 contact_search_direction_z = -1.0
 
-# Slow search speed [m/s] and maximum travel distance [m].
-# 0.540 m = 54 cm downward search. Increased slightly because 52 cm stopped about 1 cm before the table.
+# Search speed [m/s] and maximum travel distance [m].
 contact_search_speed = 0.1
 contact_search_max_distance = 0.540
 
 # Minimum downward travel before first-touch contact detection [m].
-# The last runs showed real contact beginning around 0.251-0.252 m.
 contact_search_min_distance = 0.240
 
 # First-touch reference/gain calculation uses the same gate as the phase switch.
@@ -311,60 +157,150 @@ contact_search_use_directional_force = 1
 contact_search_confirm_time = 0.0
 contact_force_threshold = 12.0
 
-# Force safety trigger during the first orientation-alignment phase.
-# Moment comparison is reserved for post_contact_align after first contact.
-detect_contact_during_alignment = 1
-alignment_contact_force_threshold = 12.0
-
-# Soft Cartesian gains used only during contact search. Keep these much lower
-# than post_contact gains because the conservative phase-switch gate can keep
+# Soft Cartesian gains used only during contact search -- kept much lower
+# than post_contact gains since the conservative phase-switch gate can keep
 # searching after first physical touch.
 contact_search_Kp_x = 150.0
 contact_search_Kp_y = 150.0
 contact_search_Kp_z = 150.0
-
 contact_search_Dp_x = 25.0
 contact_search_Dp_y = 25.0
 contact_search_Dp_z = 25.0
 
-# Rotation:
-# These rotational constraint flags are interpreted in the surface frame:
-#   normal   = rotation around surface normal
-#   tangent1 = rotation around first tangent direction
-#   tangent2 = rotation around second tangent direction
-#
-# For the current horizontal surface:
-#   surface normal = base z
-#   tangent1       = base x
-#   tangent2       = base y
-#
-# Therefore:
-#   constrain_rotation_about_surface_normal   -> base z
-#   constrain_rotation_about_surface_tangent1 -> base x
-#   constrain_rotation_about_surface_tangent2 -> base y
-#
-#   1 -> keep rotational stiffness in this surface-frame component
-#   0 -> set e_R component to 0, no rotational spring in this component
-#
-# Damping still acts if DR_i > 0.
-# For a fully free rotational component, set its flag = 0 and damping = 0.
+# 1 = once contact is found, target a tool orientation parallel to the
+# surface (for the horizontal table, tool z points down along -base z).
+align_orientation_to_surface_after_contact = 1
+
+# ====================================================================
+# Phase 3: post_contact_align
+# ====================================================================
+# Minimum time before the moment-threshold early exit can fire [s].
+post_contact_align_min_time = 2.0
+
+# Maximum time spent in this phase after first contact [s].
+post_contact_align_duration = 7.0
+
+# Moment-change early-exit threshold [Nm] (e.g. the second tool edge
+# touching down after passively tipping flat). Only checked once
+# post_contact_align_min_time has elapsed.
+post_contact_moment_threshold = 90.0
+
+# Ignore the first transient screw-axis samples when picking the measured
+# "best" axis for comparison/gain suggestion; among stable samples, picks
+# the one closest to the active contact edge. If none pass the gate, the
+# best transient sample is kept and labeled transient_fallback.
+post_contact_best_axis_min_time = 0.60
+post_contact_best_axis_min_omega = 0.12
+
+# Small position offset into the real surface [m], acting like a spring
+# preload that presses the selected edge down:
+#   preload force approx post_contact_Kp_z * post_contact_normal_push
+# Ramps from post_contact_normal_push up to post_contact_max_push over time
+# (rate post_contact_push_speed), growing the preload/contact moment that
+# passively tips the tool flat. Check peak preload force
+# (post_contact_Kp_z * post_contact_max_push) against collision_force_acc/nom
+# above whenever Kp_z or max_push changes.
+post_contact_normal_push = 0.018
+post_contact_push_speed = 0.010
+post_contact_max_push = 0.031
+
+# Translational spring used only during this phase, base frame [x, y, z].
+# z (downward, into the table) is intentionally stiff so the preload above
+# generates a real contact moment at the pressed edge.
+post_contact_Kp_x = 40.0
+post_contact_Kp_y = 40.0
+post_contact_Kp_z = 6500.0
+post_contact_Dp_x = 10.0
+post_contact_Dp_y = 10.0
+post_contact_Dp_z = 175.0
+
+# Rotational spring/damping used only during this phase, surface frame
+# [normal, tangent1, tangent2]. Target is the pose held at first contact (no
+# scripted rotation). normal (yaw about the push axis) stays constrained;
+# tangent1/tangent2 (the tipping directions) stay very soft so real contact
+# moment can passively rotate the tool flat.
+post_contact_KR_normal = 20.0
+post_contact_KR_tangent1 = 0.0
+post_contact_KR_tangent2 = 0.0
+post_contact_DR_normal = 10.0
+post_contact_DR_tangent1 = 0.01
+post_contact_DR_tangent2 = 0.01
+
+# Virtual center of rotation during this phase: p_c = p_contact + vcr_offset
+# * surface_normal. 0 = on the detected surface point, >0 = above, <0 = below.
+use_virtual_center_after_contact = 0
+vcr_offset = 0.0
+
+# After this phase, use the real contact/search surface for surface
+# impedance (phase 4). With manual downward search this is a horizontal
+# table plane: x/y can move while z stays constrained to the table.
+use_search_direction_surface_after_alignment = 1
+
+# --------------------------------------------------------------
+# Best-axis / gain-suggestion diagnostics (reporting only, post_contact_align)
+# --------------------------------------------------------------
+# Diagnostic only: prints suggested post-contact stiffness/damping at the
+# end of post_contact_align, does not apply them. Uses this run's measured
+# best axis, falling back to desired_axis_* below if none was measured.
+suggest_gains_from_desired_axis = 1
+
+# Target axis for comparison/suggestion, base frame, relative to the active
+# tool edge: axis_point = p_edge + desired_axis_from_edge,
+# axis_line(s) = axis_point + s * desired_axis_dir. Auto-updated to each
+# run's measured best axis.
+desired_axis_from_edge_x = 0.0160
+desired_axis_from_edge_y = 0.0315
+desired_axis_from_edge_z = 0.0003
+desired_axis_dir_x = -0.506
+desired_axis_dir_y = -0.863
+desired_axis_dir_z = 0.012
+desired_axis_pitch = 0.0127
+
+# Legacy reference-motion settings, kept for file compatibility only. The
+# current suggestion computes K/KR from actual error since first touch and
+# D/DR from the residual wrench after subtracting stiffness.
+suggested_gain_omega_ref = 0.20
+suggested_gain_angle_ref = 0.10
+suggested_gain_min = 0.01
+suggested_gain_max = 8000.0
+
+# ====================================================================
+# Phase 4: surface_impedance
+# ====================================================================
+# Rotational constraint flags, surface frame (normal/tangent1/tangent2 ->
+# base z/x/y for the current horizontal surface). 1 = keep rotational
+# stiffness on that component, 0 = no spring (damping still acts if DR_i >
+# 0; for a fully free component set both the flag and damping to 0).
 constrain_rotation_about_surface_normal = 1
 constrain_rotation_about_surface_tangent1 = 1
 constrain_rotation_about_surface_tangent2 = 1
 
-# Not used when hold_mode = 1 and constraint_enabled = 1
+# Surface-frame gains: normal = normal-to-surface, tangent1/2 = in-plane.
+Kp_normal = 7000.0
+Kp_tangent1 = 100.0
+Kp_tangent2 = 100.0
+Dp_normal = 220.0
+Dp_tangent1 = 20.0
+Dp_tangent2 = 20.0
+KR_normal = 8.0
+KR_tangent1 = 80.0
+KR_tangent2 = 40.0
+DR_normal = 4.0
+DR_tangent1 = 15.0
+DR_tangent2 = 12.0
+
+# Smooth relative trajectory test, only used when hold_mode = 0.
 delta_p_x = 0.005
 delta_p_y = 0.000
 delta_p_z = 0.000
 trajectory_duration = 8.0
 
-# ------------------------------------------------------------------
+# ====================================================================
 # Initial joint configuration [rad]
-# ------------------------------------------------------------------
-# Choose:
-#   horizontal_tool -> current/default tool orientation
-#   tilted_tool     -> same as horizontal_tool, but q_init_5 is changed
-#   horizontal_table_search -> starts close above the detected horizontal table
+# ====================================================================
+# horizontal_tool          -> current/default tool orientation
+# tilted_tool               -> same, but q_init_5 is changed
+# horizontal_table_search   -> starts close above the detected horizontal table
 q_init_case = horizontal_table_search
 
 q_init_horizontal_1 = 0.0
@@ -383,8 +319,8 @@ q_init_tilted_5 = 0.333818
 q_init_tilted_6 = 2.446060
 q_init_tilted_7 = 0.457594
 
-# Good horizontal table-search start posture.
-# This keeps the tool close to the table while leaving q4 far enough from its lower limit.
+# Good horizontal table-search start posture: keeps the tool close to the
+# table while leaving q4 far enough from its lower limit.
 q_init_table_1 = -0.016251
 q_init_table_2 = 0.174096
 q_init_table_3 = -0.018640
@@ -402,77 +338,15 @@ q_init_table_7 = 0.745537
 # q_init_6 = pi/2
 # q_init_7 = pi/4
 
-# ------------------------------------------------------------------
-# Gains
-# ------------------------------------------------------------------
-# In surface mode:
-#   normal   = normal-to-surface stiffness/damping
-#   tangent1 = first tangent stiffness/damping
-#   tangent2 = second tangent stiffness/damping
-Kp_normal = 7000.0
-Kp_tangent1 = 100.0
-Kp_tangent2 = 100.0
-
-Dp_normal = 220.0
-Dp_tangent1 = 20.0
-Dp_tangent2 = 20.0
-
-KR_normal = 8.0
-KR_tangent1 = 80.0
-KR_tangent2 = 40.0
-
-DR_normal = 4.0
-DR_tangent1 = 15.0
-DR_tangent2 = 12.0
-
-# ------------------------------------------------------------------
-# Franka collision/contact threshold tuning
-# ------------------------------------------------------------------
-use_custom_collision_behavior = 1
-
-collision_joint_torque_threshold = 45.0
-collision_cartesian_force_threshold = 45.0
-collision_cartesian_moment_threshold = 30.0
-
-
-# ------------------------------------------------------------------
+# ====================================================================
 # Nullspace sigma-min optimization
-# ------------------------------------------------------------------
-# 1 = enable nullspace optimization
-# Uses the 1D nullspace direction n of the 6x7 Jacobian.
-# It tries to keep q close to the start configuration and compares
-# J(q + alpha*n) with J(q - alpha*n). The direction with larger
-# sigma_min(J) is preferred.
+# ====================================================================
+# Uses the 1D nullspace direction n of the 6x7 Jacobian: compares
+# J(q + alpha*n) with J(q - alpha*n) and prefers the direction with larger
+# sigma_min(J), while a restoring spring keeps q close to the start posture.
 use_nullspace_optimization = 1
-
-
-# Damping inside the nullspace.
 nullspace_damping = 2.0
-
-# Nullspace restoring spring back to the start joint posture [Nm/rad].
-# This prevents slow nullspace rotation/drift while keeping the TCP task fixed.
 nullspace_k_start = 2.0
-
-# Weight for the sigma_min improvement direction.
 nullspace_k_sigma = 0.1
-
-# Small nullspace step [rad] for comparing q +/- alpha*n. +-5 Degree
 nullspace_alpha = 0.01
-
-# Maximum norm of the added nullspace torque [Nm].
 nullspace_tau_max = 1.0
-
-# ------------------------------------------------------------------
-# More-open Franka collision/reflex thresholds
-# ------------------------------------------------------------------
-# Values are finite. They do NOT disable Franka internal safety.
-# Increase only under professor/lab supervision.
-# Torque thresholds are joint-side [Nm], 7 values internally all set equal.
-# Force thresholds are Cartesian [N/Nm style libfranka 6D thresholds], 6 values internally all set equal.
-# These are the ones that actually reach robot.setCollisionBehavior() --
-# collision_joint_torque_threshold/collision_cartesian_force_threshold/
-# collision_cartesian_moment_threshold above are NOT wired into that call.
-collision_torque_acc = 120.0
-collision_torque_nom = 120.0
-collision_force_acc = 200.0
-collision_force_nom = 200.0

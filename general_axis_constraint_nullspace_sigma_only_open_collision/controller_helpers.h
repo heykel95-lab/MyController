@@ -2,6 +2,60 @@
 
 #include "controller_types.h"
 
+inline std::string trimWhitespace(const std::string& input) {
+  const std::string whitespace = " \t\r\n";
+  const auto begin = input.find_first_not_of(whitespace);
+  if (begin == std::string::npos) {
+    return "";
+  }
+  const auto end = input.find_last_not_of(whitespace);
+  return input.substr(begin, end - begin + 1);
+}
+
+// Rewrites specific "key = value" lines of a parameters file in place,
+// preserving every other line (comments, formatting, unrelated keys)
+// exactly as-is. Used to auto-update desired_axis_* with the just-measured
+// best axis when consecutive runs share the same post-contact gains.
+inline void updateParameterValues(
+    const std::string& filename,
+    const std::vector<std::pair<std::string, std::string>>& updates) {
+  std::ifstream in(filename);
+  if (!in.is_open()) {
+    return;
+  }
+  std::vector<std::string> lines;
+  std::string line;
+  while (std::getline(in, line)) {
+    lines.push_back(line);
+  }
+  in.close();
+
+  for (auto& l : lines) {
+    const auto comment_pos = l.find('#');
+    const std::string code_part =
+        (comment_pos != std::string::npos) ? l.substr(0, comment_pos) : l;
+    const auto eq_pos = code_part.find('=');
+    if (eq_pos == std::string::npos) {
+      continue;
+    }
+    const std::string key = trimWhitespace(code_part.substr(0, eq_pos));
+    for (const auto& update : updates) {
+      if (key == update.first) {
+        const std::string comment_part =
+            (comment_pos != std::string::npos) ? l.substr(comment_pos) : "";
+        l = code_part.substr(0, eq_pos) + "= " + update.second +
+            (comment_part.empty() ? "" : ("  " + comment_part));
+        break;
+      }
+    }
+  }
+
+  std::ofstream out(filename, std::ios::trunc);
+  for (const auto& out_line : lines) {
+    out << out_line << "\n";
+  }
+}
+
 inline Array7 vec7ToArray(const Vec7& v) {
   Array7 array{};
   for (int i = 0; i < 7; ++i) {
@@ -87,6 +141,21 @@ inline double pointDistanceToAxis(
   }
 
   return (point - axis_point).cross(axis_direction / axis_norm).norm();
+}
+
+// The point on the line through axis_point (direction axis_direction)
+// closest to "point": project (point - axis_point) onto the unit axis
+// direction, then step that far along the axis from axis_point.
+inline Vec3 nearestPointOnAxis(
+    const Vec3& point,
+    const Vec3& axis_point,
+    const Vec3& axis_direction) {
+  const double axis_norm = axis_direction.norm();
+  if (axis_norm <= 1e-8) {
+    return axis_point;
+  }
+  const Vec3 axis_unit = axis_direction / axis_norm;
+  return axis_point + (point - axis_point).dot(axis_unit) * axis_unit;
 }
 
 // The single screw axis (Chasles' theorem) that exactly describes a finite

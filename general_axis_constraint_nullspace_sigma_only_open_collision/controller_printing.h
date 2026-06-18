@@ -170,9 +170,20 @@ inline void printAlignDebug(double phase_time,
                              double force_n,
                              double moment_nm,
                              double moment_limit_nm,
-                             double edge_mm) {
-  printf("align:      t=%5.1f s | tip=%5.1f deg | force=%5.1f N | moment=%5.1f Nm (limit %.1f) | edge=%5.1f mm\n",
-         phase_time, tip_deg, force_n, moment_nm, moment_limit_nm, edge_mm);
+                             double edge_mm,
+                             bool pole_valid,
+                             const Vec3& pole_nearest_edge_mm,
+                             double pole_dist_mm) {
+  char pole_text[64];
+  if (pole_valid) {
+    snprintf(pole_text, sizeof(pole_text), "pole=[%+.1f,%+.1f,%+.1f] D=%.1f mm",
+             pole_nearest_edge_mm(0), pole_nearest_edge_mm(1), pole_nearest_edge_mm(2),
+             pole_dist_mm);
+  } else {
+    snprintf(pole_text, sizeof(pole_text), "pole=slow");
+  }
+  printf("align:      t=%5.1f s | tip=%5.1f deg | F=%5.1f N | M=%5.1f Nm (limit %.1f) | edge=%5.1f mm | %s\n",
+         phase_time, tip_deg, force_n, moment_nm, moment_limit_nm, edge_mm, pole_text);
 }
 
 inline void printImpedanceDebug(double phase_time,
