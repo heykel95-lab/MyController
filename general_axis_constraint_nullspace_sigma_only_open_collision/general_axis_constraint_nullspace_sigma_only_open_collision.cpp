@@ -201,8 +201,6 @@ int main() {
     Mat3 R_after_contact_align = R_d_surface;
     Vec3 first_contact_tcp = p_start;
     Vec3 first_contact_point = p_start;
-    Vec3 first_touch_candidate_tcp = p_start;
-    Vec3 first_touch_candidate_point = p_start;
     Vec3 first_touch_candidate_force = external_force_start;
     Vec3 first_touch_candidate_moment = initial_external_wrench.tail<3>();
     Vec3 active_tool_contact_offset_ee = params.tool_contact_point_ee;
@@ -296,15 +294,12 @@ int main() {
     double last_valid_post_align_screw_pitch = 0.0;
     double last_valid_post_align_axis_time = 0.0;
     double last_valid_post_align_omega_norm = 0.0;
-    Vec3 last_valid_post_align_force_delta = Vec3::Zero();
-    Vec3 last_valid_post_align_moment_delta = Vec3::Zero();
     Vec3 last_valid_post_align_external_force = Vec3::Zero();
     Vec3 last_valid_post_align_external_moment = Vec3::Zero();
-    Vec3 last_valid_post_align_p_EE = Vec3::Zero();
-    Vec3 last_valid_post_align_tool_contact_point = Vec3::Zero();
     Mat3 last_valid_post_align_R_EE = Mat3::Identity();
     Vec3 last_valid_post_align_pdot = Vec3::Zero();
     Vec3 last_valid_post_align_omega = Vec3::Zero();
+    Vec3 last_valid_post_align_e_p = Vec3::Zero();
     bool last_valid_post_align_axis_valid = false;
     bool last_valid_post_align_axis_stable = false;
 
@@ -507,6 +502,18 @@ int main() {
         const double post_align_time = time - phase_start_time;
         const double post_moment_delta_norm = (external_moment - contact_moment_bias).norm();
         const double post_force_delta_norm = (external_force - contact_force_bias).norm();
+        // Real commanded position error for this cycle, computed the same
+        // way the desired-motion block further down will compute it. Used
+        // for the gain suggestion below instead of "how far the edge moved
+        // since first touch": post_contact_push ramps the commanded depth
+        // over time, and against a rigid table the edge barely moves even
+        // though the commanded depth (and the real spring force) keeps
+        // growing, so distance-moved badly understates the actual error.
+        const Vec3 edge_target_this_cycle =
+            first_contact_point +
+            postContactPush(params, post_align_time) * contact_search_direction;
+        const Vec3 e_p_post_align =
+            (edge_target_this_cycle - R_contact_start * tool_contact_offset_ee) - p_EE;
         Vec3 instant_pole_from_tcp = Vec3::Zero();
         const bool instant_pole_valid =
             computeInstantaneousPoleFromTcp(pdot, omega, &instant_pole_from_tcp);
@@ -547,15 +554,12 @@ int main() {
           last_valid_post_align_screw_pitch = instant_screw_pitch;
           last_valid_post_align_axis_time = post_align_time;
           last_valid_post_align_omega_norm = omega_norm;
-          last_valid_post_align_force_delta = external_force - contact_force_bias;
-          last_valid_post_align_moment_delta = external_moment - contact_moment_bias;
           last_valid_post_align_external_force = external_force;
           last_valid_post_align_external_moment = external_moment;
-          last_valid_post_align_p_EE = p_EE;
-          last_valid_post_align_tool_contact_point = tool_contact_point;
           last_valid_post_align_R_EE = R_EE;
           last_valid_post_align_pdot = pdot;
           last_valid_post_align_omega = omega;
+          last_valid_post_align_e_p = e_p_post_align;
           last_valid_post_align_axis_valid = true;
           last_valid_post_align_axis_stable = best_axis_candidate_stable;
         }
@@ -705,13 +709,11 @@ int main() {
                 first_touch_candidate_saved ? first_touch_candidate_force : contact_force_bias;
             const Vec3 gain_moment_reference =
                 first_touch_candidate_saved ? first_touch_candidate_moment : contact_moment_bias;
-            const Vec3 gain_point_reference =
-                first_touch_candidate_saved ? first_touch_candidate_point : first_contact_point;
             const Mat3 gain_rotation_reference = R_contact_start;
-            const Vec3 gain_sample_point =
+            const Vec3 gain_sample_e_p =
                 last_valid_post_align_axis_valid
-                    ? last_valid_post_align_tool_contact_point
-                    : tool_contact_point;
+                    ? last_valid_post_align_e_p
+                    : e_p_post_align;
             const Mat3 gain_sample_rotation =
                 last_valid_post_align_axis_valid
                     ? last_valid_post_align_R_EE
@@ -734,7 +736,6 @@ int main() {
                      ? last_valid_post_align_external_moment
                      : external_moment) -
                 gain_moment_reference;
-            const Vec3 actual_dp = gain_sample_point - gain_point_reference;
             const Vec3 actual_dphi =
                 orientationError(gain_rotation_reference, gain_sample_rotation);
             const Vec3 actual_dphi_surface = R_surface.transpose() * actual_dphi;
@@ -748,14 +749,14 @@ int main() {
             // suggested damping to the gain floor.
             const Vec3 force_damping_residual =
                 contact_force_delta -
-                params.post_contact_Kp_diag.cwiseProduct(actual_dp);
+                params.post_contact_Kp_diag.cwiseProduct(gain_sample_e_p);
             const Vec3 moment_damping_residual =
                 contact_moment_surface -
                 params.post_contact_KR_diag.cwiseProduct(actual_dphi_surface);
             const Vec3 suggested_Kp =
                 suggestedPositiveGains(
                     contact_force_delta,
-                    actual_dp,
+                    gain_sample_e_p,
                     params.suggested_gain_min,
                     params.suggested_gain_max);
             const Vec3 suggested_Dp =
@@ -793,10 +794,10 @@ int main() {
                    suggestion_axis_dir(2));
             printf("suggestion_axis_pitch = %+.1f mm/rad\n",
                    1000.0 * suggestion_axis_pitch);
-            printf("actual_error_used: dp=[%+.1f, %+.1f, %+.1f] mm | dphi_surface=[%+.3f, %+.3f, %+.3f] rad\n",
-                   1000.0 * actual_dp(0),
-                   1000.0 * actual_dp(1),
-                   1000.0 * actual_dp(2),
+            printf("actual_error_used: e_p=[%+.1f, %+.1f, %+.1f] mm | dphi_surface=[%+.3f, %+.3f, %+.3f] rad\n",
+                   1000.0 * gain_sample_e_p(0),
+                   1000.0 * gain_sample_e_p(1),
+                   1000.0 * gain_sample_e_p(2),
                    actual_dphi_surface(0),
                    actual_dphi_surface(1),
                    actual_dphi_surface(2));
@@ -860,7 +861,7 @@ int main() {
                    moment_damping_residual(2));
             printf("gain_reference: %s\n",
                    first_touch_candidate_saved ? "first_touch_candidate" : "phase_switch_bias");
-            printf("note: K/KR are fit directly from this sample's error; D/DR are fit from the wrench left over after subtracting your *configured* K/KR (not a refit), so they stay comparable to your real gains. Axes with configured K/KR below %.0f are passive and shown as n/a.\n",
+            printf("note: Kp/KR are fit from this sample's real commanded error (e_p includes the post_contact_push ramp, not just distance moved since first touch); Dp/DR are fit from the wrench left over after subtracting your *configured* Kp/KR from that same error (not a refit), so they stay comparable to your real gains. Axes with configured K/KR below %.0f are passive and shown as n/a.\n",
                    passive_axis_gain_threshold);
           }
           printf("phase: %s\n", phaseName(phase));
@@ -925,8 +926,6 @@ int main() {
           first_touch_candidate_time = time - phase_start_time;
           first_touch_candidate_distance = search_distance;
           first_touch_candidate_signal = search_force_signal;
-          first_touch_candidate_tcp = p_EE;
-          first_touch_candidate_point = tool_contact_point;
           first_touch_candidate_force = external_force;
           first_touch_candidate_moment = external_moment;
           printf("\nFirst-touch candidate saved: dist=%.1f mm | force=%.1f N | confirmed=%.3f s\n",
