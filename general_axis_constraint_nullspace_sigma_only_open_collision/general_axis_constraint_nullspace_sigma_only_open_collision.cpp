@@ -481,7 +481,7 @@ int main() {
         contact_force_bias = external_force_start;
         contact_moment_bias = external_moment;
         printf("\nContact during alignment: force=%.1f N\n", force_delta_norm);
-        printVec3Mm("contact_point", first_contact_point);
+        printContactEdgeDebug(active_tool_contact_offset_ee, first_contact_tcp, first_contact_point);
         printf("phase: %s\n", phaseName(phase));
       }
 
@@ -740,23 +740,18 @@ int main() {
             const Vec3 actual_dphi_surface = R_surface.transpose() * actual_dphi;
             const Vec3 actual_omega_surface = R_surface.transpose() * gain_sample_omega;
             const Vec3 contact_moment_surface = R_surface.transpose() * contact_moment_delta;
-            auto signedRawGains = [](const Vec3& wrench, const Vec3& motion) {
-              Vec3 gains = Vec3::Zero();
-              for (int i = 0; i < 3; ++i) {
-                if (std::abs(motion(i)) > 1e-6) {
-                  gains(i) = wrench(i) / motion(i);
-                }
-              }
-              return gains;
-            };
-            const Vec3 raw_signed_Kp =
-                signedRawGains(contact_force_delta, actual_dp);
-            const Vec3 raw_signed_KR =
-                signedRawGains(contact_moment_surface, actual_dphi_surface);
+            // Residual against the gains actually commanded (not a gain refit
+            // from this same sample), so the leftover wrench used for the
+            // damping suggestion is independent of the stiffness suggestion
+            // below. Fitting and then subtracting the same single-sample fit
+            // always leaves ~0 residual, which is why this used to force the
+            // suggested damping to the gain floor.
             const Vec3 force_damping_residual =
-                contact_force_delta - raw_signed_Kp.cwiseProduct(actual_dp);
+                contact_force_delta -
+                params.post_contact_Kp_diag.cwiseProduct(actual_dp);
             const Vec3 moment_damping_residual =
-                contact_moment_surface - raw_signed_KR.cwiseProduct(actual_dphi_surface);
+                contact_moment_surface -
+                params.post_contact_KR_diag.cwiseProduct(actual_dphi_surface);
             const Vec3 suggested_Kp =
                 suggestedPositiveGains(
                     contact_force_delta,
@@ -829,23 +824,25 @@ int main() {
                    params.post_contact_DR_diag(0),
                    params.post_contact_DR_diag(1),
                    params.post_contact_DR_diag(2));
+            // Below this commanded gain, an axis is treated as intentionally
+            // passive (e.g. post_contact_KR_tangent1/2 = 0 so the real
+            // contact moment can tip the tool freely): the measured wrench
+            // there is dominated by contact mechanics, not the spring law,
+            // so no numeric K/D suggestion is shown for it.
+            const double passive_axis_gain_threshold = 1.0;
             printf("Suggested:\n");
-            printf("Kp = [%.0f, %.0f, %.0f]\n",
-                   suggested_Kp(0),
-                   suggested_Kp(1),
-                   suggested_Kp(2));
-            printf("Dp = [%.0f, %.0f, %.0f]\n",
-                   suggested_Dp(0),
-                   suggested_Dp(1),
-                   suggested_Dp(2));
-            printf("KR = [%.4g, %.4g, %.4g]\n",
-                   suggested_KR(0),
-                   suggested_KR(1),
-                   suggested_KR(2));
-            printf("DR = [%.4g, %.4g, %.4g]\n",
-                   suggested_DR(0),
-                   suggested_DR(1),
-                   suggested_DR(2));
+            printf("Kp = %s\n",
+                   formatSuggestedGains(suggested_Kp, params.post_contact_Kp_diag,
+                                         passive_axis_gain_threshold, "%.0f").c_str());
+            printf("Dp = %s\n",
+                   formatSuggestedGains(suggested_Dp, params.post_contact_Kp_diag,
+                                         passive_axis_gain_threshold, "%.0f").c_str());
+            printf("KR = %s\n",
+                   formatSuggestedGains(suggested_KR, params.post_contact_KR_diag,
+                                         passive_axis_gain_threshold, "%.4g").c_str());
+            printf("DR = %s\n",
+                   formatSuggestedGains(suggested_DR, params.post_contact_KR_diag,
+                                         passive_axis_gain_threshold, "%.4g").c_str());
             printf("wrench_used_at_axis_t=%.3f s: F=[%+.1f, %+.1f, %+.1f] N | M_surface=[%+.1f, %+.1f, %+.1f] Nm\n",
                    last_valid_post_align_axis_valid ? last_valid_post_align_axis_time : post_align_time,
                    contact_force_delta(0),
@@ -863,7 +860,8 @@ int main() {
                    moment_damping_residual(2));
             printf("gain_reference: %s\n",
                    first_touch_candidate_saved ? "first_touch_candidate" : "phase_switch_bias");
-            printf("note: K/KR use real error from first touch; D/DR use residual wrench after stiffness subtraction, so one-sample damping can be near zero or unreliable.\n");
+            printf("note: K/KR are fit directly from this sample's error; D/DR are fit from the wrench left over after subtracting your *configured* K/KR (not a refit), so they stay comparable to your real gains. Axes with configured K/KR below %.0f are passive and shown as n/a.\n",
+                   passive_axis_gain_threshold);
           }
           printf("phase: %s\n", phaseName(phase));
         }
@@ -973,7 +971,7 @@ int main() {
                    1000.0 * first_touch_candidate_distance,
                    search_phase_elapsed - first_touch_candidate_time);
           }
-          printVec3Mm("contact_point", first_contact_point);
+          printContactEdgeDebug(active_tool_contact_offset_ee, first_contact_tcp, first_contact_point);
           printf("phase: %s\n", phaseName(phase));
         // If the maximum search distance is reached without detecting contact, stop the controller and log the final data.
         } else if (search_distance >= params.contact_search_max_distance) {

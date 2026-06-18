@@ -14,6 +14,19 @@ inline void printVec3Mm(const char* label, const Vec3& v) {
          1000.0 * v(2));
 }
 
+// At the moment contact is detected, shows exactly which tool edge was used
+// and what it cost in base-frame mm, so the auto-selected side (+/- offset_ee)
+// and the tilt-induced depth/lateral split (edge_offset_base) can be checked
+// directly against the physical setup instead of trusted blindly.
+inline void printContactEdgeDebug(const Vec3& offset_ee,
+                                   const Vec3& p_EE_at_contact,
+                                   const Vec3& contact_point) {
+  printVec3Mm("offset_ee", offset_ee);
+  printVec3Mm("p_EE_at_contact", p_EE_at_contact);
+  printVec3Mm("contact_point", contact_point);
+  printVec3Mm("edge_offset_base", contact_point - p_EE_at_contact);
+}
+
 inline void printVec3Deg(const char* label, const Vec3& v) {
   const double rad_to_deg = 180.0 / M_PI;
   printf("%s = [%.2f, %.2f, %.2f] deg\n",
@@ -46,6 +59,28 @@ inline void printVec7Deg(const char* label, const Vec7& v) {
          rad_to_deg * v(4),
          rad_to_deg * v(5),
          rad_to_deg * v(6));
+}
+
+// Formats a per-axis gain suggestion, replacing axes where the configured
+// gain is below gain_threshold with "n/a": on a passive axis (commanded
+// stiffness ~0), the measured wrench there comes from real contact
+// mechanics, not from the spring law the suggestion is fit against, so a
+// numeric suggestion would not be a meaningful gain.
+inline std::string formatSuggestedGains(const Vec3& suggested,
+                                         const Vec3& configured,
+                                         double gain_threshold,
+                                         const char* value_format) {
+  char value[3][32];
+  for (int i = 0; i < 3; ++i) {
+    if (std::abs(configured(i)) < gain_threshold) {
+      snprintf(value[i], sizeof(value[i]), "n/a");
+    } else {
+      snprintf(value[i], sizeof(value[i]), value_format, suggested(i));
+    }
+  }
+  char line[128];
+  snprintf(line, sizeof(line), "[%s, %s, %s]", value[0], value[1], value[2]);
+  return std::string(line);
 }
 
 inline void printMat3(const char* label, const Mat3& m) {
