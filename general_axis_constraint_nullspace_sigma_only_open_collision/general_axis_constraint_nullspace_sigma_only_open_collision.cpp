@@ -751,9 +751,10 @@ int main() {
                 : params.quasi_effective_inertia;
             const DiagonalGainSet quasi_gains = computeQuasiStaticGains(
                 params, translational_inertia, rotational_inertia);
-            printf("=== Gain-selection methods ===\n");
+            printf("=== Gain-suggestion diagnostics only ===\n");
+            printf("Reporting only: suggestions are not applied online. Edit parameters.txt manually to test them.\n");
 
-            printf("\nMethod 1: quasi-static initial selection\n");
+            printf("\n=== Method 1: Quasi-static candidate gains ===\n");
             printf("formula: Kp=Fmax/dxmax, KR=Mmax/dtheta_max, D=2*zeta*sqrt(M*K)\n");
             printf("inertia_source: %s\n",
                    cartesian_inertia.valid
@@ -774,7 +775,7 @@ int main() {
             printGainVec("KR_active_post_contact", params.post_contact_KR_diag);
             printGainVec("DR_active_post_contact", params.post_contact_DR_diag);
 
-            printf("\nMethod 2: adjoint pole method with instantaneous pole\n");
+            printf("\n=== Method 2: Adjoint pole-based candidate gains ===\n");
             const Vec3 pole_axis_from_edge = last_valid_post_align_axis_valid
                 ? last_valid_post_align_axis_point_from_edge
                 : params.desired_axis_from_edge;
@@ -821,7 +822,7 @@ int main() {
                      axis_pitch_error_mm);
             }
 
-            printf("\nMethod 3: least-squares effective moment identification\n");
+            printf("\n=== Method 3: Least-squares effective moment identification ===\n");
             printf("model: M_C = K_rt*dx_C + D_rt*v_C + K_R*dtheta + D_R*omega\n");
             printf("moment transfer: M_C = m - r_C x f\n");
             const EffectiveMomentFit moment_fit =

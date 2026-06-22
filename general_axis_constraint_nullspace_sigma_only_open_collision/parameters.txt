@@ -237,9 +237,9 @@ vcr_offset = 0.0
 use_search_direction_surface_after_alignment = 1
 
 # --------------------------------------------------------------
-# Gain-selection diagnostics (reporting only, post_contact_align)
+# Gain-suggestion diagnostics only (reporting only, post_contact_align)
 # --------------------------------------------------------------
-# Diagnostic only: prints the three thesis gain-selection views at the end
+# Diagnostic only: prints the three thesis gain-suggestion views at the end
 # of post_contact_align. Method 1 computes quasi-static diagonal K/D from
 # limits below. Method 2 maps those gains through the adjoint around the
 # measured instantaneous pole. Method 3 fits the effective contact-edge
