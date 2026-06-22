@@ -709,7 +709,7 @@ inline Vec7 computeNullspaceTorque(
   Vec7 n = svd_current.matrixV().col(6);
 
   if (n.norm() <= 1e-9) {
-    return limitJointTorqueVectorNorm(tau_nullspace, params.nullspace_tau_max);
+    return tau_nullspace;
   }
 
   n.normalize();
@@ -744,5 +744,5 @@ inline Vec7 computeNullspaceTorque(
   const Vec7 tau_sigma =
       N * (params.nullspace_k_sigma * sigma_direction * params.nullspace_alpha * n);
 
-  return limitJointTorqueVectorNorm(tau_nullspace + tau_sigma, params.nullspace_tau_max);
+  return tau_nullspace + tau_sigma;
 }
