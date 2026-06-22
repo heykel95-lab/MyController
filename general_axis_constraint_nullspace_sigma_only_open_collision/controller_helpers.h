@@ -69,18 +69,6 @@ inline double smallestSingularValue(const Mat6x7& J) {
   return svd.singularValues().minCoeff();
 }
 
-inline Vec7 limitJointTorqueVectorNorm(const Vec7& v, double max_norm) {
-  if (max_norm <= 0.0) {
-    return v;
-  }
-
-  const double norm = v.norm();
-  if (norm > max_norm && norm > 1e-12) {
-    return max_norm * v / norm;
-  }
-  return v;
-}
-
 inline double smoothStep(double r) {
   r = std::max(0.0, std::min(1.0, r));
   return 10.0 * std::pow(r, 3) - 15.0 * std::pow(r, 4) + 6.0 * std::pow(r, 5);
@@ -333,7 +321,9 @@ inline Vec3 criticalDampingFromStiffness(const Vec3& inertia,
   return damping;
 }
 
-inline DiagonalGainSet computeQuasiStaticGains(const Parameters& params) {
+inline DiagonalGainSet computeQuasiStaticGains(const Parameters& params,
+                                               const Vec3& translational_inertia,
+                                               const Vec3& rotational_inertia) {
   DiagonalGainSet gains;
   gains.Kp = stiffnessFromLimits(params.quasi_force_limit,
                                  params.quasi_displacement_limit,
@@ -343,15 +333,20 @@ inline DiagonalGainSet computeQuasiStaticGains(const Parameters& params) {
                                  params.quasi_angle_limit,
                                  params.suggested_gain_min,
                                  params.suggested_gain_max);
-  gains.Dp = criticalDampingFromStiffness(params.quasi_effective_mass,
+  gains.Dp = criticalDampingFromStiffness(translational_inertia,
                                          gains.Kp,
                                          params.quasi_damping_ratio,
                                          params.suggested_gain_max);
-  gains.DR = criticalDampingFromStiffness(params.quasi_effective_inertia,
+  gains.DR = criticalDampingFromStiffness(rotational_inertia,
                                          gains.KR,
                                          params.quasi_damping_ratio,
                                          params.suggested_gain_max);
   return gains;
+}
+
+inline DiagonalGainSet computeQuasiStaticGains(const Parameters& params) {
+  return computeQuasiStaticGains(
+      params, params.quasi_effective_mass, params.quasi_effective_inertia);
 }
 
 inline Mat3 skewMatrix(const Vec3& v) {
@@ -380,6 +375,75 @@ inline Mat6x6 offsetAdjoint(const Vec3& r_c) {
 inline Mat6x6 adjointTransformedGain(const Mat6x6& pole_gain, const Vec3& r_c) {
   const Mat6x6 adjoint = offsetAdjoint(r_c);
   return adjoint.transpose() * pole_gain * adjoint;
+}
+
+struct CartesianInertiaEstimate {
+  Vec3 translational = Vec3::Ones();
+  Vec3 rotational = Vec3::Ones();
+  Mat6x6 Lambda_task = Mat6x6::Zero();
+  bool valid = false;
+};
+
+inline Mat6x6 blockDiagonalRotation(const Mat3& R) {
+  Mat6x6 T = Mat6x6::Zero();
+  T.block<3, 3>(0, 0) = R;
+  T.block<3, 3>(3, 3) = R;
+  return T;
+}
+
+inline CartesianInertiaEstimate computeCartesianInertiaEstimate(
+    const Mat7x7& joint_mass,
+    const Mat6x7& J,
+    const Mat3& R_task) {
+  CartesianInertiaEstimate result;
+
+  Eigen::LDLT<Mat7x7> mass_ldlt(joint_mass);
+  if (mass_ldlt.info() != Eigen::Success) {
+    return result;
+  }
+
+  const Mat7x6 Minv_Jt = mass_ldlt.solve(J.transpose());
+  if (!Minv_Jt.allFinite()) {
+    return result;
+  }
+
+  Mat6x6 lambda_inv = J * Minv_Jt;
+  lambda_inv = 0.5 * (lambda_inv + lambda_inv.transpose());
+  if (!lambda_inv.allFinite()) {
+    return result;
+  }
+
+  Mat6x6 lambda_inv_damped = lambda_inv;
+  lambda_inv_damped.diagonal().array() += 1e-9;
+  Eigen::LDLT<Mat6x6> lambda_ldlt(lambda_inv_damped);
+  if (lambda_ldlt.info() != Eigen::Success) {
+    return result;
+  }
+
+  Mat6x6 Lambda_base = lambda_ldlt.solve(Mat6x6::Identity());
+  if (!Lambda_base.allFinite()) {
+    return result;
+  }
+  Lambda_base = 0.5 * (Lambda_base + Lambda_base.transpose());
+
+  const Mat6x6 T_task = blockDiagonalRotation(R_task);
+  result.Lambda_task = T_task.transpose() * Lambda_base * T_task;
+  result.Lambda_task = 0.5 * (result.Lambda_task + result.Lambda_task.transpose());
+  if (!result.Lambda_task.allFinite()) {
+    return result;
+  }
+
+  for (int i = 0; i < 3; ++i) {
+    const double m = result.Lambda_task(i, i);
+    const double I = result.Lambda_task(i + 3, i + 3);
+    if (m <= 0.0 || I <= 0.0) {
+      return result;
+    }
+    result.translational(i) = m;
+    result.rotational(i) = I;
+  }
+  result.valid = true;
+  return result;
 }
 
 struct EffectiveMomentFitAccumulator {

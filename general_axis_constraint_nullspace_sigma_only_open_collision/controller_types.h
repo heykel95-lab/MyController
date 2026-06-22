@@ -91,7 +91,6 @@ struct Parameters {
   double nullspace_damping = 1.0;
   double nullspace_k_sigma = 0.5;
   double nullspace_alpha = 0.01;
-  double nullspace_tau_max = 2.0;
 
   Vec3 delta_p = Vec3(0.005, 0.0, 0.0);
   double trajectory_duration = 8.0;

@@ -36,6 +36,7 @@ using Vec12 = Eigen::Matrix<double, 12, 1>;
 using Mat3 = Eigen::Matrix3d;
 using Mat6x6 = Eigen::Matrix<double, 6, 6>;
 using Mat6x7 = Eigen::Matrix<double, 6, 7>;
+using Mat7x6 = Eigen::Matrix<double, 7, 6>;
 using Mat7x7 = Eigen::Matrix<double, 7, 7>;
 using Mat3x12 = Eigen::Matrix<double, 3, 12>;
 using Mat12x3 = Eigen::Matrix<double, 12, 3>;

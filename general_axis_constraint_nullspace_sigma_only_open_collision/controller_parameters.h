@@ -301,7 +301,6 @@ inline Parameters readParameters(const std::string& filename) {
   p.nullspace_damping = getDouble("nullspace_damping", p.nullspace_damping);
   p.nullspace_k_sigma = getDouble("nullspace_k_sigma", p.nullspace_k_sigma);
   p.nullspace_alpha = getDouble("nullspace_alpha", p.nullspace_alpha);
-  p.nullspace_tau_max = getDouble("nullspace_tau_max", p.nullspace_tau_max);
 
   p.delta_p(0) = getDouble("delta_p_x", p.delta_p(0));
   p.delta_p(1) = getDouble("delta_p_y", p.delta_p(1));

@@ -739,11 +739,28 @@ int main() {
           }
 
           if (params.suggest_gains_from_desired_axis) {
-            const DiagonalGainSet quasi_gains = computeQuasiStaticGains(params);
+            std::array<double, 49> mass_array = model.mass(state);
+            Map<const Mat7x7> joint_mass(mass_array.data());
+            const CartesianInertiaEstimate cartesian_inertia =
+                computeCartesianInertiaEstimate(joint_mass, J, R_surface);
+            const Vec3 translational_inertia = cartesian_inertia.valid
+                ? cartesian_inertia.translational
+                : params.quasi_effective_mass;
+            const Vec3 rotational_inertia = cartesian_inertia.valid
+                ? cartesian_inertia.rotational
+                : params.quasi_effective_inertia;
+            const DiagonalGainSet quasi_gains = computeQuasiStaticGains(
+                params, translational_inertia, rotational_inertia);
             printf("=== Gain-selection methods ===\n");
 
             printf("\nMethod 1: quasi-static initial selection\n");
             printf("formula: Kp=Fmax/dxmax, KR=Mmax/dtheta_max, D=2*zeta*sqrt(M*K)\n");
+            printf("inertia_source: %s\n",
+                   cartesian_inertia.valid
+                       ? "libfranka Lambda task-frame diagonal"
+                       : "parameters fallback");
+            printGainVec("M_eff_trans", translational_inertia);
+            printGainVec("I_eff_rot", rotational_inertia);
             printGainVec("Fmax_N", params.quasi_force_limit);
             printGainVec("dxmax_m", params.quasi_displacement_limit);
             printGainVec("Mmax_Nm", params.quasi_moment_limit);

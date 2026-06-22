@@ -281,8 +281,9 @@ quasi_angle_limit_normal = 0.1745
 quasi_angle_limit_tangent1 = 0.1745
 quasi_angle_limit_tangent2 = 0.1745
 
-# D = 2*zeta*sqrt(M*K). The default M/I=1 keeps the normalized thesis
-# approximation d ~= 2*sqrt(k); replace with operational-space inertia if used.
+# D = 2*zeta*sqrt(M*K). During a run, M/I is computed from libfranka
+# as the task-frame diagonal of Lambda=(J*Mq^-1*J^T)^-1. These values
+# are only fallbacks if that estimate is not numerically available.
 quasi_effective_mass_normal = 1.0
 quasi_effective_mass_tangent1 = 1.0
 quasi_effective_mass_tangent2 = 1.0
@@ -379,4 +380,3 @@ nullspace_damping = 2.0
 nullspace_k_start = 2.0
 nullspace_k_sigma = 0.1
 nullspace_alpha = 0.01
-nullspace_tau_max = 1.0
