@@ -237,11 +237,13 @@ vcr_offset = 0.0
 use_search_direction_surface_after_alignment = 1
 
 # --------------------------------------------------------------
-# Best-axis / gain-suggestion diagnostics (reporting only, post_contact_align)
+# Gain-selection diagnostics (reporting only, post_contact_align)
 # --------------------------------------------------------------
-# Diagnostic only: prints suggested post-contact stiffness/damping at the
-# end of post_contact_align, does not apply them. Uses this run's measured
-# best axis, falling back to desired_axis_* below if none was measured.
+# Diagnostic only: prints the three thesis gain-selection views at the end
+# of post_contact_align. Method 1 computes quasi-static diagonal K/D from
+# limits below. Method 2 maps those gains through the adjoint around the
+# measured instantaneous pole. Method 3 fits the effective contact-edge
+# moment model from the logged post-contact samples. None is applied online.
 suggest_gains_from_desired_axis = 1
 
 # Target axis for comparison/suggestion, base frame, relative to the active
@@ -256,13 +258,41 @@ desired_axis_dir_y = -0.863
 desired_axis_dir_z = 0.012
 desired_axis_pitch = 0.0127
 
-# Legacy reference-motion settings, kept for file compatibility only. The
-# current suggestion computes K/KR from actual error since first touch and
-# D/DR from the residual wrench after subtracting stiffness.
+# Gain print bounds and legacy reference-motion settings.
+# suggested_gain_min/max clamp printed suggested values;
+# omega_ref and angle_ref are kept for file compatibility.
 suggested_gain_omega_ref = 0.20
 suggested_gain_angle_ref = 0.10
 suggested_gain_min = 0.01
 suggested_gain_max = 8000.0
+
+# Method 1: quasi-static initial selection, surface-frame normal/tangent1/tangent2.
+# Kp = Fmax / dxmax, KR = Mmax / dtheta_max.
+quasi_force_limit_normal = 15.0
+quasi_force_limit_tangent1 = 10.0
+quasi_force_limit_tangent2 = 10.0
+quasi_displacement_limit_normal = 0.005
+quasi_displacement_limit_tangent1 = 0.010
+quasi_displacement_limit_tangent2 = 0.010
+quasi_moment_limit_normal = 0.75
+quasi_moment_limit_tangent1 = 0.75
+quasi_moment_limit_tangent2 = 0.75
+quasi_angle_limit_normal = 0.1745
+quasi_angle_limit_tangent1 = 0.1745
+quasi_angle_limit_tangent2 = 0.1745
+
+# D = 2*zeta*sqrt(M*K). The default M/I=1 keeps the normalized thesis
+# approximation d ~= 2*sqrt(k); replace with operational-space inertia if used.
+quasi_effective_mass_normal = 1.0
+quasi_effective_mass_tangent1 = 1.0
+quasi_effective_mass_tangent2 = 1.0
+quasi_effective_inertia_normal = 1.0
+quasi_effective_inertia_tangent1 = 1.0
+quasi_effective_inertia_tangent2 = 1.0
+quasi_damping_ratio = 1.0
+
+# Method 3: small damped least-squares ridge for the effective moment fit.
+effective_moment_fit_ridge = 1e-8
 
 # ====================================================================
 # Phase 4: surface_impedance

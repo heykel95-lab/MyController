@@ -290,6 +290,163 @@ inline void fitStiffnessDamping(
   }
 }
 
+struct DiagonalGainSet {
+  Vec3 Kp = Vec3::Zero();
+  Vec3 Dp = Vec3::Zero();
+  Vec3 KR = Vec3::Zero();
+  Vec3 DR = Vec3::Zero();
+};
+
+inline double clampedLimitGain(double numerator,
+                               double denominator,
+                               double min_gain,
+                               double max_gain) {
+  if (std::abs(denominator) <= 1e-12) {
+    return max_gain;
+  }
+  const double gain = std::abs(numerator) / std::abs(denominator);
+  return std::max(min_gain, std::min(max_gain, gain));
+}
+
+inline Vec3 stiffnessFromLimits(const Vec3& max_wrench,
+                                const Vec3& max_motion,
+                                double min_gain,
+                                double max_gain) {
+  Vec3 stiffness = Vec3::Zero();
+  for (int i = 0; i < 3; ++i) {
+    stiffness(i) = clampedLimitGain(max_wrench(i), max_motion(i), min_gain, max_gain);
+  }
+  return stiffness;
+}
+
+inline Vec3 criticalDampingFromStiffness(const Vec3& inertia,
+                                         const Vec3& stiffness,
+                                         double damping_ratio,
+                                         double max_gain) {
+  Vec3 damping = Vec3::Zero();
+  const double zeta = std::max(0.0, damping_ratio);
+  for (int i = 0; i < 3; ++i) {
+    const double m = std::max(0.0, inertia(i));
+    const double k = std::max(0.0, stiffness(i));
+    damping(i) = std::min(max_gain, 2.0 * zeta * std::sqrt(m * k));
+  }
+  return damping;
+}
+
+inline DiagonalGainSet computeQuasiStaticGains(const Parameters& params) {
+  DiagonalGainSet gains;
+  gains.Kp = stiffnessFromLimits(params.quasi_force_limit,
+                                 params.quasi_displacement_limit,
+                                 params.suggested_gain_min,
+                                 params.suggested_gain_max);
+  gains.KR = stiffnessFromLimits(params.quasi_moment_limit,
+                                 params.quasi_angle_limit,
+                                 params.suggested_gain_min,
+                                 params.suggested_gain_max);
+  gains.Dp = criticalDampingFromStiffness(params.quasi_effective_mass,
+                                         gains.Kp,
+                                         params.quasi_damping_ratio,
+                                         params.suggested_gain_max);
+  gains.DR = criticalDampingFromStiffness(params.quasi_effective_inertia,
+                                         gains.KR,
+                                         params.quasi_damping_ratio,
+                                         params.suggested_gain_max);
+  return gains;
+}
+
+inline Mat3 skewMatrix(const Vec3& v) {
+  Mat3 s;
+  s << 0.0, -v(2), v(1),
+       v(2), 0.0, -v(0),
+       -v(1), v(0), 0.0;
+  return s;
+}
+
+inline Mat6x6 blockDiagonalGain(const Vec3& translational, const Vec3& rotational) {
+  Mat6x6 gain = Mat6x6::Zero();
+  gain.block<3, 3>(0, 0) = translational.asDiagonal();
+  gain.block<3, 3>(3, 3) = rotational.asDiagonal();
+  return gain;
+}
+
+inline Mat6x6 offsetAdjoint(const Vec3& r_c) {
+  Mat6x6 adjoint = Mat6x6::Zero();
+  adjoint.block<3, 3>(0, 0) = Mat3::Identity();
+  adjoint.block<3, 3>(0, 3) = skewMatrix(r_c);
+  adjoint.block<3, 3>(3, 3) = Mat3::Identity();
+  return adjoint;
+}
+
+inline Mat6x6 adjointTransformedGain(const Mat6x6& pole_gain, const Vec3& r_c) {
+  const Mat6x6 adjoint = offsetAdjoint(r_c);
+  return adjoint.transpose() * pole_gain * adjoint;
+}
+
+struct EffectiveMomentFitAccumulator {
+  Mat12x12 H = Mat12x12::Zero();
+  Mat12x3 B = Mat12x3::Zero();
+  double y_squared_sum = 0.0;
+  long sample_count = 0;
+
+  void addSample(const Vec3& contact_displacement,
+                 const Vec3& contact_velocity,
+                 const Vec3& rotation_displacement,
+                 const Vec3& angular_velocity,
+                 const Vec3& contact_moment) {
+    Vec12 phi;
+    phi << contact_displacement, contact_velocity, rotation_displacement, angular_velocity;
+    H.noalias() += phi * phi.transpose();
+    B.noalias() += phi * contact_moment.transpose();
+    y_squared_sum += contact_moment.squaredNorm();
+    ++sample_count;
+  }
+};
+
+struct EffectiveMomentFit {
+  Mat3 K_rt = Mat3::Zero();
+  Mat3 D_rt = Mat3::Zero();
+  Mat3 K_R = Mat3::Zero();
+  Mat3 D_R = Mat3::Zero();
+  double rms_error = 0.0;
+  long sample_count = 0;
+  bool valid = false;
+};
+
+inline EffectiveMomentFit fitEffectiveMomentModel(
+    const EffectiveMomentFitAccumulator& fit,
+    double ridge) {
+  EffectiveMomentFit result;
+  result.sample_count = fit.sample_count;
+  if (fit.sample_count < 12) {
+    return result;
+  }
+
+  Mat12x12 H_damped = fit.H;
+  H_damped.diagonal().array() += std::max(0.0, ridge);
+  Eigen::LDLT<Mat12x12> ldlt(H_damped);
+  if (ldlt.info() != Eigen::Success) {
+    return result;
+  }
+
+  const Mat12x3 x = ldlt.solve(fit.B);
+  if (ldlt.info() != Eigen::Success || !x.allFinite()) {
+    return result;
+  }
+
+  const Mat3x12 A = x.transpose();
+  result.K_rt = A.block<3, 3>(0, 0);
+  result.D_rt = A.block<3, 3>(0, 3);
+  result.K_R = A.block<3, 3>(0, 6);
+  result.D_R = A.block<3, 3>(0, 9);
+
+  const double cross_term = (x.transpose() * fit.B).trace();
+  const double model_term = (x.transpose() * fit.H * x).trace();
+  const double sse = std::max(0.0, fit.y_squared_sum - 2.0 * cross_term + model_term);
+  result.rms_error = std::sqrt(sse / static_cast<double>(fit.sample_count));
+  result.valid = true;
+  return result;
+}
+
 inline Vec3 desiredAxisLinearMotionFromTcp(
     const Vec3& axis_from_tcp,
     const Vec3& axis_dir,

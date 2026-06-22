@@ -54,6 +54,14 @@ struct Parameters {
   double suggested_gain_angle_ref = 0.10;
   double suggested_gain_min = 0.01;
   double suggested_gain_max = 8000.0;
+  Vec3 quasi_force_limit = Vec3(15.0, 10.0, 10.0);
+  Vec3 quasi_displacement_limit = Vec3(0.005, 0.010, 0.010);
+  Vec3 quasi_moment_limit = Vec3(0.75, 0.75, 0.75);
+  Vec3 quasi_angle_limit = Vec3(0.1745, 0.1745, 0.1745);
+  Vec3 quasi_effective_mass = Vec3(1.0, 1.0, 1.0);
+  Vec3 quasi_effective_inertia = Vec3(1.0, 1.0, 1.0);
+  double quasi_damping_ratio = 1.0;
+  double effective_moment_fit_ridge = 1e-8;
 
   bool use_contact_search = false;
   bool contact_search_use_surface_normal = true;

@@ -36,6 +36,17 @@ inline void printVec3Deg(const char* label, const Vec3& v) {
          rad_to_deg * v(2));
 }
 
+inline void printGainVec(const char* label, const Vec3& v) {
+  printf("%s = [%.4g, %.4g, %.4g]\n", label, v(0), v(1), v(2));
+}
+
+inline void printMat3Rows(const char* label, const Mat3& m) {
+  printf("%s:\n", label);
+  for (int i = 0; i < 3; ++i) {
+    printf("  [%.4g, %.4g, %.4g]\n", m(i, 0), m(i, 1), m(i, 2));
+  }
+}
+
 inline void printVec7(const char* label, const Vec7& v) {
   printf("%s = [%.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f]\n",
          label,
