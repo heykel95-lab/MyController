@@ -776,51 +776,62 @@ int main() {
             printGainVec("DR_active_post_contact", params.post_contact_DR_diag);
 
             printf("\n=== Method 2: Adjoint pole-based candidate gains ===\n");
-            const Vec3 pole_axis_from_edge = last_valid_post_align_axis_valid
-                ? last_valid_post_align_axis_point_from_edge
-                : params.desired_axis_from_edge;
-            const Vec3 edge_from_tcp_for_pole = last_valid_post_align_axis_valid
-                ? last_valid_post_align_edge_from_tcp
-                : R_EE * active_tool_contact_offset_ee;
+            // The pole for the K/D adjoint suggestion comes from the stable
+            // Chasles finite screw axis (computed from the start/end edge pose),
+            // not the per-cycle best instantaneous pole, which jumps between
+            // cycles and can be numerically unreliable. The separate
+            // "=== Best axis compare ===" block above keeps the instantaneous
+            // best axis for the run-to-run evaluation.
+            Vec3 pole_point;
+            if (finite_axis.valid) {
+              const Vec3 axis_point_base =
+                  first_contact_point + finite_axis.axis_point_from_start;
+              pole_point = nearestPointOnAxis(
+                  tool_contact_point, axis_point_base, finite_axis.axis_dir);
+            } else {
+              pole_point = tool_contact_point + params.desired_axis_from_edge;
+            }
             const Vec3 r_c_task =
-                -R_surface.transpose() * (edge_from_tcp_for_pole + pole_axis_from_edge);
-            const Mat6x6 K_pole = blockDiagonalGain(quasi_gains.Kp, quasi_gains.KR);
-            const Mat6x6 D_pole = blockDiagonalGain(quasi_gains.Dp, quasi_gains.DR);
+                -R_surface.transpose() * (pole_point - p_EE);
+            // Transform the gains ACTUALLY applied during post_contact_align
+            // (from parameters.txt) referred to the pole, not the quasi-static
+            // estimate: the active gains are what actually produced this motion;
+            // the quasi-static values may be faulty.
+            const Mat6x6 K_pole =
+                blockDiagonalGain(params.post_contact_Kp_diag, params.post_contact_KR_diag);
+            const Mat6x6 D_pole =
+                blockDiagonalGain(params.post_contact_Dp_diag, params.post_contact_DR_diag);
             const Mat6x6 K_tcp_task = adjointTransformedGain(K_pole, r_c_task);
             const Mat6x6 D_tcp_task = adjointTransformedGain(D_pole, r_c_task);
-            printf("pole_reference: %s\n",
-                   last_valid_post_align_axis_valid
-                       ? "measured_best_instantaneous_pole"
-                       : "desired_axis_fallback");
-            printVec3Mm("r_c_task", r_c_task);
-            printMat3Rows("K_TCP_pp", Mat3(K_tcp_task.block<3, 3>(0, 0)));
-            printMat3Rows("K_TCP_pR", Mat3(K_tcp_task.block<3, 3>(0, 3)));
-            printMat3Rows("K_TCP_Rp", Mat3(K_tcp_task.block<3, 3>(3, 0)));
-            printMat3Rows("K_TCP_RR", Mat3(K_tcp_task.block<3, 3>(3, 3)));
-            printMat3Rows("D_TCP_pp", Mat3(D_tcp_task.block<3, 3>(0, 0)));
-            printMat3Rows("D_TCP_pR", Mat3(D_tcp_task.block<3, 3>(0, 3)));
-            printMat3Rows("D_TCP_Rp", Mat3(D_tcp_task.block<3, 3>(3, 0)));
-            printMat3Rows("D_TCP_RR", Mat3(D_tcp_task.block<3, 3>(3, 3)));
-            if (last_valid_post_align_axis_valid) {
-              const Vec3 desired_axis_dir_unit =
-                  normalizedOrFallback(params.desired_axis_dir, Vec3(1.0, 0.0, 0.0));
-              const Vec3 axis_point_error =
-                  last_valid_post_align_axis_point_from_edge - params.desired_axis_from_edge;
-              const double axis_dir_dot = std::abs(std::max(
-                  -1.0, std::min(1.0, last_valid_post_align_axis_dir.dot(desired_axis_dir_unit))));
-              const double axis_dir_error_deg = (180.0 / M_PI) * std::acos(axis_dir_dot);
-              const double desired_axis_edge_distance = pointDistanceToAxis(
-                  Vec3::Zero(), params.desired_axis_from_edge, desired_axis_dir_unit);
-              const double axis_edge_error_mm =
-                  1000.0 * (last_valid_post_align_axis_edge_distance - desired_axis_edge_distance);
-              const double axis_pitch_error_mm =
-                  1000.0 * (last_valid_post_align_screw_pitch - params.desired_axis_pitch);
-              printf("axis_error: point_norm=%.1f mm | dir=%.1f deg | edge=%+.1f mm | pitch=%+.1f mm/rad\n",
-                     1000.0 * axis_point_error.norm(),
-                     axis_dir_error_deg,
-                     axis_edge_error_mm,
-                     axis_pitch_error_mm);
+            // Clean step-by-step view of how this K/D suggestion is built,
+            // all from the stable Chasles finite screw axis (the noisy
+            // instantaneous best-axis stays in the separate Best axis compare).
+            printf("step 1) finite screw axis (Chasles' theorem):\n");
+            if (finite_axis.valid) {
+              const Vec3 axis_point_base =
+                  first_contact_point + finite_axis.axis_point_from_start;
+              printVec3Mm("  axis_from_edge", axis_point_base - tool_contact_point);
+              printGainVec("  axis_dir", finite_axis.axis_dir);
+              printf("  pitch = %+.1f mm/rad | angle = %.1f deg\n",
+                     1000.0 * finite_axis.pitch,
+                     (180.0 / M_PI) * finite_axis.angle);
+            } else {
+              printf("  not valid (rotation too small) -> desired-axis fallback\n");
             }
+            printf("step 2) chosen pole on that axis, nearest the edge:\n");
+            printVec3Mm("  pole_from_edge", pole_point - tool_contact_point);
+            printVec3Mm("  r_c_task (p_EE - pole, task frame)", r_c_task);
+            printf("step 3) adjoint  Ad_g = [[I, skew(r_c)], [0, I]]:\n");
+            printMat3Rows("  skew(r_c_task)", skewMatrix(r_c_task));
+            printf("step 4) K_TCP = Ad^T K_pole Ad,  D_TCP = Ad^T D_pole Ad  (K/D_pole = active post-contact gains):\n");
+            printMat3Rows("  K_TCP_pp", Mat3(K_tcp_task.block<3, 3>(0, 0)));
+            printMat3Rows("  K_TCP_pR", Mat3(K_tcp_task.block<3, 3>(0, 3)));
+            printMat3Rows("  K_TCP_Rp", Mat3(K_tcp_task.block<3, 3>(3, 0)));
+            printMat3Rows("  K_TCP_RR", Mat3(K_tcp_task.block<3, 3>(3, 3)));
+            printMat3Rows("  D_TCP_pp", Mat3(D_tcp_task.block<3, 3>(0, 0)));
+            printMat3Rows("  D_TCP_pR", Mat3(D_tcp_task.block<3, 3>(0, 3)));
+            printMat3Rows("  D_TCP_Rp", Mat3(D_tcp_task.block<3, 3>(3, 0)));
+            printMat3Rows("  D_TCP_RR", Mat3(D_tcp_task.block<3, 3>(3, 3)));
 
             printf("\n=== Method 3: Least-squares effective moment identification ===\n");
             printf("model: M_C = K_rt*dx_C + D_rt*v_C + K_R*dtheta + D_R*omega\n");
