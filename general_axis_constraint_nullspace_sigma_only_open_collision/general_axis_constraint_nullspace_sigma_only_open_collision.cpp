@@ -754,8 +754,8 @@ int main() {
                 clampGain(fit_rot_K(0)), clampGain(fit_rot_K(1)), clampGain(fit_rot_K(2)));
             const Vec3 suggested_DR(
                 clampGain(fit_rot_D(0)), clampGain(fit_rot_D(1)), clampGain(fit_rot_D(2)));
-            printf("=== Gain compare ===\n");
-            printf("Current post-contact gains:\n");
+            printf("=== Gain-selection methods ===\n");
+            printf("\nMethod 1: limit/manual thesis method (active post-contact gains)\n");
             printf("Kp = [%.0f, %.0f, %.0f]\n",
                    params.post_contact_Kp_diag(0),
                    params.post_contact_Kp_diag(1),
@@ -778,7 +778,7 @@ int main() {
             // there is dominated by contact mechanics, not the spring law,
             // so no numeric K/D suggestion is shown for it.
             const double passive_axis_gain_threshold = 1.0;
-            printf("Suggested (least-squares fit over the whole post_contact_align window) (n/a = free/passive axis):\n");
+            printf("\nMethod 2: least-squares log-fit method (post_contact_align window)\n");
             printf("Kp = %s\n",
                    formatSuggestedGains(suggested_Kp, params.post_contact_Kp_diag,
                                          passive_axis_gain_threshold, "%.0f", fit_pos_valid).c_str());
@@ -791,8 +791,38 @@ int main() {
             printf("DR = %s\n",
                    formatSuggestedGains(suggested_DR, params.post_contact_KR_diag,
                                          passive_axis_gain_threshold, "%.4g", fit_rot_valid).c_str());
-            printf("gain_reference: %s\n",
+            printf("fit_reference: %s\n",
                    first_touch_candidate_saved ? "first_touch_candidate" : "phase_switch_bias");
+
+            printf("\nMethod 3: axis-based method (desired vs measured screw axis)\n");
+            if (last_valid_post_align_axis_valid) {
+              const Vec3 desired_axis_dir_unit =
+                  normalizedOrFallback(params.desired_axis_dir, Vec3(1.0, 0.0, 0.0));
+              const Vec3 axis_point_error =
+                  last_valid_post_align_axis_point_from_edge - params.desired_axis_from_edge;
+              const double axis_dir_dot = std::abs(std::max(
+                  -1.0, std::min(1.0, last_valid_post_align_axis_dir.dot(desired_axis_dir_unit))));
+              const double axis_dir_error_deg = (180.0 / M_PI) * std::acos(axis_dir_dot);
+              const double desired_axis_edge_distance = pointDistanceToAxis(
+                  Vec3::Zero(), params.desired_axis_from_edge, desired_axis_dir_unit);
+              const double axis_edge_error_mm =
+                  1000.0 * (last_valid_post_align_axis_edge_distance - desired_axis_edge_distance);
+              const double axis_pitch_error_mm =
+                  1000.0 * (last_valid_post_align_screw_pitch - params.desired_axis_pitch);
+              printf("axis_point_error = [%+.1f, %+.1f, %+.1f] mm\n",
+                     1000.0 * axis_point_error(0),
+                     1000.0 * axis_point_error(1),
+                     1000.0 * axis_point_error(2));
+              printf("axis_direction_error = %.1f deg\n", axis_dir_error_deg);
+              printf("axis_edge_error = %+.1f mm\n", axis_edge_error_mm);
+              printf("axis_pitch_error = %+.1f mm/rad\n", axis_pitch_error_mm);
+              printf("Kp = tune translational stiffness to reduce axis_point_error/axis_edge_error\n");
+              printf("Dp = increase if the measured axis oscillates or jumps between samples\n");
+              printf("KR = tune rotational stiffness to reduce axis_direction_error\n");
+              printf("DR = increase if direction or pitch convergence oscillates\n");
+            } else {
+              printf("n/a: no valid post-contact screw axis was measured\n");
+            }
           }
           printf("phase: %s\n", phaseName(phase));
         }
