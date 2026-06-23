@@ -52,6 +52,20 @@ struct Parameters {
   // post_align gains (no lever-arm coupling), which should reproduce the normal
   // decoupled commanded wrench; 0 = use the saved coupled method2_K_tcp/D_tcp.
   bool use_in_method2_k_d_diag = false;
+  // Manual pole placement for the applied Method 2 wrench. When 1 (and diag=0),
+  // the coupled K_TCP/D_TCP are recomputed LIVE each cycle from the chosen pole
+  // instead of the saved matrices: pole = current contact edge +
+  // manual_method2_pole_from_edge (base frame), r_c = p_EE - pole,
+  // K_TCP = Ad(r_c)^T * blockdiag(post_align gains) * Ad(r_c). This lets the
+  // pole (the only knob in the adjoint) be swept to find the placement that
+  // gives the desired rotation/alignment.
+  bool use_manual_method2_pole = false;
+  Vec3 manual_method2_pole_from_edge = Vec3::Zero();
+  // 1 = pin the manual pole to the FIRST contact pose (first_contact_point /
+  // first_contact_tcp), so K_TCP/D_TCP are computed once at contact and stay
+  // constant for the whole align phase. 0 = track the live moving edge, so the
+  // matrices refresh every cycle. Frozen is simpler/more predictable to sweep.
+  bool method2_pole_freeze_at_contact = true;
   bool method2_tcp_wrench_saved = false;
   Mat6x6 method2_K_tcp_base = Mat6x6::Zero();
   Mat6x6 method2_D_tcp_base = Mat6x6::Zero();

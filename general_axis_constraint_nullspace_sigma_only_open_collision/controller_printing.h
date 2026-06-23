@@ -71,6 +71,23 @@ inline void printMat6Grid(const char* label, const Mat6x6& M) {
   }
 }
 
+// Prints the six eigenvalues of a symmetric 6x6 gain (ascending) plus a PSD
+// verdict. A valid passive spring/damper must be positive semi-definite, i.e.
+// every eigenvalue >= 0; negative off-diagonal *entries* are fine, only the
+// eigenvalues matter. The adjoint congruence preserves these from the
+// decoupled pole gains, so this is a numerical confirmation that the coupled
+// K_TCP/D_TCP are still valid. Uses the symmetric (self-adjoint) solver.
+inline void printSpatialGainEigenvalues(const char* label, const Mat6x6& M) {
+  const Mat6x6 symmetric = 0.5 * (M + M.transpose());
+  Eigen::SelfAdjointEigenSolver<Mat6x6> solver(symmetric);
+  const Eigen::Matrix<double, 6, 1> eig = solver.eigenvalues();
+  const double tol = 1e-6 * std::max(1.0, eig.cwiseAbs().maxCoeff());
+  const bool psd = eig.minCoeff() >= -tol;
+  printf("%s eigenvalues = [%.4g, %.4g, %.4g, %.4g, %.4g, %.4g] -> %s (min=%.4g)\n",
+         label, eig(0), eig(1), eig(2), eig(3), eig(4), eig(5),
+         psd ? "PSD ok (>=0)" : "NOT PSD (<0!)", eig(0));
+}
+
 inline void printSpatialGain6(const char* label, const Mat6x6& M) {
   static const char* kRowNames[6] = {"fx", "fy", "fz", "mx", "my", "mz"};
   printf("%s:\n", label);

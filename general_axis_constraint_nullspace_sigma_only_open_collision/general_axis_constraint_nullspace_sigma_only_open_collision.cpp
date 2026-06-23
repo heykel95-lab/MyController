@@ -1076,10 +1076,16 @@ int main() {
             printSpatialGain6("K_pole (base-frame gains, decoupled)", K_pole);
             printSpatialGain6("K_TCP  = Ad^T K_pole Ad (base-frame coupled at tool tip)",
                               K_tcp_base);
+            // Negative entries above are coupling, not a fault: validity is PSD
+            // (all eigenvalues >= 0), which the adjoint preserves from K_pole.
+            printSpatialGainEigenvalues("K_pole", K_pole);
+            printSpatialGainEigenvalues("K_TCP ", K_tcp_base);
             printf("\n-- DAMPING D --\n");
             printSpatialGain6("D_pole (base-frame gains, decoupled)", D_pole);
             printSpatialGain6("D_TCP  = Ad^T D_pole Ad (base-frame coupled at tool tip)",
                               D_tcp_base);
+            printSpatialGainEigenvalues("D_pole", D_pole);
+            printSpatialGainEigenvalues("D_TCP ", D_tcp_base);
 
             printf("\n=== Method 3: Least-squares effective moment identification ===\n");
             printf("model: M_C = K_rt*dx_C + D_rt*v_C + K_R*dtheta + D_R*omega\n");
@@ -1331,14 +1337,16 @@ int main() {
       Vec3 m;
       if (phase == ControlPhase::kPostContactAlign &&
           params.post_contact_apply_method2_tcp_wrench) {
-        // Method 2 active-apply mode. The 6x6 K/D source is selected by
-        // use_in_method2_k_d_diag:
-        //   1 -> block-diagonal post_align gains (no lever-arm coupling). Fed
-        //        through the same 6x6 path this reproduces the normal decoupled
-        //        commanded wrench exactly, so the resulting motion should match
-        //        the baseline -- a check that the apply path is wired right.
-        //   0 -> the saved coupled K_TCP/D_TCP from the previous baseline run,
-        //        which already contain the finite-axis lever-arm coupling.
+        // Method 2 active-apply mode. The 6x6 K/D source is selected by, in
+        // priority order:
+        //   use_in_method2_k_d_diag = 1 -> block-diagonal post_align gains (no
+        //     lever-arm coupling). Fed through the 6x6 path this reproduces the
+        //     normal decoupled commanded wrench, so the motion matches baseline.
+        //   use_manual_method2_pole = 1 -> recompute the coupled K_TCP/D_TCP
+        //     LIVE from a chosen pole = contact edge + manual_pole_from_edge.
+        //     The pole is the only knob in the adjoint, so sweeping it moves the
+        //     effective rotation center to chase the desired alignment.
+        //   otherwise -> the saved coupled K_TCP/D_TCP from a previous run.
         Mat6x6 K_tcp_base;
         Mat6x6 D_tcp_base;
         if (params.use_in_method2_k_d_diag) {
@@ -1348,6 +1356,26 @@ int main() {
           D_tcp_base = Mat6x6::Zero();
           D_tcp_base.block<3, 3>(0, 0) = Dp_post_contact;
           D_tcp_base.block<3, 3>(3, 3) = DR_post_contact;
+        } else if (params.use_manual_method2_pole) {
+          Mat6x6 K_pole = Mat6x6::Zero();
+          K_pole.block<3, 3>(0, 0) = Kp_post_contact;
+          K_pole.block<3, 3>(3, 3) = KR_post_contact;
+          Mat6x6 D_pole = Mat6x6::Zero();
+          D_pole.block<3, 3>(0, 0) = Dp_post_contact;
+          D_pole.block<3, 3>(3, 3) = DR_post_contact;
+          // Frozen: reference the contact-time pose (constant through align), so
+          // K_TCP/D_TCP are a single fixed spring. Live: reference the moving
+          // edge, so they refresh each cycle.
+          const Vec3 edge_ref = params.method2_pole_freeze_at_contact
+                                    ? first_contact_point
+                                    : tool_contact_point;
+          const Vec3 tcp_ref = params.method2_pole_freeze_at_contact
+                                   ? first_contact_tcp
+                                   : p_EE;
+          const Vec3 manual_pole = edge_ref + params.manual_method2_pole_from_edge;
+          const Vec3 r_c_manual = tcp_ref - manual_pole;
+          K_tcp_base = adjointTransformedGain(K_pole, r_c_manual);
+          D_tcp_base = adjointTransformedGain(D_pole, r_c_manual);
         } else {
           K_tcp_base = params.method2_K_tcp_base;
           D_tcp_base = params.method2_D_tcp_base;

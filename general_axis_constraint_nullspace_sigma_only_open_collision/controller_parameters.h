@@ -229,6 +229,16 @@ inline Parameters readParameters(const std::string& filename) {
               p.post_contact_apply_method2_tcp_wrench);
   p.use_in_method2_k_d_diag =
       getBool("use_in_method2_k_d_diag", p.use_in_method2_k_d_diag);
+  p.use_manual_method2_pole =
+      getBool("use_manual_method2_pole", p.use_manual_method2_pole);
+  p.manual_method2_pole_from_edge(0) =
+      getDouble("manual_method2_pole_from_edge_x", p.manual_method2_pole_from_edge(0));
+  p.manual_method2_pole_from_edge(1) =
+      getDouble("manual_method2_pole_from_edge_y", p.manual_method2_pole_from_edge(1));
+  p.manual_method2_pole_from_edge(2) =
+      getDouble("manual_method2_pole_from_edge_z", p.manual_method2_pole_from_edge(2));
+  p.method2_pole_freeze_at_contact =
+      getBool("method2_pole_freeze_at_contact", p.method2_pole_freeze_at_contact);
   p.method2_tcp_wrench_saved =
       getBool("method2_tcp_wrench_saved", p.method2_tcp_wrench_saved);
   p.method2_K_tcp_base = getMat6("method2_K_tcp", p.method2_K_tcp_base);
