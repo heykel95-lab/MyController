@@ -1045,47 +1045,64 @@ int main() {
                   method2_updates.end());
               printf("(Method 2 K_TCP/D_TCP queued for post_contact_eval_method2_tcp_wrench = 1)\n");
             }
-            // Re-expresses the decoupled post-contact spring (defined about
-            // the contact screw axis / pole) as the equivalent coupled 6x6
-            // spring felt at the tool tip. K_pole is block-diagonal (no
-            // force<->rotation coupling); the lever arm r_c to the TCP fills
-            // in the off-diagonal quadrants of K_TCP via the adjoint.
-            printf("Equivalent 6x6 TCP spring for the decoupled pole spring.\n");
-            printf("Each block below is ONE 6x6 (not four): rows fx..mz = wrench,\n");
-            printf("cols tx..rz = displacement; off-diagonal quadrants = coupling.\n\n");
+            // Method 2 expresses the SAME diagonal post-contact spring at the
+            // tool tip for two poles, via  K_TCP = Ad(r_c)^T K_pole Ad(r_c),
+            // r_c = TCP - pole:
+            //   (A) measured Chasles screw axis -> diagnostic of the motion.
+            //   (B) commanded manual pole       -> the spring actually applied
+            //       in manual-pole apply mode (apply=1, diag=0, manual_pole=1).
+            // Each matrix is ONE 6x6 (rows fx..mz = wrench, cols tx..rz =
+            // displacement); the off-diagonal quadrants are the coupling.
+            const bool manual_pole_commanded =
+                params.post_contact_apply_method2_tcp_wrench &&
+                !params.use_in_method2_k_d_diag &&
+                params.use_manual_method2_pole;
+            const Vec3 edge_ref_cmd = params.method2_pole_freeze_at_contact
+                                          ? first_contact_point
+                                          : tool_contact_point;
+            const Vec3 tcp_ref_cmd = params.method2_pole_freeze_at_contact
+                                         ? first_contact_tcp
+                                         : p_EE;
+            const Vec3 pole_cmd =
+                edge_ref_cmd + params.manual_method2_pole_from_edge;
+            const Vec3 r_c_cmd = tcp_ref_cmd - pole_cmd;
+            const Mat6x6 K_tcp_cmd = adjointTransformedGain(K_pole, r_c_cmd);
+            const Mat6x6 D_tcp_cmd = adjointTransformedGain(D_pole, r_c_cmd);
+
+            printf("source spring K_pole/D_pole (diagonal, from parameters):\n");
+            printGainVec("  Kp [N/m]    ", params.post_contact_Kp_diag);
+            printGainVec("  KR [Nm/rad] ", params.post_contact_KR_diag);
+            printGainVec("  Dp [Ns/m]   ", params.post_contact_Dp_diag);
+            printGainVec("  DR [Nms/rad]", params.post_contact_DR_diag);
+
+            printf("\npoles compared (lever r_c = TCP - pole):\n");
             if (finite_axis.valid) {
-              const Vec3 axis_point_base =
-                  first_contact_point + finite_axis.axis_point_from_start;
-              printf("screw axis (Chasles): angle=%.1f deg | pitch=%+.1f mm/rad\n",
+              printf("  (A) Chasles axis  : angle=%.1f deg | pitch=%+.1f mm/rad\n",
                      (180.0 / M_PI) * finite_axis.angle,
                      1000.0 * finite_axis.pitch);
-              printVec3Mm("  axis_from_edge", axis_point_base - tool_contact_point);
-              printGainVec("  axis_dir", finite_axis.axis_dir);
             } else {
-              printf("screw axis: not valid (rotation too small) -> desired-axis fallback\n");
+              printf("  (A) Chasles axis  : not valid (rotation too small) -> saved-axis fallback\n");
             }
-            printVec3Mm("pole_from_edge (axis point nearest edge)",
-                        pole_point - tool_contact_point);
-            printVec3Mm("lever r_c = TCP - pole (base frame, source of coupling)",
-                        r_c_base);
-            printf("\n-- ADJOINT Ad = [[I, skew(r_c)], [0, I]] --\n");
-            printf("top-left & bottom-right = I, top-right = skew(r_c), bottom-left = 0.\n");
-            printf("each 6x6 gain is moved pole->TCP by  X_TCP = Ad^T * X_pole * Ad.\n");
-            printMat6Grid("Ad", offsetAdjoint(r_c_base));
-            printf("\n-- STIFFNESS K --\n");
-            printSpatialGain6("K_pole (base-frame gains, decoupled)", K_pole);
-            printSpatialGain6("K_TCP  = Ad^T K_pole Ad (base-frame coupled at tool tip)",
-                              K_tcp_base);
-            // Negative entries above are coupling, not a fault: validity is PSD
-            // (all eigenvalues >= 0), which the adjoint preserves from K_pole.
-            printSpatialGainEigenvalues("K_pole", K_pole);
-            printSpatialGainEigenvalues("K_TCP ", K_tcp_base);
-            printf("\n-- DAMPING D --\n");
-            printSpatialGain6("D_pole (base-frame gains, decoupled)", D_pole);
-            printSpatialGain6("D_TCP  = Ad^T D_pole Ad (base-frame coupled at tool tip)",
-                              D_tcp_base);
-            printSpatialGainEigenvalues("D_pole", D_pole);
-            printSpatialGainEigenvalues("D_TCP ", D_tcp_base);
+            printVec3Mm("      pole_from_edge", pole_point - tool_contact_point);
+            printVec3Mm("      r_c           ", r_c_base);
+            printf("  (B) manual pole   : %s, %s reference\n",
+                   manual_pole_commanded ? "COMMANDED this run" : "comparison only",
+                   params.method2_pole_freeze_at_contact ? "contact" : "live");
+            printVec3Mm("      pole_from_edge", pole_cmd - tool_contact_point);
+            printVec3Mm("      r_c           ", r_c_cmd);
+            printVec3Mm("      r_c(B)-r_c(A) ", r_c_cmd - r_c_base);
+
+            printf("\nK_TCP = Ad^T K_pole Ad  [rows fx..mz | cols tx..rz]:\n");
+            printSpatialGain6("  (A) Chasles axis", K_tcp_base);
+            printSpatialGainEigenvalues("  (A) K_TCP", K_tcp_base);
+            printSpatialGain6("  (B) manual pole (commanded)", K_tcp_cmd);
+            printSpatialGainEigenvalues("  (B) K_TCP", K_tcp_cmd);
+
+            printf("\nD_TCP = Ad^T D_pole Ad:\n");
+            printSpatialGain6("  (A) Chasles axis", D_tcp_base);
+            printSpatialGainEigenvalues("  (A) D_TCP", D_tcp_base);
+            printSpatialGain6("  (B) manual pole (commanded)", D_tcp_cmd);
+            printSpatialGainEigenvalues("  (B) D_TCP", D_tcp_cmd);
 
             printf("\n=== Method 3: Least-squares effective moment identification ===\n");
             printf("model: M_C = K_rt*dx_C + D_rt*v_C + K_R*dtheta + D_R*omega\n");
