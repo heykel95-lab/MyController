@@ -640,18 +640,28 @@ inline Mat3 makeSpatialGainMatrix(const Vec3& diagonal_in_task_frame, const Mat3
 
 inline void startKeyboardStopThread(
     const Parameters& params,
-    std::atomic<bool>& stop_requested) {
+    std::atomic<bool>& stop_requested,
+    std::atomic<bool>& proceed_requested,
+    std::atomic<bool>& guide_requested) {
   printf("Press e+Enter to stop the Control algorithm before the remaining duration expires.\n");
+  if (params.use_manual_guidance_start) {
+    printf("Press p+Enter to leave manual guidance and start the phase sequence.\n");
+  }
+  printf("During surface_impedance: press g+Enter to hand-guide the tool, then p+Enter to restart the sequence.\n");
   if (params.experiment_duration <= 0.0) {
     printf("experiment_duration <= 0: the Control algorithm is running indefinitely until e + Enter.\n");
   }
 
-  std::thread keyboard_thread([&stop_requested]() {
+  std::thread keyboard_thread([&stop_requested, &proceed_requested, &guide_requested]() {
     std::string line;
     while (std::getline(std::cin, line)) {
       if (line == "e" || line == "E") {
         stop_requested.store(true);
         break;
+      } else if (line == "p" || line == "P") {
+        proceed_requested.store(true);
+      } else if (line == "g" || line == "G") {
+        guide_requested.store(true);
       }
     }
   });

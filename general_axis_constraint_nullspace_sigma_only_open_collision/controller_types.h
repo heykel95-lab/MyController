@@ -16,6 +16,8 @@ struct Parameters {
   double gripper_open_speed = 0.05;
 
   bool hold_mode = true;
+  bool use_manual_guidance_start = false;
+  double manual_guidance_damping = 0.5;
 
   bool constraint_enabled = true;
   bool use_start_as_surface_point = true;
@@ -33,6 +35,7 @@ struct Parameters {
   bool orientation_test_only = false;
   double orientation_test_extra_tilt_deg = 0.0;
   bool use_phase_sequence = true;
+  bool use_orientation_phase = true;
   double orient_phase_min_time = 0.5;
   double orient_phase_error_threshold = 0.03;
   double post_contact_align_min_time = 0.3;
@@ -45,6 +48,10 @@ struct Parameters {
   double post_contact_max_push = 0.0;
   bool post_contact_eval_method2_tcp_wrench = false;
   bool post_contact_apply_method2_tcp_wrench = false;
+  // When applying the Method 2 TCP wrench: 1 = use the block-diagonal
+  // post_align gains (no lever-arm coupling), which should reproduce the normal
+  // decoupled commanded wrench; 0 = use the saved coupled method2_K_tcp/D_tcp.
+  bool use_in_method2_k_d_diag = false;
   bool method2_tcp_wrench_saved = false;
   Mat6x6 method2_K_tcp_base = Mat6x6::Zero();
   Mat6x6 method2_D_tcp_base = Mat6x6::Zero();

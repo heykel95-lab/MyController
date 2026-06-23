@@ -22,6 +22,12 @@ print_impedance_debug = 0
 # 1 = static holding/compliance test, 0 = smooth relative trajectory test.
 hold_mode = 1
 
+# 1 = after q_init/gripper setup, enter a compliant manual-guidance phase.
+# Move the robot by hand, then press p + Enter; the current pose becomes the
+# start pose for search_first_contact / post_contact_align.
+use_manual_guidance_start = 1
+manual_guidance_damping = 0.5
+
 # Open the Franka hand after q_init and before contact search, as late as
 # possible before contact.
 open_gripper_before_run = 1
@@ -37,8 +43,8 @@ gripper_open_speed = 0.050
 # [N/Nm], each set equal across all 7/6 axes. Finite, not a safety bypass --
 # increase only under professor/lab supervision.
 use_custom_collision_behavior = 1
-collision_torque_acc = 120.0
-collision_torque_nom = 120.0
+collision_torque_acc = 140.0
+collision_torque_nom = 140.0
 collision_force_acc = 240.0
 collision_force_nom = 240.0
 
@@ -105,6 +111,11 @@ tool_contact_point_ee_z = 0.0
 #                                real contact moment passively tips the tool flat.
 #   4. surface_impedance     -- normal-constrained impedance hold/test.
 use_phase_sequence = 1
+
+# 0 = skip orient_to_surface completely. The run starts at search_first_contact
+# and holds the q_init/start orientation during search; after contact it still
+# enters post_contact_align because use_phase_sequence remains 1.
+use_orientation_phase = 0
 
 # ====================================================================
 # Phase 1: orient_to_surface
@@ -209,7 +220,7 @@ post_contact_max_push = 0.031
 # generates a real contact moment at the pressed edge.
 post_contact_Kp_x = 40.0
 post_contact_Kp_y = 40.0
-post_contact_Kp_z = 6500.0
+post_contact_Kp_z = 5500.0
 post_contact_Dp_x = 10.0
 post_contact_Dp_y = 10.0
 post_contact_Dp_z = 175.0
@@ -219,7 +230,7 @@ post_contact_Dp_z = 175.0
 # scripted rotation). Normal (yaw about the target axis) stays constrained;
 # tangent1/tangent2 (the tipping directions) stay very soft so real contact
 # moment can passively rotate the tool flat.
-post_contact_KR_normal = 20.0
+post_contact_KR_normal = 10.0
 post_contact_KR_tangent1 = 0.0
 post_contact_KR_tangent2 = 0.0
 post_contact_DR_normal = 10.0
@@ -229,9 +240,14 @@ post_contact_DR_tangent2 = 0.01
 # Method 2 validation modes.
 # eval = 1 computes the saved 6x6 TCP wrench side-by-side but still commands
 # the normal decoupled self-align wrench.
-# apply = 1 actually commands the saved 6x6 TCP wrench during post_contact_align.
+# apply = 1 actually commands a 6x6 TCP wrench during post_contact_align.
+# When apply = 1, use_in_method2_k_d_diag selects the 6x6 K/D source:
+#   1 = block-diagonal post_align gains (no coupling) -> should reproduce the
+#       normal decoupled commanded wrench / same motion (sanity check).
+#   0 = saved coupled method2_K_tcp/method2_D_tcp (finite-axis lever coupling).
 post_contact_eval_method2_tcp_wrench = 1
-post_contact_apply_method2_tcp_wrench = 0
+post_contact_apply_method2_tcp_wrench = 1
+use_in_method2_k_d_diag = 1
 method2_tcp_wrench_saved = 1
 
 # Saved full 6x6 Method 2 TCP gains, base frame, rows/cols [fx fy fz mx my mz].
@@ -240,74 +256,74 @@ method2_K_tcp_00 = 40
 method2_K_tcp_01 = 0
 method2_K_tcp_02 = 0
 method2_K_tcp_03 = 0
-method2_K_tcp_04 = -0.357632477
-method2_K_tcp_05 = 2.23358915
+method2_K_tcp_04 = -1.0958211
+method2_K_tcp_05 = 2.45233718
 method2_K_tcp_10 = 0
 method2_K_tcp_11 = 40
 method2_K_tcp_12 = 0
-method2_K_tcp_13 = 0.357632477
+method2_K_tcp_13 = 1.0958211
 method2_K_tcp_14 = 0
-method2_K_tcp_15 = 0.347403955
+method2_K_tcp_15 = 0.432642362
 method2_K_tcp_20 = 0
 method2_K_tcp_21 = 0
-method2_K_tcp_22 = 6500
-method2_K_tcp_23 = -362.958238
-method2_K_tcp_24 = -56.4531427
+method2_K_tcp_22 = 5500
+method2_K_tcp_23 = -337.196362
+method2_K_tcp_24 = -59.4883247
 method2_K_tcp_25 = 0
 method2_K_tcp_30 = 0
-method2_K_tcp_31 = 0.357632477
-method2_K_tcp_32 = -362.958238
-method2_K_tcp_33 = 20.2706871
-method2_K_tcp_34 = 3.15232818
-method2_K_tcp_35 = 0.00310607342
-method2_K_tcp_40 = -0.357632477
+method2_K_tcp_31 = 1.0958211
+method2_K_tcp_32 = -337.196362
+method2_K_tcp_33 = 20.703
+method2_K_tcp_34 = 3.64713576
+method2_K_tcp_35 = 0.0118524657
+method2_K_tcp_40 = -1.0958211
 method2_K_tcp_41 = 0
-method2_K_tcp_42 = -56.4531427
-method2_K_tcp_43 = 3.15232818
-method2_K_tcp_44 = 1.83324461
-method2_K_tcp_45 = -5.0199701
-method2_K_tcp_50 = 2.23358915
-method2_K_tcp_51 = 0.347403955
+method2_K_tcp_42 = -59.4883247
+method2_K_tcp_43 = 3.64713576
+method2_K_tcp_44 = 1.34332281
+method2_K_tcp_45 = -2.56718307
+method2_K_tcp_50 = 2.45233718
+method2_K_tcp_51 = 0.432642362
 method2_K_tcp_52 = 0
-method2_K_tcp_53 = 0.00310607342
-method2_K_tcp_54 = -5.0199701
-method2_K_tcp_55 = 18.7879943
+method2_K_tcp_53 = 0.0118524657
+method2_K_tcp_54 = -2.56718307
+method2_K_tcp_55 = 9.48515545
 method2_D_tcp_00 = 10
 method2_D_tcp_01 = 0
 method2_D_tcp_02 = 0
 method2_D_tcp_03 = 0
-method2_D_tcp_04 = -0.0894081192
-method2_D_tcp_05 = 0.558397288
+method2_D_tcp_04 = -0.273955275
+method2_D_tcp_05 = 0.613084295
 method2_D_tcp_10 = 0
 method2_D_tcp_11 = 10
 method2_D_tcp_12 = 0
-method2_D_tcp_13 = 0.0894081192
+method2_D_tcp_13 = 0.273955275
 method2_D_tcp_14 = 0
-method2_D_tcp_15 = 0.0868509887
+method2_D_tcp_15 = 0.10816059
 method2_D_tcp_20 = 0
 method2_D_tcp_21 = 0
 method2_D_tcp_22 = 175
-method2_D_tcp_23 = -9.77195255
-method2_D_tcp_24 = -1.5198923
+method2_D_tcp_23 = -10.7289752
+method2_D_tcp_24 = -1.89281033
 method2_D_tcp_25 = 0
 method2_D_tcp_30 = 0
-method2_D_tcp_31 = 0.0894081192
-method2_D_tcp_32 = -9.77195255
-method2_D_tcp_33 = 0.556462562
-method2_D_tcp_34 = 0.0848703741
-method2_D_tcp_35 = 0.000776518355
-method2_D_tcp_40 = -0.0894081192
+method2_D_tcp_31 = 0.273955275
+method2_D_tcp_32 = -10.7289752
+method2_D_tcp_33 = 0.675281767
+method2_D_tcp_34 = 0.116045229
+method2_D_tcp_35 = 0.00296311643
+method2_D_tcp_40 = -0.273955275
 method2_D_tcp_41 = 0
-method2_D_tcp_42 = -1.5198923
-method2_D_tcp_43 = 0.0848703741
-method2_D_tcp_44 = 0.693202904
-method2_D_tcp_45 = -2.50249253
-method2_D_tcp_50 = 0.558397288
-method2_D_tcp_51 = 0.0868509887
+method2_D_tcp_42 = -1.89281033
+method2_D_tcp_43 = 0.116045229
+method2_D_tcp_44 = 0.707181006
+method2_D_tcp_45 = -2.51429577
+method2_D_tcp_50 = 0.613084295
+method2_D_tcp_51 = 0.10816059
 method2_D_tcp_52 = 0
-method2_D_tcp_53 = 0.000776518355
-method2_D_tcp_54 = -2.50249253
-method2_D_tcp_55 = 9.36273195
+method2_D_tcp_53 = 0.00296311643
+method2_D_tcp_54 = -2.51429577
+method2_D_tcp_55 = 9.369554
 
 # Virtual center of rotation during this phase:
 # p_c = p_contact + vcr_offset * alignment_target_normal.
@@ -333,24 +349,24 @@ print_gain_suggestion_diagnostics = 1
 # Last best instantaneous axis, base frame, relative to the active tool edge.
 # Used only for best-axis comparison diagnostics. Auto-updated from the best
 # per-cycle post_contact_align axis sample.
-last_best_axis_from_edge_x = 0.0139
-last_best_axis_from_edge_y = 0.0342
-last_best_axis_from_edge_z = 0.0030
-last_best_axis_dir_x = -0.419
-last_best_axis_dir_y = -0.897
-last_best_axis_dir_z = -0.140
-last_best_axis_pitch = -0.0143
+last_best_axis_from_edge_x = 0.0173
+last_best_axis_from_edge_y = 0.0118
+last_best_axis_from_edge_z = 0.0014
+last_best_axis_dir_x = -0.865
+last_best_axis_dir_y = -0.501
+last_best_axis_dir_z = -0.024
+last_best_axis_pitch = 0.0301
 
 # Last finite Chasles axis, base frame, relative to the active tool edge.
 # Used by Method 2 diagnostics and to save the coupled K_TCP/D_TCP matrices.
 # Auto-updated from the full start/end post_contact_align edge motion.
-last_chasles_axis_from_edge_x = 0.0085
-last_chasles_axis_from_edge_y = -0.0135
-last_chasles_axis_from_edge_z = -0.0129
-last_chasles_axis_dir_x = -0.864
-last_chasles_axis_dir_y = -0.502
-last_chasles_axis_dir_z = -0.046
-last_chasles_axis_pitch = 0.0142
+last_chasles_axis_from_edge_x = 0.0097
+last_chasles_axis_from_edge_y = -0.0148
+last_chasles_axis_from_edge_z = -0.0281
+last_chasles_axis_dir_x = -0.793
+last_chasles_axis_dir_y = -0.608
+last_chasles_axis_dir_z = 0.045
+last_chasles_axis_pitch = 0.0105
 
 # Gain print bounds and legacy reference-motion settings.
 # suggested_gain_min/max clamp printed suggested values;
@@ -362,28 +378,39 @@ suggested_gain_max = 8000.0
 
 # Method 1: quasi-static initial selection, surface-frame normal/tangent1/tangent2.
 # Kp = Fmax / dxmax, KR = Mmax / dtheta_max.
-quasi_force_limit_normal = 15.0
-quasi_force_limit_tangent1 = 10.0
-quasi_force_limit_tangent2 = 10.0
-quasi_displacement_limit_normal = 0.005
-quasi_displacement_limit_tangent1 = 0.010
-quasi_displacement_limit_tangent2 = 0.010
-quasi_moment_limit_normal = 0.75
-quasi_moment_limit_tangent1 = 0.75
-quasi_moment_limit_tangent2 = 0.75
-quasi_angle_limit_normal = 0.1745
-quasi_angle_limit_tangent1 = 0.1745
-quasi_angle_limit_tangent2 = 0.1745
+# Limits chosen from the post_contact_align run operating point:
+#   normal: steady push ~114 N at the working 6500 N/m -> dx = 114/6500 ~ 17.5 mm.
+#   tangent: soft slide, ~4 N over 100 mm -> 40 N/m (matches post_contact_Kp_x/y).
+quasi_force_limit_normal = 114.0
+quasi_force_limit_tangent1 = 4.0
+quasi_force_limit_tangent2 = 4.0
+quasi_displacement_limit_normal = 0.0175
+quasi_displacement_limit_tangent1 = 0.100
+quasi_displacement_limit_tangent2 = 0.100
+# normal = constrained yaw about the push axis (2 Nm over 0.10 rad -> 20 Nm/rad).
+# tangent = free tipping: tiny moment over a large angle floors KR to ~0.01 so the
+# tool passively rotates flat (the 67 Nm seen in the run is contact reaction, not
+# a spring moment, so it must NOT be designed into the tangent stiffness).
+quasi_moment_limit_normal = 2.0
+quasi_moment_limit_tangent1 = 0.005
+quasi_moment_limit_tangent2 = 0.005
+quasi_angle_limit_normal = 0.10
+quasi_angle_limit_tangent1 = 0.50
+quasi_angle_limit_tangent2 = 0.50
 
 # D = 2*zeta*sqrt(M*K). During a run, M/I is computed from libfranka
 # as the task-frame diagonal of Lambda=(J*Mq^-1*J^T)^-1. These values
 # are only fallbacks if that estimate is not numerically available.
-quasi_effective_mass_normal = 1.0
-quasi_effective_mass_tangent1 = 1.0
-quasi_effective_mass_tangent2 = 1.0
-quasi_effective_inertia_normal = 1.0
-quasi_effective_inertia_tangent1 = 1.0
-quasi_effective_inertia_tangent2 = 1.0
+# Fallback only (libfranka Lambda overrides these online): rough Franka
+# task-space inertia near this contact pose, ~2.5 kg translational, ~0.25 kg m^2
+# rotational. Used so the critically damped D = 2*zeta*sqrt(M*K) is sane even
+# when the Lambda estimate is unavailable.
+quasi_effective_mass_normal = 2.5
+quasi_effective_mass_tangent1 = 2.5
+quasi_effective_mass_tangent2 = 2.5
+quasi_effective_inertia_normal = 0.25
+quasi_effective_inertia_tangent1 = 0.25
+quasi_effective_inertia_tangent2 = 0.25
 quasi_damping_ratio = 1.0
 
 # Method 3: small damped least-squares ridge for the effective moment fit.
@@ -425,8 +452,9 @@ trajectory_duration = 8.0
 # ====================================================================
 # horizontal_tool          -> current/default tool orientation
 # tilted_tool               -> same, but q_init_5 is changed
+# tilted_close              -> tilted measured close-to-table start posture
 # horizontal_table_search   -> starts close above the detected horizontal table
-q_init_case = horizontal_table_search
+q_init_case = tilted_tool
 
 q_init_horizontal_1 = 0.0
 q_init_horizontal_2 = -pi/4
@@ -436,13 +464,23 @@ q_init_horizontal_5 = 0.0
 q_init_horizontal_6 = pi/2
 q_init_horizontal_7 = pi/4
 
-q_init_tilted_1 = -0.050853
-q_init_tilted_2 = 0.147669
-q_init_tilted_3 = -0.068458
-q_init_tilted_4 = -2.294886
-q_init_tilted_5 = 0.333818
-q_init_tilted_6 = 2.446060
-q_init_tilted_7 = 0.457594
+q_init_tilted_1 = -0.050676
+q_init_tilted_2 = 0.306123
+q_init_tilted_3 = -0.077518
+q_init_tilted_4 = -2.137129
+q_init_tilted_5 = 0.307386
+q_init_tilted_6 = 2.433004
+q_init_tilted_7 = 0.426049
+
+# From measured close tilted start, listed in the run as:
+# [-2.9, 8.5, -3.9, -131.5, 19.2, 140.2, 26.2] deg.
+q_init_tilted_close_1 = -0.050615
+q_init_tilted_close_2 = 0.148353
+q_init_tilted_close_3 = -0.068068
+q_init_tilted_close_4 = -2.295108
+q_init_tilted_close_5 = 0.335103
+q_init_tilted_close_6 = 2.446952
+q_init_tilted_close_7 = 0.457276
 
 # Good horizontal table-search start posture: keeps the tool close to the
 # table while leaving q4 far enough from its lower limit.

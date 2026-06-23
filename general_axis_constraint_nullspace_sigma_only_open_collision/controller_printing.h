@@ -181,10 +181,14 @@ inline void printJointStartEndTableDeg(const Vec7& q_start, const Vec7& q_final)
 
 inline void printParameters(const Parameters& params) {
   printf("\n=== Setup ===\n");
-  printf("phase_sequence: %s | contact_search: %s | orientation_test: %s\n",
+  printf("phase_sequence: %s | orientation_phase: %s | contact_search: %s | orientation_test: %s\n",
          params.use_phase_sequence ? "on" : "off",
+         params.use_orientation_phase ? "on" : "off",
          params.use_contact_search ? "on" : "off",
          params.orientation_test_only ? "on" : "off");
+  printf("manual_guidance_start: %s | manual_damping=%.2f\n",
+         params.use_manual_guidance_start ? "on" : "off",
+         params.manual_guidance_damping);
   printf("force/moment limits: search=%.1f N | align=%.1f N | post_moment=%.1f Nm\n",
          params.contact_force_threshold,
          params.alignment_contact_force_threshold,

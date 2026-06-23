@@ -132,6 +132,10 @@ inline Parameters readParameters(const std::string& filename) {
 
   p.hold_mode = getBool("hold_mode", p.hold_mode);
   p.hold_mode = getBool("use_current_pose", p.hold_mode);
+  p.use_manual_guidance_start =
+      getBool("use_manual_guidance_start", p.use_manual_guidance_start);
+  p.manual_guidance_damping =
+      getDouble("manual_guidance_damping", p.manual_guidance_damping);
   p.constraint_enabled = getBool("constraint_enabled", p.constraint_enabled);
   p.use_start_as_surface_point = getBool("use_start_as_surface_point", p.use_start_as_surface_point);
   p.surface_point(0) = getDouble("surface_point_x", p.surface_point(0));
@@ -192,6 +196,7 @@ inline Parameters readParameters(const std::string& filename) {
   p.orientation_test_extra_tilt_deg =
       getDouble("orientation_test_extra_tilt_deg", p.orientation_test_extra_tilt_deg);
   p.use_phase_sequence = getBool("use_phase_sequence", p.use_phase_sequence);
+  p.use_orientation_phase = getBool("use_orientation_phase", p.use_orientation_phase);
   p.orient_phase_min_time = getDouble("orient_phase_min_time", p.orient_phase_min_time);
   p.orient_phase_error_threshold =
       getDouble("orient_phase_error_threshold", p.orient_phase_error_threshold);
@@ -222,6 +227,8 @@ inline Parameters readParameters(const std::string& filename) {
   p.post_contact_apply_method2_tcp_wrench =
       getBool("post_contact_apply_method2_tcp_wrench",
               p.post_contact_apply_method2_tcp_wrench);
+  p.use_in_method2_k_d_diag =
+      getBool("use_in_method2_k_d_diag", p.use_in_method2_k_d_diag);
   p.method2_tcp_wrench_saved =
       getBool("method2_tcp_wrench_saved", p.method2_tcp_wrench_saved);
   p.method2_K_tcp_base = getMat6("method2_K_tcp", p.method2_K_tcp_base);
@@ -420,6 +427,14 @@ inline Parameters readParameters(const std::string& filename) {
     p.q_init[4] = getDouble("q_init_tilted_5", p.q_init[4]);
     p.q_init[5] = getDouble("q_init_tilted_6", p.q_init[5]);
     p.q_init[6] = getDouble("q_init_tilted_7", p.q_init[6]);
+  } else if (p.q_init_case == "tilted_close") {
+    p.q_init[0] = getDouble("q_init_tilted_close_1", p.q_init[0]);
+    p.q_init[1] = getDouble("q_init_tilted_close_2", p.q_init[1]);
+    p.q_init[2] = getDouble("q_init_tilted_close_3", p.q_init[2]);
+    p.q_init[3] = getDouble("q_init_tilted_close_4", p.q_init[3]);
+    p.q_init[4] = getDouble("q_init_tilted_close_5", p.q_init[4]);
+    p.q_init[5] = getDouble("q_init_tilted_close_6", p.q_init[5]);
+    p.q_init[6] = getDouble("q_init_tilted_close_7", p.q_init[6]);
   } else {
     p.q_init[0] = getDouble("q_init_horizontal_1", p.q_init[0]);
     p.q_init[1] = getDouble("q_init_horizontal_2", p.q_init[1]);
