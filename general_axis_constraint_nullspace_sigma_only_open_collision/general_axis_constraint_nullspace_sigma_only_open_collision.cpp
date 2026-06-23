@@ -35,6 +35,15 @@ int main() {
     Parameters params = readParameters("parameters.txt");
     // Print the parameters to the console for confirmation before starting the experiment.
     printParameters(params);
+    if ((params.post_contact_eval_method2_tcp_wrench ||
+         params.post_contact_apply_method2_tcp_wrench) &&
+        !params.method2_tcp_wrench_saved) {
+      fprintf(stderr,
+              "Method 2 TCP wrench evaluation/application is enabled, but no saved K_TCP/D_TCP was found.\n");
+      fprintf(stderr,
+              "Run once with Method 2 evaluation/application disabled so the finite Chasles axis can save the matrices.\n");
+      return -1;
+    }
 
     // Connect to the robot. This will block until a connection is established.
     Robot robot(params.robot_ip);
@@ -299,6 +308,31 @@ int main() {
     bool last_valid_post_align_axis_valid = false;
     bool last_valid_post_align_axis_stable = false;
     EffectiveMomentFitAccumulator fit_effective_moment;
+    std::size_t method2_eval_samples = 0;
+    double method2_eval_force_error_sq_sum = 0.0;
+    double method2_eval_moment_error_sq_sum = 0.0;
+    double method2_eval_force_error_max = 0.0;
+    double method2_eval_moment_error_max = 0.0;
+    double method2_eval_force_norm_sum = 0.0;
+    double method2_eval_moment_norm_sum = 0.0;
+    double method2_eval_normal_force_norm_sum = 0.0;
+    double method2_eval_normal_moment_norm_sum = 0.0;
+    double method2_eval_force_from_translation_norm_sum = 0.0;
+    double method2_eval_force_from_rotation_norm_sum = 0.0;
+    double method2_eval_moment_from_translation_norm_sum = 0.0;
+    double method2_eval_moment_from_rotation_norm_sum = 0.0;
+    double method2_eval_final_force_error = 0.0;
+    double method2_eval_final_moment_error = 0.0;
+    double method2_eval_final_method2_force_norm = 0.0;
+    double method2_eval_final_method2_moment_norm = 0.0;
+    double method2_eval_final_normal_force_norm = 0.0;
+    double method2_eval_final_normal_moment_norm = 0.0;
+    double method2_eval_final_force_from_translation_norm = 0.0;
+    double method2_eval_final_force_from_rotation_norm = 0.0;
+    double method2_eval_final_moment_from_translation_norm = 0.0;
+    double method2_eval_final_moment_from_rotation_norm = 0.0;
+    std::vector<std::pair<std::string, std::string>> pending_parameter_updates;
+    pending_parameter_updates.reserve(96);
 
     // Print the starting message and instructions for the user before entering the control loop.
     printf("Starting impedance controller:\n");
@@ -660,6 +694,24 @@ int main() {
                    finite_axis.axis_dir(1),
                    finite_axis.axis_dir(2),
                    1000.0 * finite_axis.pitch);
+            char edge_x[32], edge_y[32], edge_z[32];
+            char dir_x[32], dir_y[32], dir_z[32];
+            char pitch_buf[32];
+            snprintf(edge_x, sizeof(edge_x), "%.4f", finite_axis.axis_point_from_start(0));
+            snprintf(edge_y, sizeof(edge_y), "%.4f", finite_axis.axis_point_from_start(1));
+            snprintf(edge_z, sizeof(edge_z), "%.4f", finite_axis.axis_point_from_start(2));
+            snprintf(dir_x, sizeof(dir_x), "%.3f", finite_axis.axis_dir(0));
+            snprintf(dir_y, sizeof(dir_y), "%.3f", finite_axis.axis_dir(1));
+            snprintf(dir_z, sizeof(dir_z), "%.3f", finite_axis.axis_dir(2));
+            snprintf(pitch_buf, sizeof(pitch_buf), "%.4f", finite_axis.pitch);
+            pending_parameter_updates.emplace_back("last_chasles_axis_from_edge_x", edge_x);
+            pending_parameter_updates.emplace_back("last_chasles_axis_from_edge_y", edge_y);
+            pending_parameter_updates.emplace_back("last_chasles_axis_from_edge_z", edge_z);
+            pending_parameter_updates.emplace_back("last_chasles_axis_dir_x", dir_x);
+            pending_parameter_updates.emplace_back("last_chasles_axis_dir_y", dir_y);
+            pending_parameter_updates.emplace_back("last_chasles_axis_dir_z", dir_z);
+            pending_parameter_updates.emplace_back("last_chasles_axis_pitch", pitch_buf);
+            printf("(last_chasles_axis_* queued from this run's finite Chasles axis)\n");
           } else {
             printf("finite_axis: angle=%.1f deg, too small for a well-defined axis\n",
                    (180.0 / M_PI) * finite_axis.angle);
@@ -667,35 +719,35 @@ int main() {
 
           printf("\n=== Best axis compare ===\n");
           if (last_valid_post_align_axis_valid) {
-            const Vec3 desired_axis_dir =
-                normalizedOrFallback(params.desired_axis_dir, Vec3(1.0, 0.0, 0.0));
+            const Vec3 last_best_axis_dir =
+                normalizedOrFallback(params.last_best_axis_dir, Vec3(1.0, 0.0, 0.0));
             const Vec3 axis_point_error =
                 last_valid_post_align_axis_point_from_edge -
-                params.desired_axis_from_edge;
+                params.last_best_axis_from_edge;
             const double axis_dir_dot =
                 std::abs(std::max(
                     -1.0,
-                    std::min(1.0, last_valid_post_align_axis_dir.dot(desired_axis_dir))));
+                    std::min(1.0, last_valid_post_align_axis_dir.dot(last_best_axis_dir))));
             const double axis_dir_error_deg =
                 (180.0 / M_PI) * std::acos(axis_dir_dot);
             const double desired_axis_edge_distance =
                 pointDistanceToAxis(
                     Vec3::Zero(),
-                    params.desired_axis_from_edge,
-                    desired_axis_dir);
+                    params.last_best_axis_from_edge,
+                    last_best_axis_dir);
             const double axis_edge_error =
                 last_valid_post_align_axis_edge_distance -
                 desired_axis_edge_distance;
             const double pitch_error =
-                last_valid_post_align_screw_pitch - params.desired_axis_pitch;
-            printf("target:   axis_from_edge=[%+.1f, %+.1f, %+.1f] mm | dir=[%+.3f, %+.3f, %+.3f] | pitch=%+.1f mm/rad\n",
-                   1000.0 * params.desired_axis_from_edge(0),
-                   1000.0 * params.desired_axis_from_edge(1),
-                   1000.0 * params.desired_axis_from_edge(2),
-                   desired_axis_dir(0),
-                   desired_axis_dir(1),
-                   desired_axis_dir(2),
-                   1000.0 * params.desired_axis_pitch);
+                last_valid_post_align_screw_pitch - params.last_best_axis_pitch;
+            printf("last_best_target: axis_from_edge=[%+.1f, %+.1f, %+.1f] mm | dir=[%+.3f, %+.3f, %+.3f] | pitch=%+.1f mm/rad\n",
+                   1000.0 * params.last_best_axis_from_edge(0),
+                   1000.0 * params.last_best_axis_from_edge(1),
+                   1000.0 * params.last_best_axis_from_edge(2),
+                   last_best_axis_dir(0),
+                   last_best_axis_dir(1),
+                   last_best_axis_dir(2),
+                   1000.0 * params.last_best_axis_pitch);
             printf("measured: axis_from_edge=[%+.1f, %+.1f, %+.1f] mm | dir=[%+.3f, %+.3f, %+.3f] | pitch=%+.1f mm/rad  (%s, t=%.2fs, w=%.2f rad/s)\n",
                    1000.0 * last_valid_post_align_axis_point_from_edge(0),
                    1000.0 * last_valid_post_align_axis_point_from_edge(1),
@@ -712,10 +764,6 @@ int main() {
                    axis_dir_error_deg,
                    1000.0 * axis_edge_error,
                    1000.0 * pitch_error);
-
-            // Auto-update desired_axis_* in parameters.txt to this run's
-            // measured axis, so the next run is always compared against the
-            // one just before it.
             char edge_x[32], edge_y[32], edge_z[32];
             char dir_x[32], dir_y[32], dir_z[32];
             char pitch_buf[32];
@@ -726,21 +774,20 @@ int main() {
             snprintf(dir_y, sizeof(dir_y), "%.3f", last_valid_post_align_axis_dir(1));
             snprintf(dir_z, sizeof(dir_z), "%.3f", last_valid_post_align_axis_dir(2));
             snprintf(pitch_buf, sizeof(pitch_buf), "%.4f", last_valid_post_align_screw_pitch);
-            updateParameterValues(
-                "parameters.txt",
-                {{"desired_axis_from_edge_x", edge_x},
-                 {"desired_axis_from_edge_y", edge_y},
-                 {"desired_axis_from_edge_z", edge_z},
-                 {"desired_axis_dir_x", dir_x},
-                 {"desired_axis_dir_y", dir_y},
-                 {"desired_axis_dir_z", dir_z},
-                 {"desired_axis_pitch", pitch_buf}});
-            printf("(target auto-updated to this run's measured axis for next time)\n");
+            pending_parameter_updates.emplace_back("last_best_axis_from_edge_x", edge_x);
+            pending_parameter_updates.emplace_back("last_best_axis_from_edge_y", edge_y);
+            pending_parameter_updates.emplace_back("last_best_axis_from_edge_z", edge_z);
+            pending_parameter_updates.emplace_back("last_best_axis_dir_x", dir_x);
+            pending_parameter_updates.emplace_back("last_best_axis_dir_y", dir_y);
+            pending_parameter_updates.emplace_back("last_best_axis_dir_z", dir_z);
+            pending_parameter_updates.emplace_back("last_best_axis_pitch", pitch_buf);
+            printf("(last_best_axis_* queued from this run's best instantaneous axis)\n");
+
           } else {
             printf("no stable rotation measured | edge_norm=%.1f mm\n", edge_from_contact_mm.norm());
           }
 
-          if (params.suggest_gains_from_desired_axis) {
+          if (params.print_gain_suggestion_diagnostics) {
             std::array<double, 49> mass_array = model.mass(state);
             Map<const Mat7x7> joint_mass(mass_array.data());
             const CartesianInertiaEstimate cartesian_inertia =
@@ -791,20 +838,32 @@ int main() {
               pole_point = nearestPointOnAxis(
                   tool_contact_point, axis_point_base, finite_axis.axis_dir);
             } else {
-              pole_point = tool_contact_point + params.desired_axis_from_edge;
+              pole_point = tool_contact_point + params.last_chasles_axis_from_edge;
             }
-            const Vec3 r_c_task =
-                -R_alignment_target.transpose() * (pole_point - p_EE);
+            const Vec3 r_c_base = p_EE - pole_point;
             // Use the post_contact_align gains from parameters.txt directly.
             // In this self-alignment experiment R_alignment_target may be an intentional
             // tilted tool-orientation target, not the real table/contact plane,
             // so do not rotate translational gains through that frame here.
-            const Mat6x6 K_pole =
-                blockDiagonalGain(params.post_contact_Kp_diag, params.post_contact_KR_diag);
-            const Mat6x6 D_pole =
-                blockDiagonalGain(params.post_contact_Dp_diag, params.post_contact_DR_diag);
-            const Mat6x6 K_tcp_task = adjointTransformedGain(K_pole, r_c_task);
-            const Mat6x6 D_tcp_task = adjointTransformedGain(D_pole, r_c_task);
+            Mat6x6 K_pole = Mat6x6::Zero();
+            K_pole.block<3, 3>(0, 0) = Kp_post_contact;
+            K_pole.block<3, 3>(3, 3) = KR_post_contact;
+            Mat6x6 D_pole = Mat6x6::Zero();
+            D_pole.block<3, 3>(0, 0) = Dp_post_contact;
+            D_pole.block<3, 3>(3, 3) = DR_post_contact;
+            const Mat6x6 K_tcp_base = adjointTransformedGain(K_pole, r_c_base);
+            const Mat6x6 D_tcp_base = adjointTransformedGain(D_pole, r_c_base);
+            if (finite_axis.valid && !params.post_contact_apply_method2_tcp_wrench) {
+              std::vector<std::pair<std::string, std::string>> method2_updates;
+              method2_updates.emplace_back("method2_tcp_wrench_saved", "1");
+              appendMat6ParameterUpdates(method2_updates, "method2_K_tcp", K_tcp_base);
+              appendMat6ParameterUpdates(method2_updates, "method2_D_tcp", D_tcp_base);
+              pending_parameter_updates.insert(
+                  pending_parameter_updates.end(),
+                  method2_updates.begin(),
+                  method2_updates.end());
+              printf("(Method 2 K_TCP/D_TCP queued for post_contact_eval_method2_tcp_wrench = 1)\n");
+            }
             // Re-expresses the decoupled post-contact spring (defined about
             // the contact screw axis / pole) as the equivalent coupled 6x6
             // spring felt at the tool tip. K_pole is block-diagonal (no
@@ -826,20 +885,20 @@ int main() {
             }
             printVec3Mm("pole_from_edge (axis point nearest edge)",
                         pole_point - tool_contact_point);
-            printVec3Mm("lever r_c = TCP - pole (task frame, source of coupling)",
-                        r_c_task);
+            printVec3Mm("lever r_c = TCP - pole (base frame, source of coupling)",
+                        r_c_base);
             printf("\n-- ADJOINT Ad = [[I, skew(r_c)], [0, I]] --\n");
             printf("top-left & bottom-right = I, top-right = skew(r_c), bottom-left = 0.\n");
             printf("each 6x6 gain is moved pole->TCP by  X_TCP = Ad^T * X_pole * Ad.\n");
-            printMat6Grid("Ad", offsetAdjoint(r_c_task));
+            printMat6Grid("Ad", offsetAdjoint(r_c_base));
             printf("\n-- STIFFNESS K --\n");
-            printSpatialGain6("K_pole (as commanded, decoupled)", K_pole);
-            printSpatialGain6("K_TCP  = Ad^T K_pole Ad (coupled at tool tip)",
-                              K_tcp_task);
+            printSpatialGain6("K_pole (base-frame gains, decoupled)", K_pole);
+            printSpatialGain6("K_TCP  = Ad^T K_pole Ad (base-frame coupled at tool tip)",
+                              K_tcp_base);
             printf("\n-- DAMPING D --\n");
-            printSpatialGain6("D_pole (as commanded, decoupled)", D_pole);
-            printSpatialGain6("D_TCP  = Ad^T D_pole Ad (coupled at tool tip)",
-                              D_tcp_task);
+            printSpatialGain6("D_pole (base-frame gains, decoupled)", D_pole);
+            printSpatialGain6("D_TCP  = Ad^T D_pole Ad (base-frame coupled at tool tip)",
+                              D_tcp_base);
 
             printf("\n=== Method 3: Least-squares effective moment identification ===\n");
             printf("model: M_C = K_rt*dx_C + D_rt*v_C + K_R*dtheta + D_R*omega\n");
@@ -1086,13 +1145,88 @@ int main() {
           (phase == ControlPhase::kPostContactAlign) ? KR_post_contact : KR;
       const Mat3& DR_used =
           (phase == ControlPhase::kPostContactAlign) ? DR_post_contact : DR;
-      // Comuting forces and torques from the impedance control law:
-      Vec3 f = Kp_used * e_p + Dp_used * (desired.pdot_d - pdot);
-      Vec3 m = KR_used * e_R - DR_used * omega;
-      // The task-space wrench is computed by concatenating the force and torque vectors,
       Vec6 wrench;
-      wrench.head<3>() = f;
-      wrench.tail<3>() = m;
+      Vec3 f;
+      Vec3 m;
+      if (phase == ControlPhase::kPostContactAlign &&
+          params.post_contact_apply_method2_tcp_wrench) {
+        // Method 2 active-apply mode: command the saved full coupled TCP
+        // spring from the previous baseline run. Errors stay at the TCP; the
+        // saved K_TCP/D_TCP already contain the finite-axis lever-arm coupling.
+        const Mat6x6& K_tcp_base = params.method2_K_tcp_base;
+        const Mat6x6& D_tcp_base = params.method2_D_tcp_base;
+
+        Vec6 dx_base;
+        dx_base.head<3>() = e_p;
+        dx_base.tail<3>() = e_R;
+        Vec6 dv_base;
+        dv_base.head<3>() = desired.pdot_d - pdot;
+        dv_base.tail<3>() = -omega;
+
+        wrench = K_tcp_base * dx_base + D_tcp_base * dv_base;
+        f = wrench.head<3>();
+        m = wrench.tail<3>();
+      } else {
+        // Computing forces and torques from the normal decoupled impedance law.
+        f = Kp_used * e_p + Dp_used * (desired.pdot_d - pdot);
+        m = KR_used * e_R - DR_used * omega;
+        wrench.head<3>() = f;
+        wrench.tail<3>() = m;
+        if (phase == ControlPhase::kPostContactAlign &&
+            params.post_contact_eval_method2_tcp_wrench) {
+          // Passive evaluation only: compute the saved Method 2 wrench from
+          // the same TCP errors, but do not command it. The normal self-align
+          // wrench above remains active.
+          Vec6 dx_base;
+          dx_base.head<3>() = e_p;
+          dx_base.tail<3>() = e_R;
+          Vec6 dv_base;
+          dv_base.head<3>() = desired.pdot_d - pdot;
+          dv_base.tail<3>() = -omega;
+          const Vec6 method2_wrench =
+              params.method2_K_tcp_base * dx_base + params.method2_D_tcp_base * dv_base;
+          const Vec3 method2_f_from_translation =
+              params.method2_K_tcp_base.block<3, 3>(0, 0) * dx_base.head<3>() +
+              params.method2_D_tcp_base.block<3, 3>(0, 0) * dv_base.head<3>();
+          const Vec3 method2_f_from_rotation =
+              params.method2_K_tcp_base.block<3, 3>(0, 3) * dx_base.tail<3>() +
+              params.method2_D_tcp_base.block<3, 3>(0, 3) * dv_base.tail<3>();
+          const Vec3 method2_m_from_translation =
+              params.method2_K_tcp_base.block<3, 3>(3, 0) * dx_base.head<3>() +
+              params.method2_D_tcp_base.block<3, 3>(3, 0) * dv_base.head<3>();
+          const Vec3 method2_m_from_rotation =
+              params.method2_K_tcp_base.block<3, 3>(3, 3) * dx_base.tail<3>() +
+              params.method2_D_tcp_base.block<3, 3>(3, 3) * dv_base.tail<3>();
+          const Vec3 method2_f = method2_wrench.head<3>();
+          const Vec3 method2_m = method2_wrench.tail<3>();
+          const double f_error = (method2_f - f).norm();
+          const double m_error = (method2_m - m).norm();
+
+          ++method2_eval_samples;
+          method2_eval_force_error_sq_sum += f_error * f_error;
+          method2_eval_moment_error_sq_sum += m_error * m_error;
+          method2_eval_force_error_max = std::max(method2_eval_force_error_max, f_error);
+          method2_eval_moment_error_max = std::max(method2_eval_moment_error_max, m_error);
+          method2_eval_force_norm_sum += method2_f.norm();
+          method2_eval_moment_norm_sum += method2_m.norm();
+          method2_eval_normal_force_norm_sum += f.norm();
+          method2_eval_normal_moment_norm_sum += m.norm();
+          method2_eval_force_from_translation_norm_sum += method2_f_from_translation.norm();
+          method2_eval_force_from_rotation_norm_sum += method2_f_from_rotation.norm();
+          method2_eval_moment_from_translation_norm_sum += method2_m_from_translation.norm();
+          method2_eval_moment_from_rotation_norm_sum += method2_m_from_rotation.norm();
+          method2_eval_final_force_error = f_error;
+          method2_eval_final_moment_error = m_error;
+          method2_eval_final_method2_force_norm = method2_f.norm();
+          method2_eval_final_method2_moment_norm = method2_m.norm();
+          method2_eval_final_normal_force_norm = f.norm();
+          method2_eval_final_normal_moment_norm = m.norm();
+          method2_eval_final_force_from_translation_norm = method2_f_from_translation.norm();
+          method2_eval_final_force_from_rotation_norm = method2_f_from_rotation.norm();
+          method2_eval_final_moment_from_translation_norm = method2_m_from_translation.norm();
+          method2_eval_final_moment_from_rotation_norm = method2_m_from_rotation.norm();
+        }
+      }
       // The joint torques for the impedance control task are computed
       // by mapping the task-space wrench through the Jacobian transpose.
 
@@ -1174,6 +1308,51 @@ int main() {
       return Torques(tau_array);
     });
 
+    if (!pending_parameter_updates.empty()) {
+      updateParameterValues("parameters.txt", pending_parameter_updates);
+      printf("parameters.txt updated after control loop (%zu queued values).\n",
+             pending_parameter_updates.size());
+    }
+
+    if (params.post_contact_eval_method2_tcp_wrench && method2_eval_samples > 0) {
+      const double samples = static_cast<double>(method2_eval_samples);
+      const double force_rms =
+          std::sqrt(method2_eval_force_error_sq_sum / samples);
+      const double moment_rms =
+          std::sqrt(method2_eval_moment_error_sq_sum / samples);
+      printf("\n=== Method 2 eval wrench compare ===\n");
+      printf("samples=%zu | commanded=normal decoupled wrench | method2=saved coupled TCP wrench (not commanded)\n",
+             method2_eval_samples);
+      printf("force:  normal_avg=%5.1f N | method2_avg=%5.1f N | rms_diff=%5.1f N | max_diff=%5.1f N | final_diff=%5.1f N\n",
+             method2_eval_normal_force_norm_sum / samples,
+             method2_eval_force_norm_sum / samples,
+             force_rms,
+             method2_eval_force_error_max,
+             method2_eval_final_force_error);
+      printf("moment: normal_avg=%5.1f Nm | method2_avg=%5.1f Nm | rms_diff=%5.1f Nm | max_diff=%5.1f Nm | final_diff=%5.1f Nm\n",
+             method2_eval_normal_moment_norm_sum / samples,
+             method2_eval_moment_norm_sum / samples,
+             moment_rms,
+             method2_eval_moment_error_max,
+             method2_eval_final_moment_error);
+      printf("final:  normal=(%5.1f N, %5.1f Nm) | method2=(%5.1f N, %5.1f Nm)\n",
+             method2_eval_final_normal_force_norm,
+             method2_eval_final_normal_moment_norm,
+             method2_eval_final_method2_force_norm,
+             method2_eval_final_method2_moment_norm);
+      printf("decomp avg:   F(tx)=%5.1f N | F(rot)=%5.1f N | M(tx)=%5.1f Nm | M(rot)=%5.1f Nm\n",
+             method2_eval_force_from_translation_norm_sum / samples,
+             method2_eval_force_from_rotation_norm_sum / samples,
+             method2_eval_moment_from_translation_norm_sum / samples,
+             method2_eval_moment_from_rotation_norm_sum / samples);
+      printf("decomp final: F(tx)=%5.1f N | F(rot)=%5.1f N | M(tx)=%5.1f Nm | M(rot)=%5.1f Nm\n",
+             method2_eval_final_force_from_translation_norm,
+             method2_eval_final_force_from_rotation_norm,
+             method2_eval_final_moment_from_translation_norm,
+             method2_eval_final_moment_from_rotation_norm);
+      printf("read: small diffs mean apply=1 should behave like the baseline; large diffs mean apply=1 will drive a different self-align motion.\n");
+    }
+
     // After exiting the control loop, check if the contact search failed and print a message if it did.
     if (contact_search_failed) {
       printf("\nContact search stopped: maximum search distance reached before contact.\n");
@@ -1237,9 +1416,9 @@ int main() {
         final_e_R,
         final_instant_pole_to_edge,
         final_instant_axis_dir,
-        params.desired_axis_from_edge,
-        params.desired_axis_dir,
-        params.desired_axis_pitch,
+        params.last_best_axis_from_edge,
+        params.last_best_axis_dir,
+        params.last_best_axis_pitch,
         final_instant_screw_pitch,
         final_instant_edge_axis_distance,
         final_instant_axis_time,

@@ -226,6 +226,89 @@ post_contact_DR_normal = 10.0
 post_contact_DR_tangent1 = 0.01
 post_contact_DR_tangent2 = 0.01
 
+# Method 2 validation modes.
+# eval = 1 computes the saved 6x6 TCP wrench side-by-side but still commands
+# the normal decoupled self-align wrench.
+# apply = 1 actually commands the saved 6x6 TCP wrench during post_contact_align.
+post_contact_eval_method2_tcp_wrench = 1
+post_contact_apply_method2_tcp_wrench = 0
+method2_tcp_wrench_saved = 1
+
+# Saved full 6x6 Method 2 TCP gains, base frame, rows/cols [fx fy fz mx my mz].
+# These are auto-updated after a baseline run with a valid finite Chasles axis.
+method2_K_tcp_00 = 40
+method2_K_tcp_01 = 0
+method2_K_tcp_02 = 0
+method2_K_tcp_03 = 0
+method2_K_tcp_04 = -0.357632477
+method2_K_tcp_05 = 2.23358915
+method2_K_tcp_10 = 0
+method2_K_tcp_11 = 40
+method2_K_tcp_12 = 0
+method2_K_tcp_13 = 0.357632477
+method2_K_tcp_14 = 0
+method2_K_tcp_15 = 0.347403955
+method2_K_tcp_20 = 0
+method2_K_tcp_21 = 0
+method2_K_tcp_22 = 6500
+method2_K_tcp_23 = -362.958238
+method2_K_tcp_24 = -56.4531427
+method2_K_tcp_25 = 0
+method2_K_tcp_30 = 0
+method2_K_tcp_31 = 0.357632477
+method2_K_tcp_32 = -362.958238
+method2_K_tcp_33 = 20.2706871
+method2_K_tcp_34 = 3.15232818
+method2_K_tcp_35 = 0.00310607342
+method2_K_tcp_40 = -0.357632477
+method2_K_tcp_41 = 0
+method2_K_tcp_42 = -56.4531427
+method2_K_tcp_43 = 3.15232818
+method2_K_tcp_44 = 1.83324461
+method2_K_tcp_45 = -5.0199701
+method2_K_tcp_50 = 2.23358915
+method2_K_tcp_51 = 0.347403955
+method2_K_tcp_52 = 0
+method2_K_tcp_53 = 0.00310607342
+method2_K_tcp_54 = -5.0199701
+method2_K_tcp_55 = 18.7879943
+method2_D_tcp_00 = 10
+method2_D_tcp_01 = 0
+method2_D_tcp_02 = 0
+method2_D_tcp_03 = 0
+method2_D_tcp_04 = -0.0894081192
+method2_D_tcp_05 = 0.558397288
+method2_D_tcp_10 = 0
+method2_D_tcp_11 = 10
+method2_D_tcp_12 = 0
+method2_D_tcp_13 = 0.0894081192
+method2_D_tcp_14 = 0
+method2_D_tcp_15 = 0.0868509887
+method2_D_tcp_20 = 0
+method2_D_tcp_21 = 0
+method2_D_tcp_22 = 175
+method2_D_tcp_23 = -9.77195255
+method2_D_tcp_24 = -1.5198923
+method2_D_tcp_25 = 0
+method2_D_tcp_30 = 0
+method2_D_tcp_31 = 0.0894081192
+method2_D_tcp_32 = -9.77195255
+method2_D_tcp_33 = 0.556462562
+method2_D_tcp_34 = 0.0848703741
+method2_D_tcp_35 = 0.000776518355
+method2_D_tcp_40 = -0.0894081192
+method2_D_tcp_41 = 0
+method2_D_tcp_42 = -1.5198923
+method2_D_tcp_43 = 0.0848703741
+method2_D_tcp_44 = 0.693202904
+method2_D_tcp_45 = -2.50249253
+method2_D_tcp_50 = 0.558397288
+method2_D_tcp_51 = 0.0868509887
+method2_D_tcp_52 = 0
+method2_D_tcp_53 = 0.000776518355
+method2_D_tcp_54 = -2.50249253
+method2_D_tcp_55 = 9.36273195
+
 # Virtual center of rotation during this phase:
 # p_c = p_contact + vcr_offset * alignment_target_normal.
 # 0 = on the detected contact point, >0 = along target normal, <0 = opposite it.
@@ -245,19 +328,29 @@ use_search_direction_surface_after_alignment = 1
 # limits below. Method 2 maps those gains through the adjoint around the
 # measured instantaneous pole. Method 3 fits the effective contact-edge
 # moment model from the logged post-contact samples. None is applied online.
-suggest_gains_from_desired_axis = 1
+print_gain_suggestion_diagnostics = 1
 
-# Target axis for comparison/suggestion, base frame, relative to the active
-# tool edge: axis_point = p_edge + desired_axis_from_edge,
-# axis_line(s) = axis_point + s * desired_axis_dir. Auto-updated to each
-# run's measured best axis.
-desired_axis_from_edge_x = 0.0236
-desired_axis_from_edge_y = 0.0210
-desired_axis_from_edge_z = 0.0071
-desired_axis_dir_x = -0.631
-desired_axis_dir_y = -0.763
-desired_axis_dir_z = -0.140
-desired_axis_pitch = -0.0114
+# Last best instantaneous axis, base frame, relative to the active tool edge.
+# Used only for best-axis comparison diagnostics. Auto-updated from the best
+# per-cycle post_contact_align axis sample.
+last_best_axis_from_edge_x = 0.0139
+last_best_axis_from_edge_y = 0.0342
+last_best_axis_from_edge_z = 0.0030
+last_best_axis_dir_x = -0.419
+last_best_axis_dir_y = -0.897
+last_best_axis_dir_z = -0.140
+last_best_axis_pitch = -0.0143
+
+# Last finite Chasles axis, base frame, relative to the active tool edge.
+# Used by Method 2 diagnostics and to save the coupled K_TCP/D_TCP matrices.
+# Auto-updated from the full start/end post_contact_align edge motion.
+last_chasles_axis_from_edge_x = 0.0085
+last_chasles_axis_from_edge_y = -0.0135
+last_chasles_axis_from_edge_z = -0.0129
+last_chasles_axis_dir_x = -0.864
+last_chasles_axis_dir_y = -0.502
+last_chasles_axis_dir_z = -0.046
+last_chasles_axis_pitch = 0.0142
 
 # Gain print bounds and legacy reference-motion settings.
 # suggested_gain_min/max clamp printed suggested values;

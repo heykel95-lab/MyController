@@ -104,6 +104,17 @@ inline Parameters readParameters(const std::string& filename) {
   auto getBoolAlias = [&](const std::string& new_key, const std::string& old_key, bool def) {
     return getBool(new_key, getBool(old_key, def));
   };
+  auto getMat6 = [&](const std::string& prefix, const Mat6x6& def) {
+    Mat6x6 matrix = def;
+    char key[64];
+    for (int r = 0; r < 6; ++r) {
+      for (int c = 0; c < 6; ++c) {
+        snprintf(key, sizeof(key), "%s_%d%d", prefix.c_str(), r, c);
+        matrix(r, c) = getDouble(key, matrix(r, c));
+      }
+    }
+    return matrix;
+  };
 
   p.robot_ip = getString("robot_ip", p.robot_ip);
   p.experiment_duration = getDouble("experiment_duration", p.experiment_duration);
@@ -204,24 +215,67 @@ inline Parameters readParameters(const std::string& filename) {
       getDouble("post_contact_push_speed", p.post_contact_push_speed);
   p.post_contact_max_push =
       getDouble("post_contact_max_push", p.post_contact_max_push);
+  p.post_contact_eval_method2_tcp_wrench =
+      getBoolAlias("post_contact_eval_method2_tcp_wrench",
+                   "post_contact_use_method2_tcp_wrench",
+                   p.post_contact_eval_method2_tcp_wrench);
+  p.post_contact_apply_method2_tcp_wrench =
+      getBool("post_contact_apply_method2_tcp_wrench",
+              p.post_contact_apply_method2_tcp_wrench);
+  p.method2_tcp_wrench_saved =
+      getBool("method2_tcp_wrench_saved", p.method2_tcp_wrench_saved);
+  p.method2_K_tcp_base = getMat6("method2_K_tcp", p.method2_K_tcp_base);
+  p.method2_D_tcp_base = getMat6("method2_D_tcp", p.method2_D_tcp_base);
   p.use_search_direction_surface_after_alignment =
       getBool("use_search_direction_surface_after_alignment",
               p.use_search_direction_surface_after_alignment);
   p.use_virtual_center_after_contact =
       getBool("use_virtual_center_after_contact", p.use_virtual_center_after_contact);
   p.vcr_offset = getDouble("vcr_offset", p.vcr_offset);
-  p.suggest_gains_from_desired_axis =
-      getBool("suggest_gains_from_desired_axis", p.suggest_gains_from_desired_axis);
-  p.desired_axis_from_edge(0) =
-      getDouble("desired_axis_from_edge_x", p.desired_axis_from_edge(0));
-  p.desired_axis_from_edge(1) =
-      getDouble("desired_axis_from_edge_y", p.desired_axis_from_edge(1));
-  p.desired_axis_from_edge(2) =
-      getDouble("desired_axis_from_edge_z", p.desired_axis_from_edge(2));
-  p.desired_axis_dir(0) = getDouble("desired_axis_dir_x", p.desired_axis_dir(0));
-  p.desired_axis_dir(1) = getDouble("desired_axis_dir_y", p.desired_axis_dir(1));
-  p.desired_axis_dir(2) = getDouble("desired_axis_dir_z", p.desired_axis_dir(2));
-  p.desired_axis_pitch = getDouble("desired_axis_pitch", p.desired_axis_pitch);
+  p.print_gain_suggestion_diagnostics =
+      getBoolAlias("print_gain_suggestion_diagnostics",
+                   "suggest_gains_from_desired_axis",
+                   p.print_gain_suggestion_diagnostics);
+  p.last_best_axis_from_edge(0) =
+      getDoubleAlias("last_best_axis_from_edge_x",
+                     "desired_axis_from_edge_x",
+                     p.last_best_axis_from_edge(0));
+  p.last_best_axis_from_edge(1) =
+      getDoubleAlias("last_best_axis_from_edge_y",
+                     "desired_axis_from_edge_y",
+                     p.last_best_axis_from_edge(1));
+  p.last_best_axis_from_edge(2) =
+      getDoubleAlias("last_best_axis_from_edge_z",
+                     "desired_axis_from_edge_z",
+                     p.last_best_axis_from_edge(2));
+  p.last_best_axis_dir(0) =
+      getDoubleAlias("last_best_axis_dir_x", "desired_axis_dir_x", p.last_best_axis_dir(0));
+  p.last_best_axis_dir(1) =
+      getDoubleAlias("last_best_axis_dir_y", "desired_axis_dir_y", p.last_best_axis_dir(1));
+  p.last_best_axis_dir(2) =
+      getDoubleAlias("last_best_axis_dir_z", "desired_axis_dir_z", p.last_best_axis_dir(2));
+  p.last_best_axis_pitch =
+      getDoubleAlias("last_best_axis_pitch", "desired_axis_pitch", p.last_best_axis_pitch);
+  p.last_chasles_axis_from_edge(0) =
+      getDoubleAlias("last_chasles_axis_from_edge_x",
+                     "desired_axis_from_edge_x",
+                     p.last_chasles_axis_from_edge(0));
+  p.last_chasles_axis_from_edge(1) =
+      getDoubleAlias("last_chasles_axis_from_edge_y",
+                     "desired_axis_from_edge_y",
+                     p.last_chasles_axis_from_edge(1));
+  p.last_chasles_axis_from_edge(2) =
+      getDoubleAlias("last_chasles_axis_from_edge_z",
+                     "desired_axis_from_edge_z",
+                     p.last_chasles_axis_from_edge(2));
+  p.last_chasles_axis_dir(0) =
+      getDoubleAlias("last_chasles_axis_dir_x", "desired_axis_dir_x", p.last_chasles_axis_dir(0));
+  p.last_chasles_axis_dir(1) =
+      getDoubleAlias("last_chasles_axis_dir_y", "desired_axis_dir_y", p.last_chasles_axis_dir(1));
+  p.last_chasles_axis_dir(2) =
+      getDoubleAlias("last_chasles_axis_dir_z", "desired_axis_dir_z", p.last_chasles_axis_dir(2));
+  p.last_chasles_axis_pitch =
+      getDoubleAlias("last_chasles_axis_pitch", "desired_axis_pitch", p.last_chasles_axis_pitch);
   p.suggested_gain_omega_ref =
       getDouble("suggested_gain_omega_ref", p.suggested_gain_omega_ref);
   p.suggested_gain_angle_ref =

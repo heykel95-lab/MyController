@@ -56,6 +56,21 @@ inline void updateParameterValues(
   }
 }
 
+inline void appendMat6ParameterUpdates(
+    std::vector<std::pair<std::string, std::string>>& updates,
+    const std::string& prefix,
+    const Mat6x6& matrix) {
+  char key[64];
+  char value[32];
+  for (int r = 0; r < 6; ++r) {
+    for (int c = 0; c < 6; ++c) {
+      snprintf(key, sizeof(key), "%s_%d%d", prefix.c_str(), r, c);
+      snprintf(value, sizeof(value), "%.9g", matrix(r, c));
+      updates.emplace_back(key, value);
+    }
+  }
+}
+
 inline Array7 vec7ToArray(const Vec7& v) {
   Array7 array{};
   for (int i = 0; i < 7; ++i) {

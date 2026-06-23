@@ -189,8 +189,11 @@ inline void printParameters(const Parameters& params) {
          params.contact_force_threshold,
          params.alignment_contact_force_threshold,
          params.post_contact_moment_threshold);
-  printf("post_align_duration=%.1f s | debug_period=%.2f s\n",
+  printf("post_align_duration=%.1f s | method2_eval: %s | method2_apply: %s (saved=%s) | debug_period=%.2f s\n",
          params.post_contact_align_duration,
+         params.post_contact_eval_method2_tcp_wrench ? "on" : "off",
+         params.post_contact_apply_method2_tcp_wrench ? "on" : "off",
+         params.method2_tcp_wrench_saved ? "yes" : "no",
          params.debug_period);
 }
 
@@ -250,9 +253,9 @@ inline void printFinalSummary(
     const Vec3& final_e_R,
     const Vec3& final_instant_pole_to_edge,
     const Vec3& final_instant_axis_dir,
-    const Vec3& desired_axis_from_edge,
-    const Vec3& desired_axis_dir,
-    double desired_axis_pitch,
+    const Vec3& last_best_axis_from_edge,
+    const Vec3& last_best_axis_dir,
+    double last_best_axis_pitch,
     double final_instant_screw_pitch,
     double final_instant_edge_axis_distance,
     double final_instant_axis_time,
@@ -276,24 +279,24 @@ inline void printFinalSummary(
            final_instant_axis_dir(0),
            final_instant_axis_dir(1),
            final_instant_axis_dir(2));
-    const Vec3 desired_axis_dir_unit =
-        normalizedOrFallback(desired_axis_dir, Vec3(1.0, 0.0, 0.0));
-    const Vec3 axis_point_error = final_instant_pole_to_edge - desired_axis_from_edge;
+    const Vec3 last_best_axis_dir_unit =
+        normalizedOrFallback(last_best_axis_dir, Vec3(1.0, 0.0, 0.0));
+    const Vec3 axis_point_error = final_instant_pole_to_edge - last_best_axis_from_edge;
     const double axis_dir_dot =
         std::abs(std::max(
             -1.0,
-            std::min(1.0, final_instant_axis_dir.dot(desired_axis_dir_unit))));
+            std::min(1.0, final_instant_axis_dir.dot(last_best_axis_dir_unit))));
     const double axis_dir_error_deg = (180.0 / M_PI) * std::acos(axis_dir_dot);
     const double desired_axis_edge_distance =
-        pointDistanceToAxis(Vec3::Zero(), desired_axis_from_edge, desired_axis_dir_unit);
-    printf("axis_error_vs_desired: point=[%+.1f, %+.1f, %+.1f] mm | point_norm=%.1f mm | dir_error=%.1f deg | edge_error=%+.1f mm | pitch_error=%+.1f mm/rad\n",
+        pointDistanceToAxis(Vec3::Zero(), last_best_axis_from_edge, last_best_axis_dir_unit);
+    printf("axis_error_vs_last_best: point=[%+.1f, %+.1f, %+.1f] mm | point_norm=%.1f mm | dir_error=%.1f deg | edge_error=%+.1f mm | pitch_error=%+.1f mm/rad\n",
            1000.0 * axis_point_error(0),
            1000.0 * axis_point_error(1),
            1000.0 * axis_point_error(2),
            1000.0 * axis_point_error.norm(),
            axis_dir_error_deg,
            1000.0 * (final_instant_edge_axis_distance - desired_axis_edge_distance),
-           1000.0 * (final_instant_screw_pitch - desired_axis_pitch));
+           1000.0 * (final_instant_screw_pitch - last_best_axis_pitch));
   } else {
     printf("instant_axis: slow_rotation\n");
   }
