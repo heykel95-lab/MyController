@@ -20,10 +20,10 @@ struct Parameters {
   bool constraint_enabled = true;
   bool use_start_as_surface_point = true;
   Vec3 surface_point = Vec3(0.0, 0.0, 0.0);
-  Vec3 surface_normal = Vec3(1.0, 0.0, 0.0);
-  bool use_surface_tilt_angle = false;
-  double surface_tilt_angle_deg = 0.0;
-  Vec3 surface_tangent1 = Vec3(0.0, 1.0, 0.0);
+  Vec3 alignment_target_normal = Vec3(1.0, 0.0, 0.0);
+  bool use_alignment_target_tilt_angle = false;
+  double alignment_target_tilt_angle_deg = 0.0;
+  Vec3 alignment_target_tangent1 = Vec3(0.0, 1.0, 0.0);
   Vec3 tool_axis_ee = Vec3(0.0, 0.0, 1.0);
   double tool_axis_target_sign = -1.0;
   bool use_tool_contact_point_control = true;
@@ -64,7 +64,7 @@ struct Parameters {
   double effective_moment_fit_ridge = 1e-8;
 
   bool use_contact_search = false;
-  bool contact_search_use_surface_normal = true;
+  bool contact_search_use_alignment_target_normal = true;
   Vec3 contact_search_direction = Vec3(0.0, 0.0, -1.0);
   double contact_search_speed = 0.005;
   double contact_search_max_distance = 0.02;
@@ -82,9 +82,9 @@ struct Parameters {
   Vec3 post_contact_KR_diag = Vec3(8.0, 0.0, 0.0);
   Vec3 post_contact_DR_diag = Vec3(4.0, 0.01, 0.01);
 
-  bool constrain_rotation_about_surface_normal = true;
-  bool constrain_rotation_about_surface_tangent1 = true;
-  bool constrain_rotation_about_surface_tangent2 = true;
+  bool constrain_rotation_about_alignment_normal = true;
+  bool constrain_rotation_about_alignment_tangent1 = true;
+  bool constrain_rotation_about_alignment_tangent2 = true;
 
   bool use_nullspace_optimization = true;
   double nullspace_k_start = 1.0;

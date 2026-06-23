@@ -47,6 +47,44 @@ inline void printMat3Rows(const char* label, const Mat3& m) {
   }
 }
 
+// Prints a 6x6 spatial gain as ONE labeled grid instead of four loose 3x3
+// blocks. Rows are the wrench it produces (fx..fz force, mx..mz moment);
+// columns are the displacement it acts on (tx..tz translation, rx..rz
+// rotation). The vertical bar and horizontal rule mark the four quadrants:
+//   top-left  = translation -> force      top-right = rotation    -> force
+//   bot-left  = translation -> moment     bot-right = rotation    -> moment
+// The off-diagonal quadrants are the force<->rotation coupling, so a spring
+// that is decoupled at the pole (zeros there) versus coupled at the TCP
+// (filled there) can be read off directly.
+// Plain 6x6 grid with the quadrant dividers but no row/column meaning, for
+// matrices that are transforms rather than gains (e.g. the offset adjoint
+// Ad = [[I, skew(r_c)], [0, I]]). The top-right block is skew(r_c); the two
+// diagonal blocks are I; the bottom-left block is zero.
+inline void printMat6Grid(const char* label, const Mat6x6& M) {
+  printf("%s:\n", label);
+  for (int i = 0; i < 6; ++i) {
+    printf("  [%8.4g %8.4g %8.4g | %8.4g %8.4g %8.4g ]\n",
+           M(i, 0), M(i, 1), M(i, 2), M(i, 3), M(i, 4), M(i, 5));
+    if (i == 2) {
+      printf("  --------------------------+--------------------------\n");
+    }
+  }
+}
+
+inline void printSpatialGain6(const char* label, const Mat6x6& M) {
+  static const char* kRowNames[6] = {"fx", "fy", "fz", "mx", "my", "mz"};
+  printf("%s:\n", label);
+  printf("           tx        ty        tz    |    rx        ry        rz\n");
+  for (int i = 0; i < 6; ++i) {
+    printf("  %s [%8.4g %8.4g %8.4g | %8.4g %8.4g %8.4g ]\n",
+           kRowNames[i],
+           M(i, 0), M(i, 1), M(i, 2), M(i, 3), M(i, 4), M(i, 5));
+    if (i == 2) {
+      printf("     ---------------------------+---------------------------\n");
+    }
+  }
+}
+
 inline void printVec7(const char* label, const Vec7& v) {
   printf("%s = [%.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f]\n",
          label,

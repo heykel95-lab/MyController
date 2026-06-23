@@ -126,23 +126,39 @@ inline Parameters readParameters(const std::string& filename) {
   p.surface_point(0) = getDouble("surface_point_x", p.surface_point(0));
   p.surface_point(1) = getDouble("surface_point_y", p.surface_point(1));
   p.surface_point(2) = getDouble("surface_point_z", p.surface_point(2));
-  p.surface_normal(0) = getDouble("surface_normal_x", p.surface_normal(0));
-  p.surface_normal(1) = getDouble("surface_normal_y", p.surface_normal(1));
-  p.surface_normal(2) = getDouble("surface_normal_z", p.surface_normal(2));
-  p.use_surface_tilt_angle =
-      getBool("use_surface_tilt_angle", p.use_surface_tilt_angle);
-  p.surface_tilt_angle_deg =
-      getDouble("surface_tilt_angle_deg", p.surface_tilt_angle_deg);
-  if (p.use_surface_tilt_angle) {
-    const double tilt_rad = p.surface_tilt_angle_deg * M_PI / 180.0;
-    p.surface_normal = Vec3(0.0, -std::sin(tilt_rad), std::cos(tilt_rad));
+  p.alignment_target_normal(0) =
+      getDoubleAlias("alignment_target_normal_x", "surface_normal_x", p.alignment_target_normal(0));
+  p.alignment_target_normal(1) =
+      getDoubleAlias("alignment_target_normal_y", "surface_normal_y", p.alignment_target_normal(1));
+  p.alignment_target_normal(2) =
+      getDoubleAlias("alignment_target_normal_z", "surface_normal_z", p.alignment_target_normal(2));
+  p.use_alignment_target_tilt_angle =
+      getBoolAlias("use_alignment_target_tilt_angle",
+                   "use_surface_tilt_angle",
+                   p.use_alignment_target_tilt_angle);
+  p.alignment_target_tilt_angle_deg =
+      getDoubleAlias("alignment_target_tilt_angle_deg",
+                     "surface_tilt_angle_deg",
+                     p.alignment_target_tilt_angle_deg);
+  if (p.use_alignment_target_tilt_angle) {
+    const double tilt_rad = p.alignment_target_tilt_angle_deg * M_PI / 180.0;
+    p.alignment_target_normal = Vec3(0.0, -std::sin(tilt_rad), std::cos(tilt_rad));
   }
-  p.surface_tangent1(0) =
-      getDoubleAlias("surface_tangent1_x", "surface_tangent_hint_x", p.surface_tangent1(0));
-  p.surface_tangent1(1) =
-      getDoubleAlias("surface_tangent1_y", "surface_tangent_hint_y", p.surface_tangent1(1));
-  p.surface_tangent1(2) =
-      getDoubleAlias("surface_tangent1_z", "surface_tangent_hint_z", p.surface_tangent1(2));
+  p.alignment_target_tangent1(0) =
+      getDouble("alignment_target_tangent1_x",
+                getDoubleAlias("surface_tangent1_x",
+                               "surface_tangent_hint_x",
+                               p.alignment_target_tangent1(0)));
+  p.alignment_target_tangent1(1) =
+      getDouble("alignment_target_tangent1_y",
+                getDoubleAlias("surface_tangent1_y",
+                               "surface_tangent_hint_y",
+                               p.alignment_target_tangent1(1)));
+  p.alignment_target_tangent1(2) =
+      getDouble("alignment_target_tangent1_z",
+                getDoubleAlias("surface_tangent1_z",
+                               "surface_tangent_hint_z",
+                               p.alignment_target_tangent1(2)));
   p.tool_axis_ee(0) = getDouble("tool_axis_ee_x", p.tool_axis_ee(0));
   p.tool_axis_ee(1) = getDouble("tool_axis_ee_y", p.tool_axis_ee(1));
   p.tool_axis_ee(2) = getDouble("tool_axis_ee_z", p.tool_axis_ee(2));
@@ -242,8 +258,10 @@ inline Parameters readParameters(const std::string& filename) {
       getDouble("effective_moment_fit_ridge", p.effective_moment_fit_ridge);
 
   p.use_contact_search = getBool("use_contact_search", p.use_contact_search);
-  p.contact_search_use_surface_normal =
-      getBool("contact_search_use_surface_normal", p.contact_search_use_surface_normal);
+  p.contact_search_use_alignment_target_normal =
+      getBoolAlias("contact_search_use_alignment_target_normal",
+                   "contact_search_use_surface_normal",
+                   p.contact_search_use_alignment_target_normal);
   p.contact_search_direction(0) = getDouble("contact_search_direction_x", p.contact_search_direction(0));
   p.contact_search_direction(1) = getDouble("contact_search_direction_y", p.contact_search_direction(1));
   p.contact_search_direction(2) = getDouble("contact_search_direction_z", p.contact_search_direction(2));
@@ -283,18 +301,21 @@ inline Parameters readParameters(const std::string& filename) {
   p.post_contact_DR_diag(1) = getDouble("post_contact_DR_tangent1", p.post_contact_DR_diag(1));
   p.post_contact_DR_diag(2) = getDouble("post_contact_DR_tangent2", p.post_contact_DR_diag(2));
 
-  p.constrain_rotation_about_surface_normal =
-      getBoolAlias("constrain_rotation_about_surface_normal",
-                   "fix_R_x",
-                   p.constrain_rotation_about_surface_normal);
-  p.constrain_rotation_about_surface_tangent1 =
-      getBoolAlias("constrain_rotation_about_surface_tangent1",
-                   "fix_R_y",
-                   p.constrain_rotation_about_surface_tangent1);
-  p.constrain_rotation_about_surface_tangent2 =
-      getBoolAlias("constrain_rotation_about_surface_tangent2",
-                   "fix_R_z",
-                   p.constrain_rotation_about_surface_tangent2);
+  p.constrain_rotation_about_alignment_normal =
+      getBool("constrain_rotation_about_alignment_normal",
+              getBoolAlias("constrain_rotation_about_surface_normal",
+                           "fix_R_x",
+                           p.constrain_rotation_about_alignment_normal));
+  p.constrain_rotation_about_alignment_tangent1 =
+      getBool("constrain_rotation_about_alignment_tangent1",
+              getBoolAlias("constrain_rotation_about_surface_tangent1",
+                           "fix_R_y",
+                           p.constrain_rotation_about_alignment_tangent1));
+  p.constrain_rotation_about_alignment_tangent2 =
+      getBool("constrain_rotation_about_alignment_tangent2",
+              getBoolAlias("constrain_rotation_about_surface_tangent2",
+                           "fix_R_z",
+                           p.constrain_rotation_about_alignment_tangent2));
 
   p.use_nullspace_optimization = getBool("use_nullspace_optimization", p.use_nullspace_optimization);
   p.nullspace_k_start = getDouble("nullspace_k_start", p.nullspace_k_start);

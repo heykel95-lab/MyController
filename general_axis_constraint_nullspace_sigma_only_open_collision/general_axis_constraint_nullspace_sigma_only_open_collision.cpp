@@ -126,64 +126,65 @@ int main() {
     Vec3 contact_force_bias = initial_external_wrench.head<3>();
     Vec3 contact_moment_bias = initial_external_wrench.tail<3>();
 
-    // Surface/task frame for spatial impedance:
+    // Alignment-target/task frame for orientation and rotational gains:
     //
-    //   column 0 = surface normal direction
+    //   column 0 = alignment target normal direction
     //   column 1 = first tangent direction
     //   column 2 = second tangent direction
     //
-    // In surface mode the diagonal gains from parameters.txt are interpreted
+    // In this task-frame mode the diagonal gains from parameters.txt are interpreted
     // in this frame:
     //
-    //   Kp_normal   / Dp_normal   -> normal-to-surface stiffness/damping
+    //   Kp_normal   / Dp_normal   -> target-normal stiffness/damping
     //   Kp_tangent1 / Dp_tangent1 -> first tangent stiffness/damping
     //   Kp_tangent2 / Dp_tangent2 -> second tangent stiffness/damping
     //
     // The gains are then transformed to the robot base frame:
     //
-    //   K_base = R_surface * K_surface * R_surface^T
+    //   K_base = R_alignment_target * K_task * R_alignment_target^T
     //
     // This is the practical idea inspired by spatial impedance: choose simple
-    // diagonal impedance values in a task/surface frame, then transform them
+    // diagonal impedance values in a task frame, then transform them
     // into the world/base frame.
 
-    // Defining the Rotation matrix from the surface frame to the robot base frame
+    // Defining the alignment-target frame in the robot base frame.
 
-    const Mat3 R_surface = makeSurfaceFrame(params);
-    const Mat3 R_d_surface = makeToolOrientationParallelToSurface(params, R_surface, R_d);
+    const Mat3 R_alignment_target = makeAlignmentTargetFrame(params);
+    const Mat3 R_d_alignment_target =
+        makeToolOrientationForAlignmentTarget(params, R_alignment_target, R_d);
     const double orientation_test_extra_tilt_rad =
         params.orientation_test_extra_tilt_deg * M_PI / 180.0;
     const Mat3 R_d_orientation_test =
         (std::abs(orientation_test_extra_tilt_rad) > 1e-9)
-            ? Eigen::AngleAxisd(orientation_test_extra_tilt_rad, R_surface.col(1)).toRotationMatrix() * R_d
-            : R_d_surface;
-    // The surface frame is defined based on the surface normal and tangent hint from parameters.txt.
-    // The makeSurfaceFrame function constructs an orthonormal frame where the first column is the surface normal,
-    // and the other two columns are tangent directions. This frame is used to define the directions of the impedance control gains.
+            ? Eigen::AngleAxisd(orientation_test_extra_tilt_rad, R_alignment_target.col(1)).toRotationMatrix() * R_d
+            : R_d_alignment_target;
+    // This frame is based on the target normal and tangent hint from
+    // parameters.txt. For the self-alignment test it can be a tilted tool
+    // orientation target rather than the real table normal.
     Vec3 surface_point_runtime =
         params.use_start_as_surface_point ? p_start : params.surface_point;
     const Vec3 contact_search_direction =
-        params.contact_search_use_surface_normal
-            ? -R_surface.col(0)
-            : normalizedOrFallback(params.contact_search_direction, -R_surface.col(0));
+        params.contact_search_use_alignment_target_normal
+            ? -R_alignment_target.col(0)
+            : normalizedOrFallback(params.contact_search_direction, -R_alignment_target.col(0));
     const Mat3 R_contact_surface =
-        makeSurfaceFrameFromNormalTangent(-contact_search_direction, params.surface_tangent1);
+        makeSurfaceFrameFromNormalTangent(-contact_search_direction, params.alignment_target_tangent1);
     const Mat3 Kp_search = params.contact_search_Kp_diag.asDiagonal();
     const Mat3 Dp_search = params.contact_search_Dp_diag.asDiagonal();
     const Mat3 Kp_post_contact = params.post_contact_Kp_diag.asDiagonal();
     const Mat3 Dp_post_contact = params.post_contact_Dp_diag.asDiagonal();
     // Rotational compliance used only during post_contact_align, in the
-    // surface frame (normal/tangent1/tangent2), same convention as the
+    // alignment-target frame (normal/tangent1/tangent2), same convention as the
     // global KR/DR below. Normal (yaw about the push axis) stays at a
     // constrained stiffness; tangent1/tangent2 (the tipping directions) are
     // intentionally very soft so a real contact moment at the pressed edge
     // can passively rotate the tool flat instead of being resisted by the
     // spring.
     const Mat3 KR_post_contact = params.constraint_enabled
-        ? makeSpatialGainMatrix(params.post_contact_KR_diag, R_surface)
+        ? makeSpatialGainMatrix(params.post_contact_KR_diag, R_alignment_target)
         : params.post_contact_KR_diag.asDiagonal();
     const Mat3 DR_post_contact = params.constraint_enabled
-        ? makeSpatialGainMatrix(params.post_contact_DR_diag, R_surface)
+        ? makeSpatialGainMatrix(params.post_contact_DR_diag, R_alignment_target)
         : params.post_contact_DR_diag.asDiagonal();
     ControlPhase phase = ControlPhase::kSurfaceImpedance;
     if (params.orientation_test_only) {
@@ -197,8 +198,8 @@ int main() {
     bool contact_found = !params.use_contact_search;
     bool contact_search_failed = false;
     double contact_time = 0.0;
-    Mat3 R_contact_start = R_d_surface;
-    Mat3 R_after_contact_align = R_d_surface;
+    Mat3 R_contact_start = R_d_alignment_target;
+    Mat3 R_after_contact_align = R_d_alignment_target;
     Vec3 first_contact_tcp = p_start;
     Vec3 first_contact_point = p_start;
     Vec3 first_touch_candidate_force = external_force_start;
@@ -235,19 +236,20 @@ int main() {
     printVec3Mm("p_target", p_end);
 
     // The controller gains are defined based on the parameters read from parameters.txt.
-    // If the constraint is enabled, the gains are transformed from the surface frame to the robot base frame using the R_surface rotation matrix.
+    // If the constraint is enabled, the gains are transformed from the task
+    // frame to the robot base frame using the selected frame rotation.
     // If the constraint is not enabled, the gains are used as-is as diagonal matrices in the robot base frame.
     Mat3 Kp = params.constraint_enabled
-        ? makeSpatialGainMatrix(params.Kp_diag, R_surface)
+        ? makeSpatialGainMatrix(params.Kp_diag, R_alignment_target)
         : params.Kp_diag.asDiagonal();
     Mat3 Dp = params.constraint_enabled
-        ? makeSpatialGainMatrix(params.Dp_diag, R_surface)
+        ? makeSpatialGainMatrix(params.Dp_diag, R_alignment_target)
         : params.Dp_diag.asDiagonal();
     Mat3 KR = params.constraint_enabled
-        ? makeSpatialGainMatrix(params.KR_diag, R_surface)
+        ? makeSpatialGainMatrix(params.KR_diag, R_alignment_target)
         : params.KR_diag.asDiagonal();
     Mat3 DR = params.constraint_enabled
-        ? makeSpatialGainMatrix(params.DR_diag, R_surface)
+        ? makeSpatialGainMatrix(params.DR_diag, R_alignment_target)
         : params.DR_diag.asDiagonal();
     Mat3 Kp_contact = params.constraint_enabled
         ? makeSpatialGainMatrix(params.Kp_diag, R_contact_surface)
@@ -374,15 +376,15 @@ int main() {
       Map<const Mat4x4> T_EE(state.O_T_EE.data());
       Vec3 p_EE = T_EE.block<3, 1>(0, 3);
       Mat3 R_EE = T_EE.block<3, 3>(0, 0);
-      // R_d is the initial tool orientation. R_d_surface is the desired tool
+      // R_d is the initial tool orientation. R_d_alignment_target is the desired tool
       // orientation parallel to the virtual surface.
       // In orientation_test_only, R_d_orientation_test adds an extra rotation
       // around surface tangent1. For the horizontal table this is base x.
       //
       // With use_phase_sequence = 1:
-      //   1. orient_to_surface: rotate at the start position until R_EE ~= R_d_surface
+      //   1. orient_to_surface: rotate at the start position until R_EE ~= R_d_alignment_target
       //   2. search_first_contact: translate along contact_search_direction
-      //      while keeping R_EE ~= R_d_surface
+      //      while keeping R_EE ~= R_d_alignment_target
       //   3. post_contact_align: keep the first contact point as the virtual
       //      plane point and continue rotational alignment
       //   4. surface_impedance: normal surface impedance experiment
@@ -408,7 +410,7 @@ int main() {
       double impedance_time = time;
       const bool orienting_to_surface = (phase == ControlPhase::kOrientToSurface);
       const Mat3& R_d_phase =
-          params.orientation_test_only ? R_d_orientation_test : R_d_surface;
+          params.orientation_test_only ? R_d_orientation_test : R_d_alignment_target;
       const Vec3 external_force = external_wrench.head<3>();
       const Vec3 external_moment = external_wrench.tail<3>();
       Vec3 tool_contact_offset_ee = Vec3::Zero();
@@ -431,10 +433,10 @@ int main() {
       Vec3 edge_target_debug = first_contact_point;
       double post_contact_push_debug = 0.0;
 
-      const Vec3 e_R_to_surface =
-          applyRotationalAxisMask(params, orientationError(R_EE, R_d_phase), R_surface);
+      const Vec3 e_R_to_alignment_target =
+          applyRotationalAxisMask(params, orientationError(R_EE, R_d_phase), R_alignment_target);
       const Vec3 tool_axis_current = currentToolAxisInBase(params, R_EE).normalized();
-      const Vec3 tool_axis_target = desiredToolAxisInBase(params, R_surface).normalized();
+      const Vec3 tool_axis_target = desiredToolAxisInBase(params, R_alignment_target).normalized();
       const double tool_axis_dot = std::max(
           -1.0,
           std::min(1.0, tool_axis_current.dot(tool_axis_target)));
@@ -444,7 +446,7 @@ int main() {
           time >= next_debug_time) {
         printOrientDebug(time - phase_start_time,
                           (180.0 / M_PI) * tool_axis_alignment_error,
-                          (180.0 / M_PI) * e_R_to_surface.norm());
+                          (180.0 / M_PI) * e_R_to_alignment_target.norm());
         next_debug_time = time + params.debug_period;
       }
       double force_delta_norm = 0.0;
@@ -513,9 +515,9 @@ int main() {
         // main control law uses (orientationError(current, desired)) -- the
         // old single-sample gain fit had this backwards.
         const Vec3 e_R_post_align = applyRotationalAxisMask(
-            params, orientationError(R_EE, R_contact_start), R_surface);
-        const Vec3 e_R_post_align_surface = R_surface.transpose() * e_R_post_align;
-        const Vec3 omega_post_align_surface = R_surface.transpose() * omega;
+            params, orientationError(R_EE, R_contact_start), R_alignment_target);
+        const Vec3 e_R_post_align_task = R_alignment_target.transpose() * e_R_post_align;
+        const Vec3 omega_post_align_task = R_alignment_target.transpose() * omega;
         const Vec3 gain_force_reference =
             first_touch_candidate_saved ? first_touch_candidate_force : contact_force_bias;
         const Vec3 gain_moment_reference =
@@ -529,17 +531,17 @@ int main() {
         const Vec3 moment_delta = external_moment - gain_moment_reference;
         const Vec3 contact_moment_at_edge =
             moment_delta - edge_from_tcp.cross(force_delta);
-        const Vec3 contact_displacement_surface =
-            R_surface.transpose() * (tool_contact_point - first_contact_point);
-        const Vec3 contact_velocity_surface =
-            R_surface.transpose() * (pdot + omega.cross(edge_from_tcp));
-        const Vec3 contact_moment_surface =
-            R_surface.transpose() * contact_moment_at_edge;
-        fit_effective_moment.addSample(contact_displacement_surface,
-                                       contact_velocity_surface,
-                                       e_R_post_align_surface,
-                                       omega_post_align_surface,
-                                       contact_moment_surface);
+        const Vec3 contact_displacement_task =
+            R_alignment_target.transpose() * (tool_contact_point - first_contact_point);
+        const Vec3 contact_velocity_task =
+            R_alignment_target.transpose() * (pdot + omega.cross(edge_from_tcp));
+        const Vec3 contact_moment_task =
+            R_alignment_target.transpose() * contact_moment_at_edge;
+        fit_effective_moment.addSample(contact_displacement_task,
+                                       contact_velocity_task,
+                                       e_R_post_align_task,
+                                       omega_post_align_task,
+                                       contact_moment_task);
         Vec3 instant_pole_from_tcp = Vec3::Zero();
         const bool instant_pole_valid =
             computeInstantaneousPoleFromTcp(pdot, omega, &instant_pole_from_tcp);
@@ -742,7 +744,7 @@ int main() {
             std::array<double, 49> mass_array = model.mass(state);
             Map<const Mat7x7> joint_mass(mass_array.data());
             const CartesianInertiaEstimate cartesian_inertia =
-                computeCartesianInertiaEstimate(joint_mass, J, R_surface);
+                computeCartesianInertiaEstimate(joint_mass, J, R_alignment_target);
             const Vec3 translational_inertia = cartesian_inertia.valid
                 ? cartesian_inertia.translational
                 : params.quasi_effective_mass;
@@ -792,9 +794,9 @@ int main() {
               pole_point = tool_contact_point + params.desired_axis_from_edge;
             }
             const Vec3 r_c_task =
-                -R_surface.transpose() * (pole_point - p_EE);
+                -R_alignment_target.transpose() * (pole_point - p_EE);
             // Use the post_contact_align gains from parameters.txt directly.
-            // In this self-alignment experiment R_surface may be an intentional
+            // In this self-alignment experiment R_alignment_target may be an intentional
             // tilted tool-orientation target, not the real table/contact plane,
             // so do not rotate translational gains through that frame here.
             const Mat6x6 K_pole =
@@ -803,35 +805,41 @@ int main() {
                 blockDiagonalGain(params.post_contact_Dp_diag, params.post_contact_DR_diag);
             const Mat6x6 K_tcp_task = adjointTransformedGain(K_pole, r_c_task);
             const Mat6x6 D_tcp_task = adjointTransformedGain(D_pole, r_c_task);
-            // Clean step-by-step view of how this K/D suggestion is built,
-            // all from the stable Chasles finite screw axis (the noisy
-            // instantaneous best-axis stays in the separate Best axis compare).
-            printf("step 1) finite screw axis (Chasles' theorem):\n");
+            // Re-expresses the decoupled post-contact spring (defined about
+            // the contact screw axis / pole) as the equivalent coupled 6x6
+            // spring felt at the tool tip. K_pole is block-diagonal (no
+            // force<->rotation coupling); the lever arm r_c to the TCP fills
+            // in the off-diagonal quadrants of K_TCP via the adjoint.
+            printf("Equivalent 6x6 TCP spring for the decoupled pole spring.\n");
+            printf("Each block below is ONE 6x6 (not four): rows fx..mz = wrench,\n");
+            printf("cols tx..rz = displacement; off-diagonal quadrants = coupling.\n\n");
             if (finite_axis.valid) {
               const Vec3 axis_point_base =
                   first_contact_point + finite_axis.axis_point_from_start;
+              printf("screw axis (Chasles): angle=%.1f deg | pitch=%+.1f mm/rad\n",
+                     (180.0 / M_PI) * finite_axis.angle,
+                     1000.0 * finite_axis.pitch);
               printVec3Mm("  axis_from_edge", axis_point_base - tool_contact_point);
               printGainVec("  axis_dir", finite_axis.axis_dir);
-              printf("  pitch = %+.1f mm/rad | angle = %.1f deg\n",
-                     1000.0 * finite_axis.pitch,
-                     (180.0 / M_PI) * finite_axis.angle);
             } else {
-              printf("  not valid (rotation too small) -> desired-axis fallback\n");
+              printf("screw axis: not valid (rotation too small) -> desired-axis fallback\n");
             }
-            printf("step 2) chosen pole on that axis, nearest the edge:\n");
-            printVec3Mm("  pole_from_edge", pole_point - tool_contact_point);
-            printVec3Mm("  r_c_task (p_EE - pole, task frame)", r_c_task);
-            printf("step 3) adjoint  Ad_g = [[I, skew(r_c)], [0, I]]:\n");
-            printMat3Rows("  skew(r_c_task)", skewMatrix(r_c_task));
-            printf("step 4) K_TCP = Ad^T K_pole Ad,  D_TCP = Ad^T D_pole Ad  (K/D_pole = post_contact_align parameter gains):\n");
-            printMat3Rows("  K_TCP_pp", Mat3(K_tcp_task.block<3, 3>(0, 0)));
-            printMat3Rows("  K_TCP_pR", Mat3(K_tcp_task.block<3, 3>(0, 3)));
-            printMat3Rows("  K_TCP_Rp", Mat3(K_tcp_task.block<3, 3>(3, 0)));
-            printMat3Rows("  K_TCP_RR", Mat3(K_tcp_task.block<3, 3>(3, 3)));
-            printMat3Rows("  D_TCP_pp", Mat3(D_tcp_task.block<3, 3>(0, 0)));
-            printMat3Rows("  D_TCP_pR", Mat3(D_tcp_task.block<3, 3>(0, 3)));
-            printMat3Rows("  D_TCP_Rp", Mat3(D_tcp_task.block<3, 3>(3, 0)));
-            printMat3Rows("  D_TCP_RR", Mat3(D_tcp_task.block<3, 3>(3, 3)));
+            printVec3Mm("pole_from_edge (axis point nearest edge)",
+                        pole_point - tool_contact_point);
+            printVec3Mm("lever r_c = TCP - pole (task frame, source of coupling)",
+                        r_c_task);
+            printf("\n-- ADJOINT Ad = [[I, skew(r_c)], [0, I]] --\n");
+            printf("top-left & bottom-right = I, top-right = skew(r_c), bottom-left = 0.\n");
+            printf("each 6x6 gain is moved pole->TCP by  X_TCP = Ad^T * X_pole * Ad.\n");
+            printMat6Grid("Ad", offsetAdjoint(r_c_task));
+            printf("\n-- STIFFNESS K --\n");
+            printSpatialGain6("K_pole (as commanded, decoupled)", K_pole);
+            printSpatialGain6("K_TCP  = Ad^T K_pole Ad (coupled at tool tip)",
+                              K_tcp_task);
+            printf("\n-- DAMPING D --\n");
+            printSpatialGain6("D_pole (as commanded, decoupled)", D_pole);
+            printSpatialGain6("D_TCP  = Ad^T D_pole Ad (coupled at tool tip)",
+                              D_tcp_task);
 
             printf("\n=== Method 3: Least-squares effective moment identification ===\n");
             printf("model: M_C = K_rt*dx_C + D_rt*v_C + K_R*dtheta + D_R*omega\n");
@@ -1003,7 +1011,7 @@ int main() {
              phase == ControlPhase::kSurfaceImpedance &&
              contact_found)
                 ? R_contact_surface
-                : R_surface;
+                : R_alignment_target;
         desired = computeDesiredMotion(
             params,
             impedance_time,
@@ -1030,8 +1038,8 @@ int main() {
                  ? R_d_orientation_test
                  : (phase == ControlPhase::kSurfaceImpedance && contact_found
                         ? R_after_contact_align
-                        : (use_surface_orientation ? R_d_surface : R_d)));
-      Vec3 e_R = applyRotationalAxisMask(params, orientationError(R_EE, R_d_used), R_surface);
+                        : (use_surface_orientation ? R_d_alignment_target : R_d)));
+      Vec3 e_R = applyRotationalAxisMask(params, orientationError(R_EE, R_d_used), R_alignment_target);
 
       if (phase == ControlPhase::kSurfaceImpedance && params.use_virtual_center_after_contact) {
         // Virtual center of rotation for the post-contact alignment phase:
@@ -1042,7 +1050,7 @@ int main() {
         //
         // This couples the rotational correction into the translational error
         // so the tool behaves more like it is rotating around p_c.
-        const Vec3 p_c = surface_point_runtime + params.vcr_offset * R_surface.col(0);
+        const Vec3 p_c = surface_point_runtime + params.vcr_offset * R_alignment_target.col(0);
         const Vec3 r_c = p_EE - p_c;
         e_p = e_p - e_R.cross(r_c);
       }

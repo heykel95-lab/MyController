@@ -1,6 +1,7 @@
 # Surface Constraint Impedance Controller
 
-This controller uses one unified surface constraint mode.
+This controller uses a surface/contact constraint plus a separate alignment
+target frame for the tool orientation experiment.
 
 The constrained surface is defined by:
 
@@ -8,7 +9,7 @@ The constrained surface is defined by:
 n^T * (p - p_surface) = 0
 ```
 
-where `surface_normal` is the plane normal in the robot base frame.
+where `n` is the active position-surface normal in the robot base frame.
 
 ## Surface Mode
 
@@ -16,25 +17,27 @@ where `surface_normal` is the plane normal in the robot base frame.
 constraint_enabled = 1
 ```
 
-The same mode covers the old axis-aligned cases and inclined surfaces:
+The alignment target can also be set like a surface normal. In the flat-table
+self-alignment experiment, this can intentionally be a tilted tool-orientation
+target, not the real table normal:
 
 ```text
-Y-Z plane:       surface_normal = [1, 0, 0]
-X-Z plane:       surface_normal = [0, 1, 0]
-X-Y plane:       surface_normal = [0, 0, 1]
-45 degree plane: surface_normal = [0.7071, 0, 0.7071]
+Y-Z plane:       alignment_target_normal = [1, 0, 0]
+X-Z plane:       alignment_target_normal = [0, 1, 0]
+X-Y plane:       alignment_target_normal = [0, 0, 1]
+45 degree plane: alignment_target_normal = [0.7071, 0, 0.7071]
 ```
 
-The surface/task frame is:
+The alignment-target/task frame is:
 
 ```text
-R_surface = [normal tangent1 tangent2]
+R_alignment_target = [normal tangent1 tangent2]
 ```
 
-Only `surface_tangent1` is entered by the user. The code computes `tangent2`
+Only `alignment_target_tangent1` is entered by the user. The code computes `tangent2`
 automatically from `normal x tangent1`.
 
-The gains are defined in the surface frame:
+Task-frame gains are defined in that frame:
 
 ```text
 Kp_normal / Dp_normal     = normal direction
@@ -45,27 +48,27 @@ Kp_tangent2 / Dp_tangent2 = second tangent direction
 The code transforms them to the robot base frame:
 
 ```text
-K_base = R_surface * K_surface * R_surface^T
-D_base = R_surface * D_surface * R_surface^T
+K_base = R_alignment_target * K_task * R_alignment_target^T
+D_base = R_alignment_target * D_task * R_alignment_target^T
 ```
 
 ## Rotation
 
-The rotational constraint flags are also interpreted in the surface frame:
+The rotational constraint flags are interpreted in the alignment-target frame:
 
 ```text
-constrain_rotation_about_surface_normal   = rotation around surface normal
-constrain_rotation_about_surface_tangent1 = rotation around first tangent
-constrain_rotation_about_surface_tangent2 = rotation around second tangent
+constrain_rotation_about_alignment_normal   = rotation around target normal
+constrain_rotation_about_alignment_tangent1 = rotation around first tangent
+constrain_rotation_about_alignment_tangent2 = rotation around second tangent
 ```
 
 These components are angle-axis orientation-error components, not yaw/pitch/roll.
 
-Tool alignment is separate from the surface frame. The physical tool axis is
+The physical tool axis is
 configured in the end-effector frame:
 
 ```text
-R_desired * tool_axis_ee = tool_axis_target_sign * surface_normal
+R_desired * tool_axis_ee = tool_axis_target_sign * alignment_target_normal
 ```
 
 ## Nullspace

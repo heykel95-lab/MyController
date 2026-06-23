@@ -60,25 +60,25 @@ surface_point_x = 0.0
 surface_point_y = 0.0
 surface_point_z = 0.0
 
-# Surface normal n = [0, -sin(angle), cos(angle)]. angle = 0 -> horizontal
-# table normal [0, 0, 1].
-use_surface_tilt_angle = 1
-surface_tilt_angle_deg = 15.0
+# Alignment target normal n = [0, -sin(angle), cos(angle)]. angle = 0 means
+# the tool target is aligned with the real horizontal table normal [0, 0, 1].
+use_alignment_target_tilt_angle = 1
+alignment_target_tilt_angle_deg = 15.0
 
-# Manual normal, only used when use_surface_tilt_angle = 0.
-surface_normal_x = 0.0
-surface_normal_y = -0.342
-surface_normal_z = 0.940
+# Manual normal, only used when use_alignment_target_tilt_angle = 0.
+alignment_target_normal_x = 0.0
+alignment_target_normal_y = -0.342
+alignment_target_normal_z = 0.940
 
 # Only tangent1 is entered; the code orthogonalizes it against the normal
 # and computes tangent2 = normal x tangent1.
-surface_tangent1_x = 1.0
-surface_tangent1_y = 0.0
-surface_tangent1_z = 0.0
+alignment_target_tangent1_x = 1.0
+alignment_target_tangent1_y = 0.0
+alignment_target_tangent1_z = 0.0
 
-# Physical tool axis in the EE frame (different from the surface frame).
-# Alignment enforces: R_desired * tool_axis_ee = tool_axis_target_sign * surface_normal.
-# tool_axis_target_sign = -1 means the tool points into the surface.
+# Physical tool axis in the EE frame.
+# Alignment enforces: R_desired * tool_axis_ee = tool_axis_target_sign * alignment_target_normal.
+# tool_axis_target_sign = -1 means the tool points opposite the target normal.
 tool_axis_ee_x = 0.0
 tool_axis_ee_y = 0.0
 tool_axis_ee_z = 1.0
@@ -115,7 +115,7 @@ orient_phase_min_time = 0.5
 # Orientation error threshold for switching to search [rad].
 orient_phase_error_threshold = 0.07
 
-# 1 = test only the rotation part (hold TCP, rotate toward R_d_surface, skip
+# 1 = test only the rotation part (hold TCP, rotate toward R_d_alignment_target, skip
 # contact search). Set back to 0 once orientation control is verified.
 orientation_test_only = 0
 
@@ -136,8 +136,8 @@ alignment_contact_force_threshold = 12.0
 # triggered, the current TCP position becomes the virtual surface point.
 use_contact_search = 1
 
-# 1 = search along -surface_normal. 0 = use the manual direction below.
-contact_search_use_surface_normal = 0
+# 1 = search along -alignment_target_normal. 0 = use the manual direction below.
+contact_search_use_alignment_target_normal = 0
 contact_search_direction_x = 0.0
 contact_search_direction_y = 0.0
 contact_search_direction_z = -1.0
@@ -214,9 +214,9 @@ post_contact_Dp_x = 10.0
 post_contact_Dp_y = 10.0
 post_contact_Dp_z = 175.0
 
-# Rotational spring/damping used only during this phase, surface frame
+# Rotational spring/damping used only during this phase, alignment-target frame
 # [normal, tangent1, tangent2]. Target is the pose held at first contact (no
-# scripted rotation). normal (yaw about the push axis) stays constrained;
+# scripted rotation). Normal (yaw about the target axis) stays constrained;
 # tangent1/tangent2 (the tipping directions) stay very soft so real contact
 # moment can passively rotate the tool flat.
 post_contact_KR_normal = 20.0
@@ -226,8 +226,9 @@ post_contact_DR_normal = 10.0
 post_contact_DR_tangent1 = 0.01
 post_contact_DR_tangent2 = 0.01
 
-# Virtual center of rotation during this phase: p_c = p_contact + vcr_offset
-# * surface_normal. 0 = on the detected surface point, >0 = above, <0 = below.
+# Virtual center of rotation during this phase:
+# p_c = p_contact + vcr_offset * alignment_target_normal.
+# 0 = on the detected contact point, >0 = along target normal, <0 = opposite it.
 use_virtual_center_after_contact = 0
 vcr_offset = 0.0
 
@@ -250,13 +251,13 @@ suggest_gains_from_desired_axis = 1
 # tool edge: axis_point = p_edge + desired_axis_from_edge,
 # axis_line(s) = axis_point + s * desired_axis_dir. Auto-updated to each
 # run's measured best axis.
-desired_axis_from_edge_x = 0.0206
-desired_axis_from_edge_y = 0.0254
-desired_axis_from_edge_z = -0.0006
-desired_axis_dir_x = -0.608
-desired_axis_dir_y = -0.792
-desired_axis_dir_z = -0.057
-desired_axis_pitch = -0.0104
+desired_axis_from_edge_x = 0.0236
+desired_axis_from_edge_y = 0.0210
+desired_axis_from_edge_z = 0.0071
+desired_axis_dir_x = -0.631
+desired_axis_dir_y = -0.763
+desired_axis_dir_z = -0.140
+desired_axis_pitch = -0.0114
 
 # Gain print bounds and legacy reference-motion settings.
 # suggested_gain_min/max clamp printed suggested values;
@@ -298,15 +299,15 @@ effective_moment_fit_ridge = 1e-8
 # ====================================================================
 # Phase 4: surface_impedance
 # ====================================================================
-# Rotational constraint flags, surface frame (normal/tangent1/tangent2 ->
-# base z/x/y for the current horizontal surface). 1 = keep rotational
+# Rotational constraint flags, alignment-target frame
+# (normal/tangent1/tangent2). 1 = keep rotational
 # stiffness on that component, 0 = no spring (damping still acts if DR_i >
 # 0; for a fully free component set both the flag and damping to 0).
-constrain_rotation_about_surface_normal = 1
-constrain_rotation_about_surface_tangent1 = 1
-constrain_rotation_about_surface_tangent2 = 1
+constrain_rotation_about_alignment_normal = 1
+constrain_rotation_about_alignment_tangent1 = 1
+constrain_rotation_about_alignment_tangent2 = 1
 
-# Surface-frame gains: normal = normal-to-surface, tangent1/2 = in-plane.
+# Alignment-target-frame gains: normal = target-normal direction, tangent1/2 = transverse.
 Kp_normal = 7000.0
 Kp_tangent1 = 100.0
 Kp_tangent2 = 100.0

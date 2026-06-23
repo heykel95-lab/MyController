@@ -565,15 +565,15 @@ inline Mat3 makeSurfaceFrameFromNormalTangent(const Vec3& normal_input, const Ve
   Vec3 tangent2 = normal.cross(tangent1);
   tangent2.normalize();
 
-  Mat3 R_surface;
-  R_surface.col(0) = normal;
-  R_surface.col(1) = tangent1;
-  R_surface.col(2) = tangent2;
-  return R_surface;
+  Mat3 R_alignment_target;
+  R_alignment_target.col(0) = normal;
+  R_alignment_target.col(1) = tangent1;
+  R_alignment_target.col(2) = tangent2;
+  return R_alignment_target;
 }
 
-inline Mat3 makeSurfaceFrame(const Parameters& params) {
-  return makeSurfaceFrameFromNormalTangent(params.surface_normal, params.surface_tangent1);
+inline Mat3 makeAlignmentTargetFrame(const Parameters& params) {
+  return makeSurfaceFrameFromNormalTangent(params.alignment_target_normal, params.alignment_target_tangent1);
 }
 
 inline Mat3 rotationBetweenUnitVectors(const Vec3& from_unit, const Vec3& to_unit) {
@@ -596,31 +596,31 @@ inline Mat3 rotationBetweenUnitVectors(const Vec3& from_unit, const Vec3& to_uni
   return Eigen::AngleAxisd(std::acos(dot), axis).toRotationMatrix();
 }
 
-inline Vec3 desiredToolAxisInBase(const Parameters& params, const Mat3& R_surface) {
+inline Vec3 desiredToolAxisInBase(const Parameters& params, const Mat3& R_alignment_target) {
   const double sign = (params.tool_axis_target_sign >= 0.0) ? 1.0 : -1.0;
-  return sign * R_surface.col(0);
+  return sign * R_alignment_target.col(0);
 }
 
 inline Vec3 currentToolAxisInBase(const Parameters& params, const Mat3& R_EE) {
   return R_EE * normalizedOrFallback(params.tool_axis_ee, Vec3(0.0, 0.0, 1.0));
 }
 
-inline Mat3 makeToolOrientationParallelToSurface(
+inline Mat3 makeToolOrientationForAlignmentTarget(
     const Parameters& params,
-    const Mat3& R_surface,
+    const Mat3& R_alignment_target,
     const Mat3& R_start) {
   const Vec3 tool_axis_start =
       currentToolAxisInBase(params, R_start).normalized();
   const Vec3 tool_axis_target =
-      desiredToolAxisInBase(params, R_surface).normalized();
+      desiredToolAxisInBase(params, R_alignment_target).normalized();
 
-  // Rotate the current physical tool axis onto +-surface_normal while keeping
+  // Rotate the current physical tool axis onto +-alignment_target_normal while keeping
   // the remaining orientation twist as close as possible to the start pose.
   return rotationBetweenUnitVectors(tool_axis_start, tool_axis_target) * R_start;
 }
 
-inline Mat3 makeSpatialGainMatrix(const Vec3& diagonal_in_surface_frame, const Mat3& R_surface) {
-  return R_surface * diagonal_in_surface_frame.asDiagonal() * R_surface.transpose();
+inline Mat3 makeSpatialGainMatrix(const Vec3& diagonal_in_task_frame, const Mat3& R_task) {
+  return R_task * diagonal_in_task_frame.asDiagonal() * R_task.transpose();
 }
 
 inline void startKeyboardStopThread(
@@ -674,7 +674,7 @@ inline DesiredMotion computeDesiredMotion(
     double time,
     const Vec3& p_start,
     const Vec3& p_EE,
-    const Mat3& R_surface,
+    const Mat3& R_position_surface,
     const Vec3& plane_point) {
   DesiredMotion desired{p_start, Vec3::Zero()};
 
@@ -687,18 +687,14 @@ inline DesiredMotion computeDesiredMotion(
   }
 
   if (params.constraint_enabled) {
-    const Vec3 normal = R_surface.col(0);
+    const Vec3 normal = R_position_surface.col(0);
 
     // Plane constraint for any surface orientation:
     //
     //   signed_distance [m] = n^T * (p_plane - p_EE)
     //   p_d [m]            = p_EE + signed_distance * n
     //
-    // The same surface-frame mode covers axis-aligned and inclined planes:
-    //   YZ plane -> surface_normal = [1, 0, 0]
-    //   XZ plane -> surface_normal = [0, 1, 0]
-    //   XY plane -> surface_normal = [0, 0, 1]
-    //   inclined plane -> any normalized surface_normal
+    // The same surface-frame mode covers axis-aligned and inclined planes.
     const double signed_distance = normal.dot(plane_point - p_EE);
     desired.p_d = p_EE + signed_distance * normal;
     desired.pdot_d.setZero();
@@ -707,20 +703,20 @@ inline DesiredMotion computeDesiredMotion(
   return desired;
 }
 
-inline Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_surface) {
+inline Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_alignment_target) {
   if (!params.constraint_enabled) {
     return e_R;
   }
 
-  Vec3 e_R_task = R_surface.transpose() * e_R;
+  Vec3 e_R_task = R_alignment_target.transpose() * e_R;
   e_R_task(0) =
-      params.constrain_rotation_about_surface_normal ? e_R_task(0) : 0.0;
+      params.constrain_rotation_about_alignment_normal ? e_R_task(0) : 0.0;
   e_R_task(1) =
-      params.constrain_rotation_about_surface_tangent1 ? e_R_task(1) : 0.0;
+      params.constrain_rotation_about_alignment_tangent1 ? e_R_task(1) : 0.0;
   e_R_task(2) =
-      params.constrain_rotation_about_surface_tangent2 ? e_R_task(2) : 0.0;
+      params.constrain_rotation_about_alignment_tangent2 ? e_R_task(2) : 0.0;
 
-  return R_surface * e_R_task;
+  return R_alignment_target * e_R_task;
 }
 
 inline Vec7 computeNullspaceTorque(
