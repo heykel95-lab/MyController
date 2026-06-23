@@ -793,10 +793,10 @@ int main() {
             }
             const Vec3 r_c_task =
                 -R_surface.transpose() * (pole_point - p_EE);
-            // Transform the gains ACTUALLY applied during post_contact_align
-            // (from parameters.txt) referred to the pole, not the quasi-static
-            // estimate: the active gains are what actually produced this motion;
-            // the quasi-static values may be faulty.
+            // Use the post_contact_align gains from parameters.txt directly.
+            // In this self-alignment experiment R_surface may be an intentional
+            // tilted tool-orientation target, not the real table/contact plane,
+            // so do not rotate translational gains through that frame here.
             const Mat6x6 K_pole =
                 blockDiagonalGain(params.post_contact_Kp_diag, params.post_contact_KR_diag);
             const Mat6x6 D_pole =
@@ -823,7 +823,7 @@ int main() {
             printVec3Mm("  r_c_task (p_EE - pole, task frame)", r_c_task);
             printf("step 3) adjoint  Ad_g = [[I, skew(r_c)], [0, I]]:\n");
             printMat3Rows("  skew(r_c_task)", skewMatrix(r_c_task));
-            printf("step 4) K_TCP = Ad^T K_pole Ad,  D_TCP = Ad^T D_pole Ad  (K/D_pole = active post-contact gains):\n");
+            printf("step 4) K_TCP = Ad^T K_pole Ad,  D_TCP = Ad^T D_pole Ad  (K/D_pole = post_contact_align parameter gains):\n");
             printMat3Rows("  K_TCP_pp", Mat3(K_tcp_task.block<3, 3>(0, 0)));
             printMat3Rows("  K_TCP_pR", Mat3(K_tcp_task.block<3, 3>(0, 3)));
             printMat3Rows("  K_TCP_Rp", Mat3(K_tcp_task.block<3, 3>(3, 0)));

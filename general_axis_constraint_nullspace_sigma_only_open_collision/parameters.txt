@@ -250,13 +250,13 @@ suggest_gains_from_desired_axis = 1
 # tool edge: axis_point = p_edge + desired_axis_from_edge,
 # axis_line(s) = axis_point + s * desired_axis_dir. Auto-updated to each
 # run's measured best axis.
-desired_axis_from_edge_x = 0.0160
-desired_axis_from_edge_y = 0.0315
-desired_axis_from_edge_z = 0.0003
-desired_axis_dir_x = -0.506
-desired_axis_dir_y = -0.863
-desired_axis_dir_z = 0.012
-desired_axis_pitch = 0.0127
+desired_axis_from_edge_x = 0.0206
+desired_axis_from_edge_y = 0.0254
+desired_axis_from_edge_z = -0.0006
+desired_axis_dir_x = -0.608
+desired_axis_dir_y = -0.792
+desired_axis_dir_z = -0.057
+desired_axis_pitch = -0.0104
 
 # Gain print bounds and legacy reference-motion settings.
 # suggested_gain_min/max clamp printed suggested values;
