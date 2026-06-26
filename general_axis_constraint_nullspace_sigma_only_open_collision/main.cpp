@@ -34,6 +34,9 @@ const char* phaseName(ControlPhase phase) {
 int main() {
 
   try {
+    // ================================================================
+    // 1. Setup: parameters, robot connection, recovery, gripper, model
+    // ================================================================
     //Read parameters from file, with defaults for missing values.
     Parameters params = readParameters("parameters.txt");
     // Print the parameters to the console for confirmation before starting the experiment.
@@ -150,8 +153,10 @@ int main() {
       }
     }
 
-    // Reading the Initial State from the Robot after the Generated Motion to initial is completed
-    // Defining the intial State object from the class Robotstate
+    // ================================================================
+    // 2. Initial state, task frames, gains, and run-state variables
+    // ================================================================
+    // Read the initial robot state after reaching q_init.
     RobotState initial_state = robot.readOnce();
 
 
@@ -378,412 +383,27 @@ int main() {
     std::vector<std::pair<std::string, std::string>> pending_parameter_updates;
     pending_parameter_updates.reserve(96);
 
-    // Print the starting message and instructions for the user before entering the control loop.
-    printf("Starting impedance controller:\n");
-
-    // libfranka calls this lambda at the robot control rate, normally 1 kHz.
-    //
-    // The two callback arguments are provided by libfranka:
-    //
-    //   state  = RobotState
-    //            A structure/object filled by libfranka for this control cycle.
-    //            It is refreshed every time this callback is called.
-    //
-    //            It contains measured/estimated robot data such as:
-    //              state.q                    joint positions [rad]
-    //              state.dq                   joint velocities [rad/s]
-    //              state.O_T_EE               end-effector pose as 16 doubles
-    //              state.tau_J                measured joint torques [Nm]
-    //              state.tau_ext_hat_filtered estimated external torques [Nm]
-    //              state.O_F_ext_hat_K        estimated external wrench [N, Nm]
-    //              state.robot_mode           current Franka robot mode
-    //              state.current_errors       current error/reflex flags
-    //              state.last_motion_errors   previous motion error flags
-    //              state.F_T_EE               flange-to-end-effector transform
-    //              state.EE_T_K               end-effector-to-stiffness-frame transform
-    //
-    //   period = Duration
-    //            Measured time since the previous callback [s].
-    //
-    // The lambda must return Torques, i.e. the 7 commanded joint torques
-    // tau_cmd [Nm] for this cycle.
-    robot.control([&](const RobotState& state,
-                      Duration period) -> Torques {
-
-      // increment the time variable by the period of the current control cycle, to keep track of the elapsed time since the start of the control loop.
-      time += period.toSec();
-
-
-      // Computing the joint Velocity vector dq with 7 elements in [rad/s].
-      Map<const Vec7> dq(state.dq.data());
-      Map<const Vec7> q_current(state.q.data());
-
-      // This Jacobian maps joint velocity dq [rad/s] to end-effector velocity:
-      //
-      //   xdot = J_EE(q) * dq
-      //
-      // where xdot = [linear velocity of EE; angular velocity of EE].
-      // Because the requested frame is kEndEffector, the Jacobian also uses
-      // the EE/TCP frame. Therefore the tool offset is included here too when
-      // the robot's F_T_EE is configured correctly.
-
-      // Computing the Jacobian for the current joint configuration q, for the end-effector frame
-      std::array<double, 42> jacobian_array = model.zeroJacobian(Frame::kEndEffector, state);
-      // Mapping the Jacobian array to a 9x7 Matrix J
-      Map<const Mat6x7> J(jacobian_array.data());
-      // Computing the end-effector velocity xdot in [m/s] and [rad/s].
-      Vec6 xdot = J * dq;
-      Vec3 pdot = xdot.head<3>();
-      Vec3 omega = xdot.tail<3>();
-
-      // state.O_T_EE is refreshed by libfranka every callback cycle.
-      // It is the measured base-to-end-effector transform O_T_EE.
-      //
-      // Franka stores it as a 16-value array; Eigen::Map views the same memory
-      // as a 4x4 matrix without copying it.
-      //
-      // Units:
-      //   p_EE = translation part of O_T_EE [m]
-      //   R_EE = rotation part of O_T_EE [-]
-
-      // Compunting the EE position and rotation for the current control cycle
-      Map<const Mat4x4> T_EE(state.O_T_EE.data());
-      Vec3 p_EE = T_EE.block<3, 1>(0, 3);
-      Mat3 R_EE = T_EE.block<3, 3>(0, 0);
-      // R_d is the initial tool orientation. R_d_alignment_target is the desired tool
-      // orientation parallel to the virtual surface.
-      // In orientation_test_only, R_d_orientation_test adds an extra rotation
-      // around surface tangent1. For the horizontal table this is base x.
-      //
-      // With use_phase_sequence = 1:
-      //   1. orient_to_surface: rotate at the start position until R_EE ~= R_d_alignment_target
-      //   2. search_first_contact: translate along contact_search_direction
-      //      while keeping R_EE ~= R_d_alignment_target
-      //   3. post_contact_align: keep the first contact point as the virtual
-      //      plane point and continue rotational alignment
-      //   4. surface_impedance: normal surface impedance experiment
-      Map<const Vec6> external_wrench(state.O_F_ext_hat_K.data());
-      // The control logic is as follows:
-      // If contact search is enabled, the controller starts in a mode where it moves the end-effector
-      // in the specified contact search direction at a constant speed until either contact is detected
-      // or the maximum search distance is reached.
-      // Contact is detected when the change in external force compared to the initial external force exceeds
-      // a specified threshold.
-      // If contact is detected, the current end-effector position is set as the point on the virtual surface,
-      //and the controller switches to impedance control mode using that surface point.
-      // If the maximum search distance is reached without detecting contact, the controller stops
-      // and logs the data up to that point.
-
-      // Defining the desired motion object from the DesiredMotion Class p_d and p_dot_d, which will be computed
-      // based on the current mode (searching for contact or impedance control) and the current time in the experiment.
-      // The computeDesiredMotion function computes the desired position and velocity based on the parameters,
-      // the elapsed time, the initial position, the current EE position, the surface frame, and the surface point.
-      DesiredMotion desired;
-      // The impedance_time variable is used to keep track of the time since the start of impedance control,
-      // which is used for logging and for the duration condition to end the experiment.
-      double impedance_time = time;
-      const bool orienting_to_surface = (phase == ControlPhase::kOrientToSurface);
-      const Mat3& R_d_phase =
-          params.orientation_test_only ? R_d_orientation_test : R_d_alignment_target;
-      const Vec3 external_force = external_wrench.head<3>();
-      const Vec3 external_moment = external_wrench.tail<3>();
-
-      // Manual re-guidance from the surface-impedance hold. Pressing g during
-      // surface_impedance relaxes the tool into gravity compensation so it can
-      // be moved by hand; pressing p then re-captures the pose and restarts the
-      // whole phase sequence (orient/search/align/impedance) from there. e still
-      // stops. Note: relaxing from a pressed contact releases the contact force,
-      // so expect the tool to ease off the surface when guidance starts.
-      if (phase == ControlPhase::kSurfaceImpedance && guide_requested.load()) {
-        guide_requested.store(false);
-        proceed_requested.store(false);
-        phase = ControlPhase::kManualGuide;
-        phase_start_time = time;
-        printf("\nphase: manual_guide (move the tool by hand; p+Enter restarts the sequence, e+Enter stops)\n");
-      }
-      if (phase == ControlPhase::kManualGuide) {
-        Array7 coriolis_array = model.coriolis(state);
-        Map<const Vec7> coriolis(coriolis_array.data());
-        Vec7 tau_cmd = coriolis - params.manual_guidance_damping * dq;
-        Array7 tau_array = vec7ToArray(tau_cmd);
-        if (stop_requested.load()) {
-          printf("\nStop requested with e + Enter. Finishing control loop...\n");
-          return MotionFinished(Torques(tau_array));
-        }
-        if (proceed_requested.load()) {
-          proceed_requested.store(false);
-          // Re-capture the hand-moved pose as the new start pose and reset all
-          // pose-dependent setup plus the phase machine, so the sequence runs
-          // again from here. Gains depend only on the params-defined alignment
-          // frame, so they do not need recomputing.
-          p_start = p_EE;
-          R_d = R_EE;
-          q_start = q_current;
-          R_d_alignment_target =
-              makeToolOrientationForAlignmentTarget(params, R_alignment_target, R_d);
-          R_d_orientation_test =
-              (std::abs(orientation_test_extra_tilt_rad) > 1e-9)
-                  ? Eigen::AngleAxisd(orientation_test_extra_tilt_rad,
-                                      R_alignment_target.col(1)).toRotationMatrix() * R_d
-                  : R_d_alignment_target;
-          surface_point_runtime =
-              params.use_start_as_surface_point ? p_start : params.surface_point;
-          p_end = params.hold_mode ? p_start : Vec3(p_start + params.delta_p);
-          external_force_start = external_force;
-          contact_force_bias = external_force;
-          contact_moment_bias = external_moment;
-          first_contact_tcp = p_start;
-          first_contact_point = p_start;
-          first_touch_candidate_force = external_force;
-          first_touch_candidate_moment = external_moment;
-          R_contact_start = R_d_alignment_target;
-          R_after_contact_align = R_d_alignment_target;
-          active_tool_contact_offset_ee = params.tool_contact_point_ee;
-          // Reset phase machine and per-run accumulators (time keeps running;
-          // phase-relative timers are re-zeroed to the current time).
-          phase = initial_phase;
-          phase_start_time = time;
-          next_debug_time = time;
-          contact_found = !params.use_contact_search;
-          contact_search_failed = false;
-          contact_time = 0.0;
-          first_contact_search_distance = 0.0;
-          first_contact_force_delta = 0.0;
-          first_touch_candidate_time = 0.0;
-          first_touch_candidate_distance = 0.0;
-          first_touch_candidate_signal = 0.0;
-          first_touch_candidate_saved = false;
-          contact_search_candidate_start_time = -1.0;
-          last_valid_post_align_axis_point_from_edge = Vec3::Zero();
-          last_valid_post_align_axis_dir = Vec3::Zero();
-          last_valid_post_align_edge_from_tcp = Vec3::Zero();
-          last_valid_post_align_axis_edge_distance = 0.0;
-          last_valid_post_align_screw_pitch = 0.0;
-          last_valid_post_align_axis_time = 0.0;
-          last_valid_post_align_omega_norm = 0.0;
-          last_valid_post_align_axis_valid = false;
-          last_valid_post_align_axis_stable = false;
-          fit_effective_moment = EffectiveMomentFitAccumulator();
-          // Method 2 TCP-wrench eval stats: reset so the final compare reflects
-          // only the most recent run, not a blend across restarts.
-          method2_eval_samples = 0;
-          method2_eval_force_error_sq_sum = 0.0;
-          method2_eval_moment_error_sq_sum = 0.0;
-          method2_eval_force_error_max = 0.0;
-          method2_eval_moment_error_max = 0.0;
-          method2_eval_force_norm_sum = 0.0;
-          method2_eval_moment_norm_sum = 0.0;
-          method2_eval_normal_force_norm_sum = 0.0;
-          method2_eval_normal_moment_norm_sum = 0.0;
-          method2_eval_force_from_translation_norm_sum = 0.0;
-          method2_eval_force_from_rotation_norm_sum = 0.0;
-          method2_eval_moment_from_translation_norm_sum = 0.0;
-          method2_eval_moment_from_rotation_norm_sum = 0.0;
-          printf("\n=== Restarting sequence from re-guided pose ===\n");
-          printVec7Deg("q_start", q_start);
-          printVec3Mm("p_start", p_start);
-          printf("phase: %s\n", phaseName(phase));
-        }
-        return Torques(tau_array);
-      }
-
-      Vec3 tool_contact_offset_ee = Vec3::Zero();
-      if (params.use_tool_contact_point_control) {
-        if (contact_found || phase == ControlPhase::kPostContactAlign) {
-          tool_contact_offset_ee = active_tool_contact_offset_ee;
-        } else if (params.auto_select_tool_contact_edge) {
-          const Vec3 positive_edge = R_EE * params.tool_contact_point_ee;
-          const Vec3 negative_edge = R_EE * (-params.tool_contact_point_ee);
-          tool_contact_offset_ee =
-              (positive_edge.dot(contact_search_direction) >=
-               negative_edge.dot(contact_search_direction))
-                  ? params.tool_contact_point_ee
-                  : -params.tool_contact_point_ee;
-        } else {
-          tool_contact_offset_ee = params.tool_contact_point_ee;
-        }
-      }
-      const Vec3 tool_contact_point = p_EE + R_EE * tool_contact_offset_ee;
-      Vec3 edge_target_debug = first_contact_point;
-      double post_contact_push_debug = 0.0;
-
-      const Vec3 e_R_to_alignment_target =
-          applyRotationalAxisMask(params, orientationError(R_EE, R_d_phase), R_alignment_target);
-      const Vec3 tool_axis_current = currentToolAxisInBase(params, R_EE).normalized();
-      const Vec3 tool_axis_target = desiredToolAxisInBase(params, R_alignment_target).normalized();
-      const double tool_axis_dot = std::max(
-          -1.0,
-          std::min(1.0, tool_axis_current.dot(tool_axis_target)));
-      const double tool_axis_alignment_error = std::acos(tool_axis_dot);
-      if (orienting_to_surface &&
-          params.debug_period > 0.0 &&
-          time >= next_debug_time) {
-        printOrientDebug(time - phase_start_time,
-                          (180.0 / M_PI) * tool_axis_alignment_error,
-                          (180.0 / M_PI) * e_R_to_alignment_target.norm());
-        next_debug_time = time + params.debug_period;
-      }
-      double force_delta_norm = 0.0;
-      const bool alignment_contact_detected =
-          orienting_to_surface &&
-          params.detect_contact_during_alignment &&
-          !params.orientation_test_only &&
-          forceContactDetected(external_force,
-                               params.alignment_contact_force_threshold,
-                               &force_delta_norm);
-
-      if (alignment_contact_detected) {
-        active_tool_contact_offset_ee = tool_contact_offset_ee;
-        surface_point_runtime = tool_contact_point;
-        first_contact_tcp = p_EE;
-        first_contact_point = tool_contact_point;
-        contact_found = true;
-        contact_time = time;
-        R_contact_start = R_EE;
-        phase = params.use_phase_sequence
-            ? ControlPhase::kPostContactAlign
-            : ControlPhase::kSurfaceImpedance;
-        phase_start_time = time;
-        contact_force_bias = external_force_start;
-        contact_moment_bias = external_moment;
-        printf("\nContact during alignment: force=%.1f N\n", force_delta_norm);
-        printContactEdgeDebug(active_tool_contact_offset_ee, first_contact_tcp, first_contact_point);
-        printf("phase: %s\n", phaseName(phase));
-      }
-
-      if (orienting_to_surface &&
-          !alignment_contact_detected &&
-          !params.orientation_test_only &&
-          (time - phase_start_time) >= params.orient_phase_min_time &&
-          tool_axis_alignment_error <= params.orient_phase_error_threshold) {
-        phase = params.use_contact_search
-            ? ControlPhase::kSearchFirstContact
-            : ControlPhase::kSurfaceImpedance;
-        phase_start_time = time;
-        contact_search_candidate_start_time = -1.0;
-        next_debug_time = time;
-        contact_force_bias = external_force;
-        contact_moment_bias = external_moment;
-        printf("\nOrientation reached: axis_err=%.1f deg\n",
-               (180.0 / M_PI) * tool_axis_alignment_error);
-        printf("phase: %s\n", phaseName(phase));
-      }
-
-      if (phase == ControlPhase::kPostContactAlign) {
-        const double post_align_time = time - phase_start_time;
-        const double post_moment_delta_norm = (external_moment - contact_moment_bias).norm();
-        const double post_force_delta_norm = (external_force - contact_force_bias).norm();
-        // Real commanded rotation error for this cycle, same convention the
-        // main control law uses (orientationError(current, desired)) -- the
-        // old single-sample gain fit had this backwards.
-        const Vec3 e_R_post_align = applyRotationalAxisMask(
-            params, orientationError(R_EE, R_contact_start), R_alignment_target);
-        const Vec3 e_R_post_align_task = R_alignment_target.transpose() * e_R_post_align;
-        const Vec3 omega_post_align_task = R_alignment_target.transpose() * omega;
-        const Vec3 gain_force_reference =
-            first_touch_candidate_saved ? first_touch_candidate_force : contact_force_bias;
-        const Vec3 gain_moment_reference =
-            first_touch_candidate_saved ? first_touch_candidate_moment : contact_moment_bias;
-        // Thesis effective-moment fit:
-        //   M_C = K_rt*dx_C + D_rt*v_C + K_R*dtheta + D_R*omega,
-        // with M_C moved from the TCP to the active contact edge by
-        //   M_C = m - r_C x f,  r_C = p_C - p_EE.
-        const Vec3 edge_from_tcp = tool_contact_point - p_EE;
-        const Vec3 force_delta = external_force - gain_force_reference;
-        const Vec3 moment_delta = external_moment - gain_moment_reference;
-        const Vec3 contact_moment_at_edge =
-            moment_delta - edge_from_tcp.cross(force_delta);
-        const Vec3 contact_displacement_task =
-            R_alignment_target.transpose() * (tool_contact_point - first_contact_point);
-        const Vec3 contact_velocity_task =
-            R_alignment_target.transpose() * (pdot + omega.cross(edge_from_tcp));
-        const Vec3 contact_moment_task =
-            R_alignment_target.transpose() * contact_moment_at_edge;
-        fit_effective_moment.addSample(contact_displacement_task,
-                                       contact_velocity_task,
-                                       e_R_post_align_task,
-                                       omega_post_align_task,
-                                       contact_moment_task);
-        Vec3 instant_pole_from_tcp = Vec3::Zero();
-        const bool instant_pole_valid =
-            computeInstantaneousPoleFromTcp(pdot, omega, &instant_pole_from_tcp);
-        const Vec3 instant_pole_base = p_EE + instant_pole_from_tcp;
-        const Vec3 instant_axis_point_from_edge =
-            instant_pole_base - tool_contact_point;
-        const Vec3 instant_axis_dir =
-            instant_pole_valid ? omega.normalized() : Vec3::Zero();
-        const double instant_screw_pitch =
-            instant_pole_valid ? instantaneousScrewPitch(pdot, omega) : 0.0;
-        const double instant_edge_axis_distance =
-            instant_pole_valid
-                ? pointDistanceToAxis(tool_contact_point, instant_pole_base, omega)
-                : 0.0;
-        const double omega_norm = omega.norm();
-        const bool best_axis_candidate_valid =
-            instant_pole_valid &&
-            omega_norm >= params.post_contact_best_axis_min_omega;
-        const bool best_axis_candidate_stable =
-            post_align_time >= params.post_contact_best_axis_min_time;
-        bool update_best_axis = false;
-        if (best_axis_candidate_valid) {
-          if (best_axis_candidate_stable) {
-            update_best_axis =
-                !last_valid_post_align_axis_valid ||
-                !last_valid_post_align_axis_stable ||
-                instant_edge_axis_distance < last_valid_post_align_axis_edge_distance;
-          } else if (!last_valid_post_align_axis_valid &&
-                     omega_norm > last_valid_post_align_omega_norm) {
-            update_best_axis = true;
-          }
-        }
-        if (update_best_axis) {
-          last_valid_post_align_axis_point_from_edge = instant_axis_point_from_edge;
-          last_valid_post_align_axis_dir = instant_axis_dir;
-          last_valid_post_align_edge_from_tcp = tool_contact_point - p_EE;
-          last_valid_post_align_axis_edge_distance = instant_edge_axis_distance;
-          last_valid_post_align_screw_pitch = instant_screw_pitch;
-          last_valid_post_align_axis_time = post_align_time;
-          last_valid_post_align_omega_norm = omega_norm;
-          last_valid_post_align_axis_valid = true;
-          last_valid_post_align_axis_stable = best_axis_candidate_stable;
-        }
-        if (params.debug_period > 0.0 && time >= next_debug_time) {
-          // actual_tip_deg: measured rotation away from the orientation held
-          // at first contact -- shows whether/how much the tool has
-          // passively tipped so far, not just where it is now.
+    // ================================================================
+    // One-shot report, run once when post_contact_align completes:
+    // surface-frame breakdown, finite Chasles axis, best-axis compare,
+    // and (if enabled) the Method 1/2/3 gain diagnostics. Pulled out of
+    // the realtime control loop body; captures the persistent run state
+    // by reference and takes the per-cycle measurements as arguments.
+    // ================================================================
+    auto reportPostContactAlignment = [&](
+        bool moment_contact_reached,
+        double post_align_time,
+        double post_force_delta_norm,
+        double post_moment_delta_norm,
+        const Vec3& p_EE,
+        const Mat3& R_EE,
+        const Vec3& tool_contact_point,
+        const Vec3& contact_moment_at_edge,
+        const Vec3& external_force,
+        const RobotState& state,
+        const Mat6x7& J) {
           const double actual_tip_deg =
               (180.0 / M_PI) * orientationError(R_EE, R_contact_start).norm();
-          const double edge_from_contact_mm =
-              1000.0 * (tool_contact_point - first_contact_point).norm();
-          const Vec3 pole_nearest_edge_from_edge =
-              instant_pole_valid
-                  ? Vec3(nearestPointOnAxis(tool_contact_point, instant_pole_base, omega) -
-                         tool_contact_point)
-                  : Vec3::Zero();
-          printAlignDebug(post_align_time,
-                           actual_tip_deg,
-                           post_force_delta_norm,
-                           post_moment_delta_norm,
-                           params.post_contact_moment_threshold,
-                           edge_from_contact_mm,
-                           instant_pole_valid,
-                           1000.0 * pole_nearest_edge_from_edge,
-                           1000.0 * instant_edge_axis_distance);
-          next_debug_time = time + params.debug_period;
-        }
-        const bool moment_contact_reached =
-            post_align_time >= params.post_contact_align_min_time &&
-            post_moment_delta_norm >= params.post_contact_moment_threshold;
-        const bool max_align_time_reached =
-            post_align_time >= params.post_contact_align_duration;
-
-        if (moment_contact_reached || max_align_time_reached) {
-          const double actual_tip_deg =
-              (180.0 / M_PI) * orientationError(R_EE, R_contact_start).norm();
-          R_after_contact_align = R_EE;
-          surface_point_runtime = p_EE;
-          phase = ControlPhase::kSurfaceImpedance;
-          phase_start_time = time;
           const Vec3 edge_from_contact_mm =
               1000.0 * (tool_contact_point - first_contact_point);
           const Vec3 tcp_from_contact_mm =
@@ -1130,6 +750,350 @@ int main() {
                      fit_effective_moment.sample_count);
             }
           }
+    };
+
+    printf("Starting impedance controller:\n");
+
+    // ================================================================
+    // Control loop: libfranka calls this back at ~1 kHz with the current
+    // RobotState and the period since the last call, and expects the 7
+    // commanded joint torques (Torques) for this cycle in return.
+    // ================================================================
+    robot.control([&](const RobotState& state,
+                      Duration period) -> Torques {
+
+      time += period.toSec();
+
+      // --- Measured state for this cycle ---
+      Map<const Vec7> dq(state.dq.data());
+      Map<const Vec7> q_current(state.q.data());
+
+      // EE Jacobian (kEndEffector frame, so the tool offset is included when
+      // F_T_EE is configured): xdot = J * dq, split into linear/angular.
+      std::array<double, 42> jacobian_array = model.zeroJacobian(Frame::kEndEffector, state);
+      Map<const Mat6x7> J(jacobian_array.data());
+      Vec6 xdot = J * dq;
+      Vec3 pdot = xdot.head<3>();
+      Vec3 omega = xdot.tail<3>();
+
+      // Measured base->EE pose O_T_EE (16 doubles viewed as 4x4 without copy).
+      Map<const Mat4x4> T_EE(state.O_T_EE.data());
+      Vec3 p_EE = T_EE.block<3, 1>(0, 3);
+      Mat3 R_EE = T_EE.block<3, 3>(0, 0);
+
+      // Phase sequence (use_phase_sequence = 1):
+      //   1. orient_to_surface  - rotate in place until R_EE ~= R_d_alignment_target
+      //   2. search_first_contact - translate along contact_search_direction
+      //   3. post_contact_align - hold first contact point, keep aligning
+      //   4. surface_impedance  - the surface impedance experiment
+      Map<const Vec6> external_wrench(state.O_F_ext_hat_K.data());
+
+      DesiredMotion desired;
+      double impedance_time = time;
+      const bool orienting_to_surface = (phase == ControlPhase::kOrientToSurface);
+      const Mat3& R_d_phase =
+          params.orientation_test_only ? R_d_orientation_test : R_d_alignment_target;
+      const Vec3 external_force = external_wrench.head<3>();
+      const Vec3 external_moment = external_wrench.tail<3>();
+
+      // Manual re-guidance from the surface-impedance hold. Pressing g during
+      // surface_impedance relaxes the tool into gravity compensation so it can
+      // be moved by hand; pressing p then re-captures the pose and restarts the
+      // whole phase sequence (orient/search/align/impedance) from there. e still
+      // stops. Note: relaxing from a pressed contact releases the contact force,
+      // so expect the tool to ease off the surface when guidance starts.
+      if (phase == ControlPhase::kSurfaceImpedance && guide_requested.load()) {
+        guide_requested.store(false);
+        proceed_requested.store(false);
+        phase = ControlPhase::kManualGuide;
+        phase_start_time = time;
+        printf("\nphase: manual_guide (move the tool by hand; p+Enter restarts the sequence, e+Enter stops)\n");
+      }
+      if (phase == ControlPhase::kManualGuide) {
+        Array7 coriolis_array = model.coriolis(state);
+        Map<const Vec7> coriolis(coriolis_array.data());
+        Vec7 tau_cmd = coriolis - params.manual_guidance_damping * dq;
+        Array7 tau_array = vec7ToArray(tau_cmd);
+        if (stop_requested.load()) {
+          printf("\nStop requested with e + Enter. Finishing control loop...\n");
+          return MotionFinished(Torques(tau_array));
+        }
+        if (proceed_requested.load()) {
+          proceed_requested.store(false);
+          // Re-capture the hand-moved pose as the new start pose and reset all
+          // pose-dependent setup plus the phase machine, so the sequence runs
+          // again from here. Gains depend only on the params-defined alignment
+          // frame, so they do not need recomputing.
+          p_start = p_EE;
+          R_d = R_EE;
+          q_start = q_current;
+          R_d_alignment_target =
+              makeToolOrientationForAlignmentTarget(params, R_alignment_target, R_d);
+          R_d_orientation_test =
+              (std::abs(orientation_test_extra_tilt_rad) > 1e-9)
+                  ? Eigen::AngleAxisd(orientation_test_extra_tilt_rad,
+                                      R_alignment_target.col(1)).toRotationMatrix() * R_d
+                  : R_d_alignment_target;
+          surface_point_runtime =
+              params.use_start_as_surface_point ? p_start : params.surface_point;
+          p_end = params.hold_mode ? p_start : Vec3(p_start + params.delta_p);
+          external_force_start = external_force;
+          contact_force_bias = external_force;
+          contact_moment_bias = external_moment;
+          first_contact_tcp = p_start;
+          first_contact_point = p_start;
+          first_touch_candidate_force = external_force;
+          first_touch_candidate_moment = external_moment;
+          R_contact_start = R_d_alignment_target;
+          R_after_contact_align = R_d_alignment_target;
+          active_tool_contact_offset_ee = params.tool_contact_point_ee;
+          // Reset phase machine and per-run accumulators (time keeps running;
+          // phase-relative timers are re-zeroed to the current time).
+          phase = initial_phase;
+          phase_start_time = time;
+          next_debug_time = time;
+          contact_found = !params.use_contact_search;
+          contact_search_failed = false;
+          contact_time = 0.0;
+          first_contact_search_distance = 0.0;
+          first_contact_force_delta = 0.0;
+          first_touch_candidate_time = 0.0;
+          first_touch_candidate_distance = 0.0;
+          first_touch_candidate_signal = 0.0;
+          first_touch_candidate_saved = false;
+          contact_search_candidate_start_time = -1.0;
+          last_valid_post_align_axis_point_from_edge = Vec3::Zero();
+          last_valid_post_align_axis_dir = Vec3::Zero();
+          last_valid_post_align_edge_from_tcp = Vec3::Zero();
+          last_valid_post_align_axis_edge_distance = 0.0;
+          last_valid_post_align_screw_pitch = 0.0;
+          last_valid_post_align_axis_time = 0.0;
+          last_valid_post_align_omega_norm = 0.0;
+          last_valid_post_align_axis_valid = false;
+          last_valid_post_align_axis_stable = false;
+          fit_effective_moment = EffectiveMomentFitAccumulator();
+          // Method 2 TCP-wrench eval stats: reset so the final compare reflects
+          // only the most recent run, not a blend across restarts.
+          method2_eval_samples = 0;
+          method2_eval_force_error_sq_sum = 0.0;
+          method2_eval_moment_error_sq_sum = 0.0;
+          method2_eval_force_error_max = 0.0;
+          method2_eval_moment_error_max = 0.0;
+          method2_eval_force_norm_sum = 0.0;
+          method2_eval_moment_norm_sum = 0.0;
+          method2_eval_normal_force_norm_sum = 0.0;
+          method2_eval_normal_moment_norm_sum = 0.0;
+          method2_eval_force_from_translation_norm_sum = 0.0;
+          method2_eval_force_from_rotation_norm_sum = 0.0;
+          method2_eval_moment_from_translation_norm_sum = 0.0;
+          method2_eval_moment_from_rotation_norm_sum = 0.0;
+          printf("\n=== Restarting sequence from re-guided pose ===\n");
+          printVec7Deg("q_start", q_start);
+          printVec3Mm("p_start", p_start);
+          printf("phase: %s\n", phaseName(phase));
+        }
+        return Torques(tau_array);
+      }
+
+      Vec3 tool_contact_offset_ee = Vec3::Zero();
+      if (params.use_tool_contact_point_control) {
+        if (contact_found || phase == ControlPhase::kPostContactAlign) {
+          tool_contact_offset_ee = active_tool_contact_offset_ee;
+        } else if (params.auto_select_tool_contact_edge) {
+          const Vec3 positive_edge = R_EE * params.tool_contact_point_ee;
+          const Vec3 negative_edge = R_EE * (-params.tool_contact_point_ee);
+          tool_contact_offset_ee =
+              (positive_edge.dot(contact_search_direction) >=
+               negative_edge.dot(contact_search_direction))
+                  ? params.tool_contact_point_ee
+                  : -params.tool_contact_point_ee;
+        } else {
+          tool_contact_offset_ee = params.tool_contact_point_ee;
+        }
+      }
+      const Vec3 tool_contact_point = p_EE + R_EE * tool_contact_offset_ee;
+      Vec3 edge_target_debug = first_contact_point;
+      double post_contact_push_debug = 0.0;
+
+      const Vec3 e_R_to_alignment_target =
+          applyRotationalAxisMask(params, orientationError(R_EE, R_d_phase), R_alignment_target);
+      const Vec3 tool_axis_current = currentToolAxisInBase(params, R_EE).normalized();
+      const Vec3 tool_axis_target = desiredToolAxisInBase(params, R_alignment_target).normalized();
+      const double tool_axis_dot = std::max(
+          -1.0,
+          std::min(1.0, tool_axis_current.dot(tool_axis_target)));
+      const double tool_axis_alignment_error = std::acos(tool_axis_dot);
+      if (orienting_to_surface &&
+          params.debug_period > 0.0 &&
+          time >= next_debug_time) {
+        printOrientDebug(time - phase_start_time,
+                          (180.0 / M_PI) * tool_axis_alignment_error,
+                          (180.0 / M_PI) * e_R_to_alignment_target.norm());
+        next_debug_time = time + params.debug_period;
+      }
+      double force_delta_norm = 0.0;
+      const bool alignment_contact_detected =
+          orienting_to_surface &&
+          params.detect_contact_during_alignment &&
+          !params.orientation_test_only &&
+          forceContactDetected(external_force,
+                               params.alignment_contact_force_threshold,
+                               &force_delta_norm);
+
+      if (alignment_contact_detected) {
+        active_tool_contact_offset_ee = tool_contact_offset_ee;
+        surface_point_runtime = tool_contact_point;
+        first_contact_tcp = p_EE;
+        first_contact_point = tool_contact_point;
+        contact_found = true;
+        contact_time = time;
+        R_contact_start = R_EE;
+        phase = params.use_phase_sequence
+            ? ControlPhase::kPostContactAlign
+            : ControlPhase::kSurfaceImpedance;
+        phase_start_time = time;
+        contact_force_bias = external_force_start;
+        contact_moment_bias = external_moment;
+        printf("\nContact during alignment: force=%.1f N\n", force_delta_norm);
+        printContactEdgeDebug(active_tool_contact_offset_ee, first_contact_tcp, first_contact_point);
+        printf("phase: %s\n", phaseName(phase));
+      }
+
+      if (orienting_to_surface &&
+          !alignment_contact_detected &&
+          !params.orientation_test_only &&
+          (time - phase_start_time) >= params.orient_phase_min_time &&
+          tool_axis_alignment_error <= params.orient_phase_error_threshold) {
+        phase = params.use_contact_search
+            ? ControlPhase::kSearchFirstContact
+            : ControlPhase::kSurfaceImpedance;
+        phase_start_time = time;
+        contact_search_candidate_start_time = -1.0;
+        next_debug_time = time;
+        contact_force_bias = external_force;
+        contact_moment_bias = external_moment;
+        printf("\nOrientation reached: axis_err=%.1f deg\n",
+               (180.0 / M_PI) * tool_axis_alignment_error);
+        printf("phase: %s\n", phaseName(phase));
+      }
+
+      if (phase == ControlPhase::kPostContactAlign) {
+        const double post_align_time = time - phase_start_time;
+        const double post_moment_delta_norm = (external_moment - contact_moment_bias).norm();
+        const double post_force_delta_norm = (external_force - contact_force_bias).norm();
+        // Real commanded rotation error for this cycle, same convention the
+        // main control law uses (orientationError(current, desired)) -- the
+        // old single-sample gain fit had this backwards.
+        const Vec3 e_R_post_align = applyRotationalAxisMask(
+            params, orientationError(R_EE, R_contact_start), R_alignment_target);
+        const Vec3 e_R_post_align_task = R_alignment_target.transpose() * e_R_post_align;
+        const Vec3 omega_post_align_task = R_alignment_target.transpose() * omega;
+        const Vec3 gain_force_reference =
+            first_touch_candidate_saved ? first_touch_candidate_force : contact_force_bias;
+        const Vec3 gain_moment_reference =
+            first_touch_candidate_saved ? first_touch_candidate_moment : contact_moment_bias;
+        // Thesis effective-moment fit:
+        //   M_C = K_rt*dx_C + D_rt*v_C + K_R*dtheta + D_R*omega,
+        // with M_C moved from the TCP to the active contact edge by
+        //   M_C = m - r_C x f,  r_C = p_C - p_EE.
+        const Vec3 edge_from_tcp = tool_contact_point - p_EE;
+        const Vec3 force_delta = external_force - gain_force_reference;
+        const Vec3 moment_delta = external_moment - gain_moment_reference;
+        const Vec3 contact_moment_at_edge =
+            moment_delta - edge_from_tcp.cross(force_delta);
+        const Vec3 contact_displacement_task =
+            R_alignment_target.transpose() * (tool_contact_point - first_contact_point);
+        const Vec3 contact_velocity_task =
+            R_alignment_target.transpose() * (pdot + omega.cross(edge_from_tcp));
+        const Vec3 contact_moment_task =
+            R_alignment_target.transpose() * contact_moment_at_edge;
+        fit_effective_moment.addSample(contact_displacement_task,
+                                       contact_velocity_task,
+                                       e_R_post_align_task,
+                                       omega_post_align_task,
+                                       contact_moment_task);
+        Vec3 instant_pole_from_tcp = Vec3::Zero();
+        const bool instant_pole_valid =
+            computeInstantaneousPoleFromTcp(pdot, omega, &instant_pole_from_tcp);
+        const Vec3 instant_pole_base = p_EE + instant_pole_from_tcp;
+        const Vec3 instant_axis_point_from_edge =
+            instant_pole_base - tool_contact_point;
+        const Vec3 instant_axis_dir =
+            instant_pole_valid ? omega.normalized() : Vec3::Zero();
+        const double instant_screw_pitch =
+            instant_pole_valid ? instantaneousScrewPitch(pdot, omega) : 0.0;
+        const double instant_edge_axis_distance =
+            instant_pole_valid
+                ? pointDistanceToAxis(tool_contact_point, instant_pole_base, omega)
+                : 0.0;
+        const double omega_norm = omega.norm();
+        const bool best_axis_candidate_valid =
+            instant_pole_valid &&
+            omega_norm >= params.post_contact_best_axis_min_omega;
+        const bool best_axis_candidate_stable =
+            post_align_time >= params.post_contact_best_axis_min_time;
+        bool update_best_axis = false;
+        if (best_axis_candidate_valid) {
+          if (best_axis_candidate_stable) {
+            update_best_axis =
+                !last_valid_post_align_axis_valid ||
+                !last_valid_post_align_axis_stable ||
+                instant_edge_axis_distance < last_valid_post_align_axis_edge_distance;
+          } else if (!last_valid_post_align_axis_valid &&
+                     omega_norm > last_valid_post_align_omega_norm) {
+            update_best_axis = true;
+          }
+        }
+        if (update_best_axis) {
+          last_valid_post_align_axis_point_from_edge = instant_axis_point_from_edge;
+          last_valid_post_align_axis_dir = instant_axis_dir;
+          last_valid_post_align_edge_from_tcp = tool_contact_point - p_EE;
+          last_valid_post_align_axis_edge_distance = instant_edge_axis_distance;
+          last_valid_post_align_screw_pitch = instant_screw_pitch;
+          last_valid_post_align_axis_time = post_align_time;
+          last_valid_post_align_omega_norm = omega_norm;
+          last_valid_post_align_axis_valid = true;
+          last_valid_post_align_axis_stable = best_axis_candidate_stable;
+        }
+        if (params.debug_period > 0.0 && time >= next_debug_time) {
+          // actual_tip_deg: measured rotation away from the orientation held
+          // at first contact -- shows whether/how much the tool has
+          // passively tipped so far, not just where it is now.
+          const double actual_tip_deg =
+              (180.0 / M_PI) * orientationError(R_EE, R_contact_start).norm();
+          const double edge_from_contact_mm =
+              1000.0 * (tool_contact_point - first_contact_point).norm();
+          const Vec3 pole_nearest_edge_from_edge =
+              instant_pole_valid
+                  ? Vec3(nearestPointOnAxis(tool_contact_point, instant_pole_base, omega) -
+                         tool_contact_point)
+                  : Vec3::Zero();
+          printAlignDebug(post_align_time,
+                           actual_tip_deg,
+                           post_force_delta_norm,
+                           post_moment_delta_norm,
+                           params.post_contact_moment_threshold,
+                           edge_from_contact_mm,
+                           instant_pole_valid,
+                           1000.0 * pole_nearest_edge_from_edge,
+                           1000.0 * instant_edge_axis_distance);
+          next_debug_time = time + params.debug_period;
+        }
+        const bool moment_contact_reached =
+            post_align_time >= params.post_contact_align_min_time &&
+            post_moment_delta_norm >= params.post_contact_moment_threshold;
+        const bool max_align_time_reached =
+            post_align_time >= params.post_contact_align_duration;
+
+        if (moment_contact_reached || max_align_time_reached) {
+          R_after_contact_align = R_EE;
+          surface_point_runtime = p_EE;
+          phase = ControlPhase::kSurfaceImpedance;
+          phase_start_time = time;
+          reportPostContactAlignment(
+              moment_contact_reached, post_align_time, post_force_delta_norm,
+              post_moment_delta_norm, p_EE, R_EE, tool_contact_point,
+              contact_moment_at_edge, external_force, state, J);
           printf("phase: %s\n", phaseName(phase));
         }
       }
@@ -1550,6 +1514,10 @@ int main() {
       return Torques(tau_array);
     });
 
+    // ================================================================
+    // 3. Post-run: persist queued parameter updates, Method 2 wrench
+    //    comparison, write the CSV log, and print the final summary
+    // ================================================================
     if (!pending_parameter_updates.empty()) {
       updateParameterValues("parameters.txt", pending_parameter_updates);
       printf("parameters.txt updated after control loop (%zu queued values).\n",

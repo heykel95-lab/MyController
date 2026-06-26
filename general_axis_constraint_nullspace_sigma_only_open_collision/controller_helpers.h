@@ -2,164 +2,50 @@
 
 #include "controller_types.h"
 
-inline std::string trimWhitespace(const std::string& input) {
-  const std::string whitespace = " \t\r\n";
-  const auto begin = input.find_first_not_of(whitespace);
-  if (begin == std::string::npos) {
-    return "";
-  }
-  const auto end = input.find_last_not_of(whitespace);
-  return input.substr(begin, end - begin + 1);
-}
+std::string trimWhitespace(const std::string& input);
 
 // Rewrites specific "key = value" lines of a parameters file in place,
 // preserving every other line (comments, formatting, unrelated keys)
 // exactly as-is. Used to auto-update desired_axis_* with the just-measured
 // best axis when consecutive runs share the same post-contact gains.
-inline void updateParameterValues(
+void updateParameterValues(
     const std::string& filename,
-    const std::vector<std::pair<std::string, std::string>>& updates) {
-  std::ifstream in(filename);
-  if (!in.is_open()) {
-    return;
-  }
-  std::vector<std::string> lines;
-  std::string line;
-  while (std::getline(in, line)) {
-    lines.push_back(line);
-  }
-  in.close();
+    const std::vector<std::pair<std::string, std::string>>& updates);
 
-  for (auto& l : lines) {
-    const auto comment_pos = l.find('#');
-    const std::string code_part =
-        (comment_pos != std::string::npos) ? l.substr(0, comment_pos) : l;
-    const auto eq_pos = code_part.find('=');
-    if (eq_pos == std::string::npos) {
-      continue;
-    }
-    const std::string key = trimWhitespace(code_part.substr(0, eq_pos));
-    for (const auto& update : updates) {
-      if (key == update.first) {
-        const std::string comment_part =
-            (comment_pos != std::string::npos) ? l.substr(comment_pos) : "";
-        l = code_part.substr(0, eq_pos) + "= " + update.second +
-            (comment_part.empty() ? "" : ("  " + comment_part));
-        break;
-      }
-    }
-  }
-
-  std::ofstream out(filename, std::ios::trunc);
-  for (const auto& out_line : lines) {
-    out << out_line << "\n";
-  }
-}
-
-inline void appendMat6ParameterUpdates(
+void appendMat6ParameterUpdates(
     std::vector<std::pair<std::string, std::string>>& updates,
     const std::string& prefix,
-    const Mat6x6& matrix) {
-  char key[64];
-  char value[32];
-  for (int r = 0; r < 6; ++r) {
-    for (int c = 0; c < 6; ++c) {
-      snprintf(key, sizeof(key), "%s_%d%d", prefix.c_str(), r, c);
-      snprintf(value, sizeof(value), "%.9g", matrix(r, c));
-      updates.emplace_back(key, value);
-    }
-  }
-}
+    const Mat6x6& matrix);
 
-inline Array7 vec7ToArray(const Vec7& v) {
-  Array7 array{};
-  for (int i = 0; i < 7; ++i) {
-    array[i] = v(i);
-  }
-  return array;
-}
+Array7 vec7ToArray(const Vec7& v);
 
-inline double smallestSingularValue(const Mat6x7& J) {
-  Eigen::JacobiSVD<Mat6x7> svd(J, Eigen::ComputeFullU | Eigen::ComputeFullV);
-  return svd.singularValues().minCoeff();
-}
+double smallestSingularValue(const Mat6x7& J);
 
-inline double smoothStep(double r) {
-  r = std::max(0.0, std::min(1.0, r));
-  return 10.0 * std::pow(r, 3) - 15.0 * std::pow(r, 4) + 6.0 * std::pow(r, 5);
-}
+double smoothStep(double r);
 
-inline double smoothStepDerivative(double r, double T) {
-  r = std::max(0.0, std::min(1.0, r));
-  if (r <= 0.0 || r >= 1.0) {
-    return 0.0;
-  }
+double smoothStepDerivative(double r, double T);
 
-  const double ds_dr =
-      30.0 * std::pow(r, 2)
-    - 60.0 * std::pow(r, 3)
-    + 30.0 * std::pow(r, 4);
-  return ds_dr / T;
-}
+double postContactPush(const Parameters& params, double post_align_time);
 
-inline double postContactPush(const Parameters& params, double post_align_time) {
-  double push =
-      params.post_contact_normal_push + params.post_contact_push_speed * post_align_time;
-  if (params.post_contact_max_push > 0.0) {
-    push = std::min(params.post_contact_max_push, push);
-  }
-  return push;
-}
-
-inline bool computeInstantaneousPoleFromTcp(
+bool computeInstantaneousPoleFromTcp(
     const Vec3& v,
     const Vec3& omega,
-    Vec3* pole_from_tcp) {
-  const double omega_norm_squared = omega.squaredNorm();
-  constexpr double kMinUsefulAngularSpeed = 0.02;
-  if (omega_norm_squared <= kMinUsefulAngularSpeed * kMinUsefulAngularSpeed) {
-    pole_from_tcp->setZero();
-    return false;
-  }
+    Vec3* pole_from_tcp);
 
-  *pole_from_tcp = omega.cross(v) / omega_norm_squared;
-  return true;
-}
+double instantaneousScrewPitch(const Vec3& v, const Vec3& omega);
 
-inline double instantaneousScrewPitch(const Vec3& v, const Vec3& omega) {
-  const double omega_norm_squared = omega.squaredNorm();
-  if (omega_norm_squared <= 1e-8) {
-    return 0.0;
-  }
-  return omega.dot(v) / omega_norm_squared;
-}
-
-inline double pointDistanceToAxis(
+double pointDistanceToAxis(
     const Vec3& point,
     const Vec3& axis_point,
-    const Vec3& axis_direction) {
-  const double axis_norm = axis_direction.norm();
-  if (axis_norm <= 1e-8) {
-    return 0.0;
-  }
-
-  return (point - axis_point).cross(axis_direction / axis_norm).norm();
-}
+    const Vec3& axis_direction);
 
 // The point on the line through axis_point (direction axis_direction)
 // closest to "point": project (point - axis_point) onto the unit axis
 // direction, then step that far along the axis from axis_point.
-inline Vec3 nearestPointOnAxis(
+Vec3 nearestPointOnAxis(
     const Vec3& point,
     const Vec3& axis_point,
-    const Vec3& axis_direction) {
-  const double axis_norm = axis_direction.norm();
-  if (axis_norm <= 1e-8) {
-    return axis_point;
-  }
-  const Vec3 axis_unit = axis_direction / axis_norm;
-  return axis_point + (point - axis_point).dot(axis_unit) * axis_unit;
-}
+    const Vec3& axis_direction);
 
 // The single screw axis (Chasles' theorem) that exactly describes a finite
 // rigid-body displacement between two poses of the same body-fixed
@@ -178,64 +64,23 @@ struct FiniteScrewAxis {
   bool valid = false;
 };
 
-inline FiniteScrewAxis computeFiniteScrewAxis(
+FiniteScrewAxis computeFiniteScrewAxis(
     const Vec3& p_start,
     const Mat3& R_start,
     const Vec3& p_end,
-    const Mat3& R_end) {
-  FiniteScrewAxis result;
-  // R_rel maps a vector expressed in the start orientation to the same
-  // body-fixed vector expressed in the end orientation, in base coordinates:
-  // (p_end - axis_point) = R_rel * (p_start - axis_point).
-  const Mat3 R_rel = R_end * R_start.transpose();
-  const Eigen::AngleAxisd angle_axis(R_rel);
-  const double theta = angle_axis.angle();
-  result.angle = theta;
-  // Below this angle the net rotation is too small to fix an axis location;
-  // the displacement is dominated by translation, not rotation, and the
-  // formula below divides by sin(theta/2).
-  constexpr double kMinUsefulAngle = 1e-3;
-  if (theta < kMinUsefulAngle) {
-    return result;
-  }
-  const Vec3 n_hat = angle_axis.axis();
-  const Vec3 d = p_end - p_start;
-  const double h_theta = n_hat.dot(d);
-  result.pitch = h_theta / theta;
-  // g is the component of the displacement perpendicular to the axis -- the
-  // part that has to come from rotating about an axis offset from p_start,
-  // not from translation along the axis itself.
-  const Vec3 g = d - h_theta * n_hat;
-  result.axis_point_from_start =
-      0.5 * g + 0.5 * (std::cos(0.5 * theta) / std::sin(0.5 * theta)) * n_hat.cross(g);
-  result.axis_dir = n_hat;
-  result.valid = true;
-  return result;
-}
+    const Mat3& R_end);
 
-inline double suggestedPositiveGain(
+double suggestedPositiveGain(
     double wrench_component,
     double motion_component,
     double min_gain,
-    double max_gain) {
-  const double min_motion = 1e-6;
-  double gain = max_gain;
-  if (std::abs(motion_component) > min_motion) {
-    gain = std::abs(wrench_component / motion_component);
-  }
-  return std::max(min_gain, std::min(max_gain, gain));
-}
+    double max_gain);
 
-inline Vec3 suggestedPositiveGains(
+Vec3 suggestedPositiveGains(
     const Vec3& wrench,
     const Vec3& motion,
     double min_gain,
-    double max_gain) {
-  return Vec3(
-      suggestedPositiveGain(wrench(0), motion(0), min_gain, max_gain),
-      suggestedPositiveGain(wrench(1), motion(1), min_gain, max_gain),
-      suggestedPositiveGain(wrench(2), motion(2), min_gain, max_gain));
-}
+    double max_gain);
 
 // Running sums for an ordinary-least-squares fit of wrench = K*x + D*v over
 // many samples collected while a phase runs, instead of reading K and D off
@@ -269,29 +114,12 @@ struct LinearFitAccumulator {
 // apart from this data at all, no matter how many samples are collected.
 // min_r_squared gates on exactly that: it is 1 - (correlation between x and
 // v)^2, so it is ~0 when x and v are nearly collinear.
-inline void fitStiffnessDamping(
+void fitStiffnessDamping(
     const LinearFitAccumulator& fit,
     double min_r_squared,
     Vec3* K,
     Vec3* D,
-    bool valid[3]) {
-  for (int i = 0; i < 3; ++i) {
-    const double Sxx = fit.Sxx(i);
-    const double Sxv = fit.Sxv(i);
-    const double Svv = fit.Svv(i);
-    const double scale = Sxx * Svv;
-    const double det = scale - Sxv * Sxv;
-    if (scale <= 1e-18 || det / scale < min_r_squared) {
-      (*K)(i) = 0.0;
-      (*D)(i) = 0.0;
-      valid[i] = false;
-      continue;
-    }
-    (*K)(i) = (fit.Sxf(i) * Svv - fit.Svf(i) * Sxv) / det;
-    (*D)(i) = (Sxx * fit.Svf(i) - Sxv * fit.Sxf(i)) / det;
-    valid[i] = true;
-  }
-}
+    bool valid[3]);
 
 struct DiagonalGainSet {
   Vec3 Kp = Vec3::Zero();
@@ -300,97 +128,34 @@ struct DiagonalGainSet {
   Vec3 DR = Vec3::Zero();
 };
 
-inline double clampedLimitGain(double numerator,
-                               double denominator,
-                               double min_gain,
-                               double max_gain) {
-  if (std::abs(denominator) <= 1e-12) {
-    return max_gain;
-  }
-  const double gain = std::abs(numerator) / std::abs(denominator);
-  return std::max(min_gain, std::min(max_gain, gain));
-}
+double clampedLimitGain(double numerator,
+                        double denominator,
+                        double min_gain,
+                        double max_gain);
 
-inline Vec3 stiffnessFromLimits(const Vec3& max_wrench,
-                                const Vec3& max_motion,
-                                double min_gain,
-                                double max_gain) {
-  Vec3 stiffness = Vec3::Zero();
-  for (int i = 0; i < 3; ++i) {
-    stiffness(i) = clampedLimitGain(max_wrench(i), max_motion(i), min_gain, max_gain);
-  }
-  return stiffness;
-}
+Vec3 stiffnessFromLimits(const Vec3& max_wrench,
+                         const Vec3& max_motion,
+                         double min_gain,
+                         double max_gain);
 
-inline Vec3 criticalDampingFromStiffness(const Vec3& inertia,
-                                         const Vec3& stiffness,
-                                         double damping_ratio,
-                                         double max_gain) {
-  Vec3 damping = Vec3::Zero();
-  const double zeta = std::max(0.0, damping_ratio);
-  for (int i = 0; i < 3; ++i) {
-    const double m = std::max(0.0, inertia(i));
-    const double k = std::max(0.0, stiffness(i));
-    damping(i) = std::min(max_gain, 2.0 * zeta * std::sqrt(m * k));
-  }
-  return damping;
-}
+Vec3 criticalDampingFromStiffness(const Vec3& inertia,
+                                  const Vec3& stiffness,
+                                  double damping_ratio,
+                                  double max_gain);
 
-inline DiagonalGainSet computeQuasiStaticGains(const Parameters& params,
-                                               const Vec3& translational_inertia,
-                                               const Vec3& rotational_inertia) {
-  DiagonalGainSet gains;
-  gains.Kp = stiffnessFromLimits(params.quasi_force_limit,
-                                 params.quasi_displacement_limit,
-                                 params.suggested_gain_min,
-                                 params.suggested_gain_max);
-  gains.KR = stiffnessFromLimits(params.quasi_moment_limit,
-                                 params.quasi_angle_limit,
-                                 params.suggested_gain_min,
-                                 params.suggested_gain_max);
-  gains.Dp = criticalDampingFromStiffness(translational_inertia,
-                                         gains.Kp,
-                                         params.quasi_damping_ratio,
-                                         params.suggested_gain_max);
-  gains.DR = criticalDampingFromStiffness(rotational_inertia,
-                                         gains.KR,
-                                         params.quasi_damping_ratio,
-                                         params.suggested_gain_max);
-  return gains;
-}
+DiagonalGainSet computeQuasiStaticGains(const Parameters& params,
+                                        const Vec3& translational_inertia,
+                                        const Vec3& rotational_inertia);
 
-inline DiagonalGainSet computeQuasiStaticGains(const Parameters& params) {
-  return computeQuasiStaticGains(
-      params, params.quasi_effective_mass, params.quasi_effective_inertia);
-}
+DiagonalGainSet computeQuasiStaticGains(const Parameters& params);
 
-inline Mat3 skewMatrix(const Vec3& v) {
-  Mat3 s;
-  s << 0.0, -v(2), v(1),
-       v(2), 0.0, -v(0),
-       -v(1), v(0), 0.0;
-  return s;
-}
+Mat3 skewMatrix(const Vec3& v);
 
-inline Mat6x6 blockDiagonalGain(const Vec3& translational, const Vec3& rotational) {
-  Mat6x6 gain = Mat6x6::Zero();
-  gain.block<3, 3>(0, 0) = translational.asDiagonal();
-  gain.block<3, 3>(3, 3) = rotational.asDiagonal();
-  return gain;
-}
+Mat6x6 blockDiagonalGain(const Vec3& translational, const Vec3& rotational);
 
-inline Mat6x6 offsetAdjoint(const Vec3& r_c) {
-  Mat6x6 adjoint = Mat6x6::Zero();
-  adjoint.block<3, 3>(0, 0) = Mat3::Identity();
-  adjoint.block<3, 3>(0, 3) = skewMatrix(r_c);
-  adjoint.block<3, 3>(3, 3) = Mat3::Identity();
-  return adjoint;
-}
+Mat6x6 offsetAdjoint(const Vec3& r_c);
 
-inline Mat6x6 adjointTransformedGain(const Mat6x6& pole_gain, const Vec3& r_c) {
-  const Mat6x6 adjoint = offsetAdjoint(r_c);
-  return adjoint.transpose() * pole_gain * adjoint;
-}
+Mat6x6 adjointTransformedGain(const Mat6x6& pole_gain, const Vec3& r_c);
 
 struct CartesianInertiaEstimate {
   Vec3 translational = Vec3::Ones();
@@ -399,67 +164,12 @@ struct CartesianInertiaEstimate {
   bool valid = false;
 };
 
-inline Mat6x6 blockDiagonalRotation(const Mat3& R) {
-  Mat6x6 T = Mat6x6::Zero();
-  T.block<3, 3>(0, 0) = R;
-  T.block<3, 3>(3, 3) = R;
-  return T;
-}
+Mat6x6 blockDiagonalRotation(const Mat3& R);
 
-inline CartesianInertiaEstimate computeCartesianInertiaEstimate(
+CartesianInertiaEstimate computeCartesianInertiaEstimate(
     const Mat7x7& joint_mass,
     const Mat6x7& J,
-    const Mat3& R_task) {
-  CartesianInertiaEstimate result;
-
-  Eigen::LDLT<Mat7x7> mass_ldlt(joint_mass);
-  if (mass_ldlt.info() != Eigen::Success) {
-    return result;
-  }
-
-  const Mat7x6 Minv_Jt = mass_ldlt.solve(J.transpose());
-  if (!Minv_Jt.allFinite()) {
-    return result;
-  }
-
-  Mat6x6 lambda_inv = J * Minv_Jt;
-  lambda_inv = 0.5 * (lambda_inv + lambda_inv.transpose());
-  if (!lambda_inv.allFinite()) {
-    return result;
-  }
-
-  Mat6x6 lambda_inv_damped = lambda_inv;
-  lambda_inv_damped.diagonal().array() += 1e-9;
-  Eigen::LDLT<Mat6x6> lambda_ldlt(lambda_inv_damped);
-  if (lambda_ldlt.info() != Eigen::Success) {
-    return result;
-  }
-
-  Mat6x6 Lambda_base = lambda_ldlt.solve(Mat6x6::Identity());
-  if (!Lambda_base.allFinite()) {
-    return result;
-  }
-  Lambda_base = 0.5 * (Lambda_base + Lambda_base.transpose());
-
-  const Mat6x6 T_task = blockDiagonalRotation(R_task);
-  result.Lambda_task = T_task.transpose() * Lambda_base * T_task;
-  result.Lambda_task = 0.5 * (result.Lambda_task + result.Lambda_task.transpose());
-  if (!result.Lambda_task.allFinite()) {
-    return result;
-  }
-
-  for (int i = 0; i < 3; ++i) {
-    const double m = result.Lambda_task(i, i);
-    const double I = result.Lambda_task(i + 3, i + 3);
-    if (m <= 0.0 || I <= 0.0) {
-      return result;
-    }
-    result.translational(i) = m;
-    result.rotational(i) = I;
-  }
-  result.valid = true;
-  return result;
-}
+    const Mat3& R_task);
 
 struct EffectiveMomentFitAccumulator {
   Mat12x12 H = Mat12x12::Zero();
@@ -491,343 +201,62 @@ struct EffectiveMomentFit {
   bool valid = false;
 };
 
-inline EffectiveMomentFit fitEffectiveMomentModel(
+EffectiveMomentFit fitEffectiveMomentModel(
     const EffectiveMomentFitAccumulator& fit,
-    double ridge) {
-  EffectiveMomentFit result;
-  result.sample_count = fit.sample_count;
-  if (fit.sample_count < 12) {
-    return result;
-  }
+    double ridge);
 
-  Mat12x12 H_damped = fit.H;
-  H_damped.diagonal().array() += std::max(0.0, ridge);
-  Eigen::LDLT<Mat12x12> ldlt(H_damped);
-  if (ldlt.info() != Eigen::Success) {
-    return result;
-  }
-
-  const Mat12x3 x = ldlt.solve(fit.B);
-  if (ldlt.info() != Eigen::Success || !x.allFinite()) {
-    return result;
-  }
-
-  const Mat3x12 A = x.transpose();
-  result.K_rt = A.block<3, 3>(0, 0);
-  result.D_rt = A.block<3, 3>(0, 3);
-  result.K_R = A.block<3, 3>(0, 6);
-  result.D_R = A.block<3, 3>(0, 9);
-
-  const double cross_term = (x.transpose() * fit.B).trace();
-  const double model_term = (x.transpose() * fit.H * x).trace();
-  const double sse = std::max(0.0, fit.y_squared_sum - 2.0 * cross_term + model_term);
-  result.rms_error = std::sqrt(sse / static_cast<double>(fit.sample_count));
-  result.valid = true;
-  return result;
-}
-
-inline Vec3 desiredAxisLinearMotionFromTcp(
+Vec3 desiredAxisLinearMotionFromTcp(
     const Vec3& axis_from_tcp,
     const Vec3& axis_dir,
-    double pitch) {
-  const Vec3 axis_unit =
-      (axis_dir.norm() > 1e-9) ? axis_dir.normalized() : Vec3(1.0, 0.0, 0.0);
-  return -axis_unit.cross(axis_from_tcp) + pitch * axis_unit;
-}
+    double pitch);
 
-inline Vec3 orientationError(const Mat3& R_current, const Mat3& R_desired) {
-  Mat3 R_error = R_current.transpose() * R_desired;
-  Eigen::AngleAxisd angle_axis(R_error);
+Vec3 orientationError(const Mat3& R_current, const Mat3& R_desired);
 
-  if (std::abs(angle_axis.angle()) < 1e-9) {
-    return Vec3::Zero();
-  }
-  return R_current * angle_axis.axis() * angle_axis.angle();
-}
+Array7 filledArray7(double value);
 
-inline Array7 filledArray7(double value) {
-  Array7 array{};
-  array.fill(value);
-  return array;
-}
+Array6 filledArray6(double value);
 
-inline Array6 filledArray6(double value) {
-  Array6 array{};
-  array.fill(value);
-  return array;
-}
+Vec3 normalizedOrFallback(const Vec3& v, const Vec3& fallback);
 
-inline Vec3 normalizedOrFallback(const Vec3& v, const Vec3& fallback) {
-  if (v.norm() > 1e-9) {
-    return v.normalized();
-  }
-  return fallback.normalized();
-}
+Mat3 makeSurfaceFrameFromNormalTangent(const Vec3& normal_input, const Vec3& tangent1_input);
 
-inline Mat3 makeSurfaceFrameFromNormalTangent(const Vec3& normal_input, const Vec3& tangent1_input) {
-  const Vec3 normal = normalizedOrFallback(normal_input, Vec3(1.0, 0.0, 0.0));
-  Vec3 tangent1 = tangent1_input - normal * normal.dot(tangent1_input);
+Mat3 makeAlignmentTargetFrame(const Parameters& params);
 
-  if (tangent1.norm() <= 1e-9) {
-    Vec3 fallback(0.0, 1.0, 0.0);
-    if (std::abs(normal.dot(fallback)) > 0.95) {
-      fallback = Vec3(0.0, 0.0, 1.0);
-    }
-    tangent1 = fallback - normal * normal.dot(fallback);
-  }
+Mat3 rotationBetweenUnitVectors(const Vec3& from_unit, const Vec3& to_unit);
 
-  tangent1.normalize();
-  Vec3 tangent2 = normal.cross(tangent1);
-  tangent2.normalize();
+Vec3 desiredToolAxisInBase(const Parameters& params, const Mat3& R_alignment_target);
 
-  Mat3 R_alignment_target;
-  R_alignment_target.col(0) = normal;
-  R_alignment_target.col(1) = tangent1;
-  R_alignment_target.col(2) = tangent2;
-  return R_alignment_target;
-}
+Vec3 currentToolAxisInBase(const Parameters& params, const Mat3& R_EE);
 
-inline Mat3 makeAlignmentTargetFrame(const Parameters& params) {
-  return makeSurfaceFrameFromNormalTangent(params.alignment_target_normal, params.alignment_target_tangent1);
-}
-
-inline Mat3 rotationBetweenUnitVectors(const Vec3& from_unit, const Vec3& to_unit) {
-  const double dot = std::max(-1.0, std::min(1.0, from_unit.dot(to_unit)));
-  if (dot > 1.0 - 1e-9) {
-    return Mat3::Identity();
-  }
-
-  if (dot < -1.0 + 1e-9) {
-    Vec3 axis = from_unit.cross(Vec3::UnitX());
-    if (axis.norm() <= 1e-9) {
-      axis = from_unit.cross(Vec3::UnitY());
-    }
-    axis.normalize();
-    return Eigen::AngleAxisd(M_PI, axis).toRotationMatrix();
-  }
-
-  Vec3 axis = from_unit.cross(to_unit);
-  axis.normalize();
-  return Eigen::AngleAxisd(std::acos(dot), axis).toRotationMatrix();
-}
-
-inline Vec3 desiredToolAxisInBase(const Parameters& params, const Mat3& R_alignment_target) {
-  const double sign = (params.tool_axis_target_sign >= 0.0) ? 1.0 : -1.0;
-  return sign * R_alignment_target.col(0);
-}
-
-inline Vec3 currentToolAxisInBase(const Parameters& params, const Mat3& R_EE) {
-  return R_EE * normalizedOrFallback(params.tool_axis_ee, Vec3(0.0, 0.0, 1.0));
-}
-
-inline Mat3 makeToolOrientationForAlignmentTarget(
+Mat3 makeToolOrientationForAlignmentTarget(
     const Parameters& params,
     const Mat3& R_alignment_target,
-    const Mat3& R_start) {
-  const Vec3 tool_axis_start =
-      currentToolAxisInBase(params, R_start).normalized();
-  const Vec3 tool_axis_target =
-      desiredToolAxisInBase(params, R_alignment_target).normalized();
+    const Mat3& R_start);
 
-  // Rotate the current physical tool axis onto +-alignment_target_normal while keeping
-  // the remaining orientation twist as close as possible to the start pose.
-  return rotationBetweenUnitVectors(tool_axis_start, tool_axis_target) * R_start;
-}
+Mat3 makeSpatialGainMatrix(const Vec3& diagonal_in_task_frame, const Mat3& R_task);
 
-inline Mat3 makeSpatialGainMatrix(const Vec3& diagonal_in_task_frame, const Mat3& R_task) {
-  return R_task * diagonal_in_task_frame.asDiagonal() * R_task.transpose();
-}
-
-inline void startKeyboardStopThread(
+void startKeyboardStopThread(
     const Parameters& params,
     std::atomic<bool>& stop_requested,
     std::atomic<bool>& proceed_requested,
-    std::atomic<bool>& guide_requested) {
-  printf("Press e+Enter to stop the Control algorithm before the remaining duration expires.\n");
-  if (params.use_manual_guidance_start) {
-    printf("Press p+Enter to leave manual guidance and start the phase sequence.\n");
-  }
-  printf("During surface_impedance: press g+Enter to hand-guide the tool, then p+Enter to restart the sequence.\n");
-  if (params.experiment_duration <= 0.0) {
-    printf("experiment_duration <= 0: the Control algorithm is running indefinitely until e + Enter.\n");
-  }
+    std::atomic<bool>& guide_requested);
 
-  std::thread keyboard_thread([&stop_requested, &proceed_requested, &guide_requested]() {
-    std::string line;
-    while (std::getline(std::cin, line)) {
-      if (line == "e" || line == "E") {
-        stop_requested.store(true);
-        break;
-      } else if (line == "p" || line == "P") {
-        proceed_requested.store(true);
-      } else if (line == "g" || line == "G") {
-        guide_requested.store(true);
-      }
-    }
-  });
-  keyboard_thread.detach();
-}
+void configureCollisionBehavior(Robot& robot, const Parameters& params);
 
-inline void configureCollisionBehavior(Robot& robot, const Parameters& params) {
-  setDefaultBehavior(robot);
-
-  if (!params.use_custom_collision_behavior) {
-    printf("Collision: default thresholds.\n");
-    return;
-  }
-
-  printf("Collision: custom thresholds.\n");
-
-  const Array7 collision_torque_acc = filledArray7(params.collision_torque_acc);
-  const Array7 collision_torque_nom = filledArray7(params.collision_torque_nom);
-  const Array6 collision_force_acc = filledArray6(params.collision_force_acc);
-  const Array6 collision_force_nom = filledArray6(params.collision_force_nom);
-
-  robot.setCollisionBehavior(
-      collision_torque_acc,
-      collision_torque_acc,
-      collision_torque_nom,
-      collision_torque_nom,
-      collision_force_acc,
-      collision_force_acc,
-      collision_force_nom,
-      collision_force_nom);
-}
-
-inline DesiredMotion computeDesiredMotion(
+DesiredMotion computeDesiredMotion(
     const Parameters& params,
     double time,
     const Vec3& p_start,
     const Vec3& p_EE,
     const Mat3& R_position_surface,
-    const Vec3& plane_point) {
-  DesiredMotion desired{p_start, Vec3::Zero()};
+    const Vec3& plane_point);
 
-  if (!params.hold_mode) {
-    const double r = time / params.trajectory_duration;
-    const double s = smoothStep(r);
-    const double s_dot = smoothStepDerivative(r, params.trajectory_duration);
-    desired.p_d = p_start + s * params.delta_p;
-    desired.pdot_d = s_dot * params.delta_p;
-  }
+Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_alignment_target);
 
-  if (params.constraint_enabled) {
-    const Vec3 normal = R_position_surface.col(0);
-
-    // Plane constraint for any surface orientation:
-    //
-    //   signed_distance [m] = n^T * (p_plane - p_EE)
-    //   p_d [m]            = p_EE + signed_distance * n
-    //
-    // The same surface-frame mode covers axis-aligned and inclined planes.
-    const double signed_distance = normal.dot(plane_point - p_EE);
-    desired.p_d = p_EE + signed_distance * normal;
-    desired.pdot_d.setZero();
-  }
-
-  return desired;
-}
-
-inline Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_alignment_target) {
-  if (!params.constraint_enabled) {
-    return e_R;
-  }
-
-  Vec3 e_R_task = R_alignment_target.transpose() * e_R;
-  e_R_task(0) =
-      params.constrain_rotation_about_alignment_normal ? e_R_task(0) : 0.0;
-  e_R_task(1) =
-      params.constrain_rotation_about_alignment_tangent1 ? e_R_task(1) : 0.0;
-  e_R_task(2) =
-      params.constrain_rotation_about_alignment_tangent2 ? e_R_task(2) : 0.0;
-
-  return R_alignment_target * e_R_task;
-}
-
-inline Vec7 computeNullspaceTorque(
+Vec7 computeNullspaceTorque(
     const Parameters& params,
     const Model& model,
     const RobotState& state,
     const Mat6x7& J,
     const Vec7& dq,
-    const Vec7& q_start) {
-  Vec7 tau_nullspace = Vec7::Zero();
-
-  // If nullspace optimization is disabled, return zero nullspace torque.
-  if (!params.use_nullspace_optimization) {
-    return tau_nullspace;
-  }
-  // else, compute the nullspace torque to optimize the smallest singular value of the Jacobian.
-  // Map the current joint positions to a 7 elements vector.
-  Map<const Vec7> q_current(state.q.data());
-
-  // Identity matrices for the pseudo-inverse calculation:
-  const Mat7x7 I7 = Mat7x7::Identity();
-  const Mat6x6 I6 = Mat6x6::Identity();
-  // Damping factor for the pseudo-inverse to improve numerical stability near singularities.
-  const double lambda = 0.05;
-  // Damped pseudo-inverse of the Jacobian: JJt_damped = J*J^T + lambda^2 I in units of [m^2/s^2] or [rad^2/s^2], depending on the row of J.
-  const Mat6x6 JJt_damped = J * J.transpose() + lambda * lambda * I6;
-
-  // Joint nullspace projector:
-  //
-  //   N = I - J^T * (JJt_damped)^(-1) * J
-  //
-  // Units:
-  //   J              maps dq [rad/s] to xdot [m/s, rad/s]
-  //   tau_posture    is joint torque [Nm]
-  //   nullspace term keeps motion from changing the end-effector task.
-  // JJt_damped.ldlt().solve(J) computes (JJt_damped)^(-1) * J in a numerically stable way.
-  // It solves the linear system JJt_damped * X = J for X, which is equivalent to X = (JJt_damped)^(-1) * J,
-  // but more efficient and stable than explicitly computing the inverse of JJt_damped.
-  const Mat7x7 N = I7 - J.transpose() * JJt_damped.ldlt().solve(J);
-
-  // Restoring spring in the nullspace:
-  //
-  //   tau_return [Nm] = N * (k_start * (q_start - q) - d * dq)
-  //
-  // This prevents the robot from slowly rotating/drifting in the nullspace
-  // when the TCP is moved back and forth at the same Cartesian place.
-  tau_nullspace = N * (params.nullspace_k_start * (q_start - q_current) - params.nullspace_damping * dq);
-
-  Eigen::JacobiSVD<Mat6x7> svd_current(J, Eigen::ComputeFullU | Eigen::ComputeFullV);
-  Vec7 n = svd_current.matrixV().col(6);
-
-  if (n.norm() <= 1e-9) {
-    return tau_nullspace;
-  }
-
-  n.normalize();
-
-  const Vec7 q_plus = q_current + params.nullspace_alpha * n;
-  const Vec7 q_minus = q_current - params.nullspace_alpha * n;
-
-  const Array7 q_plus_array = vec7ToArray(q_plus);
-  const Array7 q_minus_array = vec7ToArray(q_minus);
-
-  const std::array<double, 42> J_plus_array =
-      model.zeroJacobian(
-          Frame::kEndEffector,
-          q_plus_array,
-          state.F_T_EE,
-          state.EE_T_K);
-
-  const std::array<double, 42> J_minus_array =
-      model.zeroJacobian(
-          Frame::kEndEffector,
-          q_minus_array,
-          state.F_T_EE,
-          state.EE_T_K);
-
-  Map<const Mat6x7> J_plus(J_plus_array.data());
-  Map<const Mat6x7> J_minus(J_minus_array.data());
-
-  const double sigma_min_plus = smallestSingularValue(J_plus);
-  const double sigma_min_minus = smallestSingularValue(J_minus);
-  const double sigma_direction = (sigma_min_plus > sigma_min_minus) ? 1.0 : -1.0;
-
-  const Vec7 tau_sigma =
-      N * (params.nullspace_k_sigma * sigma_direction * params.nullspace_alpha * n);
-
-  return tau_nullspace + tau_sigma;
-}
+    const Vec7& q_start);
