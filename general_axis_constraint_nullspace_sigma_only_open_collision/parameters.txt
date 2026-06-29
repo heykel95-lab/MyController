@@ -215,6 +215,17 @@ post_contact_normal_push = 0.018
 post_contact_push_speed = 0.010
 post_contact_max_push = 0.031
 
+# Disable the surface-impedance phase. 1 = when post_contact_align ends (moment
+# threshold or post_contact_align_duration), freeze the preload at its current
+# value and keep post_contact_align running as a constant-press, free-slide
+# hold: the tool keeps pressing into the table with that preload (only the
+# normal direction is sprung) but is tangentially free, so it can be moved along
+# the table by hand; rotation stays held by post_contact_KR (raise
+# post_contact_KR_normal for a stiffer hold). 0 = legacy: hand off to surface
+# impedance. Note: with hold on, p+Enter re-guidance (which triggers only from
+# surface impedance) is not reached; e+Enter still stops.
+post_contact_hold_after_align = 1
+
 # Translational spring used only during this phase, base frame [x, y, z].
 # z (downward, into the table) is intentionally stiff so the preload above
 # generates a real contact moment at the pressed edge.

@@ -46,6 +46,14 @@ struct Parameters {
   double post_contact_normal_push = 0.0;
   double post_contact_push_speed = 0.0;
   double post_contact_max_push = 0.0;
+  // Disable the surface-impedance phase. When the post_contact_align phase ends
+  // (moment threshold or align duration), freeze the preload at its current
+  // value and keep running post_contact_align as a constant-press, free-slide
+  // hold: the tool keeps pressing into the table with that preload (normal
+  // direction sprung) but is tangentially free, so it can be moved along the
+  // table by hand, with rotation still held by post_contact_KR. false = legacy
+  // (switch to kSurfaceImpedance).
+  bool post_contact_hold_after_align = false;
   bool post_contact_eval_method2_tcp_wrench = false;
   bool post_contact_apply_method2_tcp_wrench = false;
   // When applying the Method 2 TCP wrench: 1 = use the block-diagonal

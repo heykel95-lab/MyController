@@ -265,6 +265,13 @@ int main() {
     Vec3 active_tool_contact_offset_ee = params.tool_contact_point_ee;
     double first_contact_search_distance = 0.0;
     double first_contact_force_delta = 0.0;
+    // Hold mode (post_contact_hold_after_align): once the align phase ends the
+    // preload is frozen here and the post_contact_align phase keeps running as a
+    // constant-press, free-slide hold (presses the table with this push, but is
+    // tangentially free so the tool can be moved along the table) instead of
+    // switching to surface impedance.
+    bool post_contact_hold_active = false;
+    double post_contact_hold_push = 0.0;
     double first_touch_candidate_time = 0.0;
     double first_touch_candidate_distance = 0.0;
     double first_touch_candidate_signal = 0.0;
@@ -857,6 +864,8 @@ int main() {
           contact_time = 0.0;
           first_contact_search_distance = 0.0;
           first_contact_force_delta = 0.0;
+          post_contact_hold_active = false;
+          post_contact_hold_push = 0.0;
           first_touch_candidate_time = 0.0;
           first_touch_candidate_distance = 0.0;
           first_touch_candidate_signal = 0.0;
@@ -1086,15 +1095,32 @@ int main() {
             post_align_time >= params.post_contact_align_duration;
 
         if (moment_contact_reached || max_align_time_reached) {
-          R_after_contact_align = R_EE;
-          surface_point_runtime = p_EE;
-          phase = ControlPhase::kSurfaceImpedance;
-          phase_start_time = time;
-          reportPostContactAlignment(
-              moment_contact_reached, post_align_time, post_force_delta_norm,
-              post_moment_delta_norm, p_EE, R_EE, tool_contact_point,
-              contact_moment_at_edge, external_force, state, J);
-          printf("phase: %s\n", phaseName(phase));
+          if (params.post_contact_hold_after_align) {
+            // Surface-impedance phase disabled: instead of handing off, freeze
+            // the preload at the value it had when the align phase ended and
+            // keep holding that desired pose with the post-contact spring. The
+            // press stays constant (no further force growth) until stop.
+            if (!post_contact_hold_active) {
+              post_contact_hold_active = true;
+              post_contact_hold_push =
+                  postContactPush(params, post_align_time);
+              reportPostContactAlignment(
+                  moment_contact_reached, post_align_time, post_force_delta_norm,
+                  post_moment_delta_norm, p_EE, R_EE, tool_contact_point,
+                  contact_moment_at_edge, external_force, state, J);
+              printf("phase: post_contact_align (holding constant push; surface impedance disabled)\n");
+            }
+          } else {
+            R_after_contact_align = R_EE;
+            surface_point_runtime = p_EE;
+            phase = ControlPhase::kSurfaceImpedance;
+            phase_start_time = time;
+            reportPostContactAlignment(
+                moment_contact_reached, post_align_time, post_force_delta_norm,
+                post_moment_delta_norm, p_EE, R_EE, tool_contact_point,
+                contact_moment_at_edge, external_force, state, J);
+            printf("phase: %s\n", phaseName(phase));
+          }
         }
       }
 
@@ -1222,9 +1248,33 @@ int main() {
         // This prevents the first edge from lifting away simply because the
         // TCP rotates around a different point.
         const double post_align_time = time - phase_start_time;
-        const double post_contact_push = postContactPush(params, post_align_time);
-        const Vec3 edge_target =
-            first_contact_point + post_contact_push * contact_search_direction;
+        double post_contact_push;
+        Vec3 edge_target;
+        if (post_contact_hold_active) {
+          // Constant-press, free-slide hold (surface-impedance-like, with the
+          // preload held on top). The preload is frozen at the value it had when
+          // the align phase ended. Instead of anchoring the edge at a fixed
+          // point (which would spring it back tangentially), project the edge
+          // onto the contact plane so only the normal direction is sprung:
+          //
+          //   pen        = n^T * (p_edge - p_contact_1)   (edge depth past plane)
+          //   p_edge_d   = p_edge + (push_hold - pen) * n
+          //
+          // Tangential error is then zero -> the tool slides freely along the
+          // table by hand, while the normal error stays push_hold -> constant
+          // press. Rotation is still held by post_contact_KR (KR_normal stiff).
+          post_contact_push = post_contact_hold_push;
+          const Vec3 n = contact_search_direction;  // unit, into the surface
+          const double edge_penetration =
+              n.dot(tool_contact_point - first_contact_point);
+          edge_target =
+              tool_contact_point + (post_contact_hold_push - edge_penetration) * n;
+        } else {
+          // Ramp the preload, pressing the fixed contact edge into the surface.
+          post_contact_push = postContactPush(params, post_align_time);
+          edge_target =
+              first_contact_point + post_contact_push * contact_search_direction;
+        }
         edge_target_debug = edge_target;
         post_contact_push_debug = post_contact_push;
         desired.p_d = edge_target - R_contact_start * tool_contact_offset_ee;

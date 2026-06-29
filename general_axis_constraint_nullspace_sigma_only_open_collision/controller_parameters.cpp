@@ -218,6 +218,9 @@ Parameters readParameters(const std::string& filename) {
       getDouble("post_contact_push_speed", p.post_contact_push_speed);
   p.post_contact_max_push =
       getDouble("post_contact_max_push", p.post_contact_max_push);
+  p.post_contact_hold_after_align =
+      getBool("post_contact_hold_after_align",
+              p.post_contact_hold_after_align);
   p.post_contact_eval_method2_tcp_wrench =
       getBoolAlias("post_contact_eval_method2_tcp_wrench",
                    "post_contact_use_method2_tcp_wrench",
