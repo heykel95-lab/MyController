@@ -112,7 +112,9 @@ tool_contact_point_ee_z = 0.0
 # ====================================================================
 # use_phase_sequence = 1 runs the controller in this order:
 #   1. orient_to_surface     -- rotate to match the virtual surface orientation.
-#   2. search_first_contact  -- translate along contact_search_direction until contact.
+#   2. search_first_contact  -- translate along contact_search_direction until either
+#                                force contact is detected or the pre-surface
+#                                clearance is reached, depending on contact_search_mode.
 #   3. post_contact_align    -- press the contacted edge into the surface
 #                                while holding a soft rotational spring, so
 #                                real contact moment passively tips the tool flat.
@@ -188,10 +190,15 @@ alignment_contact_force_threshold = 12.0
 # ====================================================================
 # Phase 2: search_first_contact
 # ====================================================================
-# TCP moves slowly in contact_search_direction until
-# ||F_ext - F_bias|| > contact_force_threshold. Not force control -- once
-# triggered, the current TCP position becomes the virtual surface point.
+# TCP moves slowly in contact_search_direction. contact_search_mode selects
+# the switch trigger:
+#   force       = old behavior, switch after confirmed external-force threshold.
+#   pre_surface = no force comparison, switch when the active tool contact point
+#                 is contact_search_surface_clearance before the configured
+#                 surface plane.
 use_contact_search = 1
+contact_search_mode = pre_surface
+contact_search_surface_clearance = 0.020
 
 # 1 = search along -alignment_target_normal. 0 = use the manual direction below.
 # switch to search along the surface normal
@@ -229,7 +236,7 @@ align_orientation_to_surface_after_contact = 1
 post_contact_align_min_time = 2.0
 
 # Maximum time spent in this phase after first contact [s].
-post_contact_align_duration = 5.0
+post_contact_align_duration = 8.0
 
 # Moment-change early-exit threshold [Nm] (e.g. the second tool edge
 # touching down after passively tipping flat). Only checked once
@@ -246,21 +253,20 @@ post_contact_best_axis_min_omega = 0.12
 # Small position offset into the real surface [m], acting like a spring
 # preload that presses the selected edge down:
 #   preload force approx post_contact_Kp_z * post_contact_normal_push
-# Ramps from post_contact_normal_push up to post_contact_max_push over time
-# (rate post_contact_push_speed), growing the preload/contact moment that
-# passively tips the tool flat. Check peak preload force
-# (post_contact_Kp_z * post_contact_max_push) against collision_force_acc/nom
-# above whenever Kp_z or max_push changes.
-# Soft-normal variant: post_contact_Kp_z = 1500 (down from 5500), so the normal
-# is compliant -- edge motion no longer spikes the force. This preload is also
-# the one grind inherits (post_contact_hold_push), so it sets the press for BOTH
-# the align tip and the grind sweep -- keep it light. With the values below and
-# post_contact_align_duration = 1.0 s, the frozen push is ~0.03 m, i.e. press
-# ~= Kp_z * push ~= 1500 * 0.03 ~= 45 N (peak Kp_z * max_push ~= 46 N). Raising
-# it lifts both phases' force and the joint torques (tau_J) toward the reflex.
-post_contact_normal_push = 0.02
-post_contact_push_speed = 0.010
-post_contact_max_push = 0.031
+# Force-search mode starts the push ramp at post_contact_normal_push and uses
+# post_contact_Kp_z. Pre-surface mode starts the same ramp at
+# -contact_search_surface_clearance and uses the softer
+# post_contact_pre_surface_Kp_z, because it switches before contact.
+# Check peak preload force (post_contact_Kp_z * post_contact_max_push) against
+# collision_force_acc/nom above whenever Kp_z or max_push changes.
+# Deeper/stronger-normal test: post_contact_Kp_z = 300 with a 0.25 m commanded push.
+# Approx press ~= Kp_z * push ~= 300 * 0.25 ~= 75 N
+# (peak Kp_z * max_push ~= 84 N). This preload is also the one grind inherits
+# (post_contact_hold_push), so it sets the press for BOTH the align tip and the
+# grind sweep. Raising Kp_z or max_push lifts both force and tau_J toward reflex.
+post_contact_normal_push = 0.250
+post_contact_push_speed = 0.050
+post_contact_max_push = 0.280
 
 # Disable the surface-impedance phase. 1 = when post_contact_align ends (moment
 # threshold or post_contact_align_duration), freeze the preload at its current
@@ -279,7 +285,8 @@ post_contact_hold_after_align = 1
 # TCP, so the press just shoved the arm up instead of tipping the tool.
 post_contact_Kp_x = 2000.0
 post_contact_Kp_y = 2000.0
-post_contact_Kp_z = 3000.0
+post_contact_Kp_z = 300.0
+post_contact_pre_surface_Kp_z = 350.0
 post_contact_Dp_x = 10.0
 post_contact_Dp_y = 10.0
 post_contact_Dp_z = 175.0
@@ -314,6 +321,7 @@ post_contact_auto_damping_factor = 0.8
 # Grind reuses the post_contact (align) gains -- align and grind share one set;
 # only the sweep trajectory below and the decoupled law (Method 2 bypass) differ.
 post_contact_grind_mode = 1
+print_grind_debug = 0
 
 # Sweep path: a smoothStep ping-pong between -A and +A along the chosen surface
 # tangent (same trajectory primitive as the delta_p move). Each stroke eases
@@ -451,28 +459,30 @@ use_search_direction_surface_after_alignment = 1
 # measured instantaneous pole. Method 3 fits the effective contact-edge
 # moment model from the logged post-contact samples. None is applied online.
 print_gain_suggestion_diagnostics = 1
+print_method1_diagnostics = 0
+print_method3_diagnostics = 0
 
 # Last best instantaneous axis, base frame, relative to the active tool edge.
 # Used only for best-axis comparison diagnostics. Auto-updated from the best
 # per-cycle post_contact_align axis sample.
-last_best_axis_from_edge_x = -0.1951
-last_best_axis_from_edge_y = -0.1111
-last_best_axis_from_edge_z = 0.2603
-last_best_axis_dir_x = -0.108
-last_best_axis_dir_y = 0.891
-last_best_axis_dir_z = 0.440
-last_best_axis_pitch = -0.0992
+last_best_axis_from_edge_x = -0.8951
+last_best_axis_from_edge_y = -0.0802
+last_best_axis_from_edge_z = 0.2962
+last_best_axis_dir_x = -0.100
+last_best_axis_dir_y = 0.990
+last_best_axis_dir_z = 0.100
+last_best_axis_pitch = -0.0120
 
 # Last finite Chasles axis, base frame, relative to the active tool edge.
 # Used by Method 2 diagnostics and to save the coupled K_TCP/D_TCP matrices.
 # Auto-updated from the full start/end post_contact_align edge motion.
-last_chasles_axis_from_edge_x = 0.0034
-last_chasles_axis_from_edge_y = -0.0222
-last_chasles_axis_from_edge_z = -0.0069
-last_chasles_axis_dir_x = -0.973
-last_chasles_axis_dir_y = -0.190
-last_chasles_axis_dir_z = 0.130
-last_chasles_axis_pitch = -0.0037
+last_chasles_axis_from_edge_x = -0.0194
+last_chasles_axis_from_edge_y = -0.1904
+last_chasles_axis_from_edge_z = -0.0183
+last_chasles_axis_dir_x = -0.994
+last_chasles_axis_dir_y = 0.104
+last_chasles_axis_dir_z = -0.021
+last_chasles_axis_pitch = 0.0161
 
 # Gain print bounds and legacy reference-motion settings.
 # suggested_gain_min/max clamp printed suggested values;

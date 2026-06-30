@@ -81,6 +81,24 @@ NullspaceMode parseNullspaceMode(const std::string& input, NullspaceMode fallbac
   return fallback;
 }
 
+ContactSearchMode parseContactSearchMode(const std::string& input, ContactSearchMode fallback) {
+  std::string value = removeSpaces(input);
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+
+  if (value == "0" || value == "force" || value == "force_threshold" ||
+      value == "external_force") {
+    return ContactSearchMode::kForce;
+  }
+  if (value == "1" || value == "pre_surface" || value == "presurface" ||
+      value == "surface_clearance" || value == "geometry" || value == "geometric") {
+    return ContactSearchMode::kPreSurface;
+  }
+
+  return fallback;
+}
+
 Parameters readParameters(const std::string& filename) {
   Parameters p;
   std::ifstream file(filename);
@@ -123,6 +141,9 @@ Parameters readParameters(const std::string& filename) {
   };
   auto getNullspaceMode = [&](const std::string& key, NullspaceMode def) {
     return values.count(key) ? parseNullspaceMode(values[key], def) : def;
+  };
+  auto getContactSearchMode = [&](const std::string& key, ContactSearchMode def) {
+    return values.count(key) ? parseContactSearchMode(values[key], def) : def;
   };
   auto getDoubleAlias = [&](const std::string& new_key, const std::string& old_key, double def) {
     return getDouble(new_key, getDouble(old_key, def));
@@ -333,6 +354,10 @@ Parameters readParameters(const std::string& filename) {
       getBoolAlias("print_gain_suggestion_diagnostics",
                    "suggest_gains_from_desired_axis",
                    p.print_gain_suggestion_diagnostics);
+  p.print_method1_diagnostics =
+      getBool("print_method1_diagnostics", p.print_method1_diagnostics);
+  p.print_method3_diagnostics =
+      getBool("print_method3_diagnostics", p.print_method3_diagnostics);
   p.last_best_axis_from_edge(0) =
       getDoubleAlias("last_best_axis_from_edge_x",
                      "desired_axis_from_edge_x",
@@ -410,6 +435,10 @@ Parameters readParameters(const std::string& filename) {
       getDouble("effective_moment_fit_ridge", p.effective_moment_fit_ridge);
 
   p.use_contact_search = getBool("use_contact_search", p.use_contact_search);
+  p.contact_search_mode =
+      getContactSearchMode("contact_search_mode", p.contact_search_mode);
+  p.contact_search_surface_clearance =
+      getDouble("contact_search_surface_clearance", p.contact_search_surface_clearance);
   p.contact_search_use_alignment_target_normal =
       getBoolAlias("contact_search_use_alignment_target_normal",
                    "contact_search_use_surface_normal",
@@ -437,6 +466,8 @@ Parameters readParameters(const std::string& filename) {
   p.post_contact_Kp_diag(0) = getDouble("post_contact_Kp_x", p.post_contact_Kp_diag(0));
   p.post_contact_Kp_diag(1) = getDouble("post_contact_Kp_y", p.post_contact_Kp_diag(1));
   p.post_contact_Kp_diag(2) = getDouble("post_contact_Kp_z", p.post_contact_Kp_diag(2));
+  p.post_contact_pre_surface_Kp_z =
+      getDouble("post_contact_pre_surface_Kp_z", p.post_contact_pre_surface_Kp_z);
   p.post_contact_Dp_diag(0) = getDouble("post_contact_Dp_x", p.post_contact_Dp_diag(0));
   p.post_contact_Dp_diag(1) = getDouble("post_contact_Dp_y", p.post_contact_Dp_diag(1));
   p.post_contact_Dp_diag(2) = getDouble("post_contact_Dp_z", p.post_contact_Dp_diag(2));
@@ -453,6 +484,7 @@ Parameters readParameters(const std::string& filename) {
       getDouble("post_contact_auto_damping_factor", p.post_contact_auto_damping_factor);
 
   p.post_contact_grind_mode = getBool("post_contact_grind_mode", p.post_contact_grind_mode);
+  p.print_grind_debug = getBool("print_grind_debug", p.print_grind_debug);
   p.grind_axis = static_cast<int>(getDouble("grind_axis", p.grind_axis));
   p.grind_amplitude_m = getDouble("grind_amplitude_m", p.grind_amplitude_m);
   p.grind_frequency_hz = getDouble("grind_frequency_hz", p.grind_frequency_hz);

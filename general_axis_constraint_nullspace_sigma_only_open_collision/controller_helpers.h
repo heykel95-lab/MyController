@@ -37,6 +37,10 @@ void grindSweep(double t, double amplitude, double stroke_duration,
 double grindStrokeDuration(const Parameters& params);
 
 double postContactPush(const Parameters& params, double post_align_time);
+double postContactPush(
+    const Parameters& params,
+    double post_align_time,
+    double start_push);
 
 bool computeInstantaneousPoleFromTcp(
     const Vec3& v,

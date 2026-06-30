@@ -210,6 +210,16 @@ const char* nullspaceModeText(NullspaceMode mode) {
   return "unknown";
 }
 
+const char* contactSearchModeText(ContactSearchMode mode) {
+  switch (mode) {
+    case ContactSearchMode::kForce:
+      return "force";
+    case ContactSearchMode::kPreSurface:
+      return "pre_surface";
+  }
+  return "unknown";
+}
+
 void printParameters(const Parameters& params) {
   printf("\n=== Setup ===\n");
   printf("phase_sequence: %s | hold_mode: %s | orientation_phase: %s | contact_search: %s | orientation_test: %s\n",
@@ -230,6 +240,9 @@ void printParameters(const Parameters& params) {
   printf("manual_guidance_start: %s | manual_damping=%.2f\n",
          params.use_manual_guidance_start ? "on" : "off",
          params.manual_guidance_damping);
+  printf("contact_search_mode: %s | surface_clearance=%.1f mm\n",
+         contactSearchModeText(params.contact_search_mode),
+         1000.0 * params.contact_search_surface_clearance);
   printf("force/moment limits: search=%.1f N | align=%.1f N | post_moment=%.1f Nm\n",
          params.contact_force_threshold,
          params.alignment_contact_force_threshold,

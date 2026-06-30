@@ -9,6 +9,11 @@ enum class NullspaceMode {
   kPostureAndSigma = 3
 };
 
+enum class ContactSearchMode {
+  kForce = 0,
+  kPreSurface = 1
+};
+
 struct Parameters {
   std::string robot_ip = "172.16.0.2";
   double experiment_duration = 10.0;
@@ -109,6 +114,8 @@ struct Parameters {
   bool use_virtual_center_after_contact = false;
   double vcr_offset = 0.0;
   bool print_gain_suggestion_diagnostics = true;
+  bool print_method1_diagnostics = true;
+  bool print_method3_diagnostics = true;
   Vec3 last_best_axis_from_edge = Vec3(0.0144, 0.0094, -0.0064);
   Vec3 last_best_axis_dir = Vec3(-0.919, -0.390, -0.053);
   double last_best_axis_pitch = -0.0146;
@@ -130,6 +137,8 @@ struct Parameters {
   double effective_moment_fit_ridge = 1e-8;
 
   bool use_contact_search = false;
+  ContactSearchMode contact_search_mode = ContactSearchMode::kForce;
+  double contact_search_surface_clearance = 0.020;
   bool contact_search_use_alignment_target_normal = true;
   Vec3 contact_search_direction = Vec3(0.0, 0.0, -1.0);
   double contact_search_speed = 0.005;
@@ -142,6 +151,7 @@ struct Parameters {
   bool detect_contact_during_alignment = true;
   double alignment_contact_force_threshold = 5.0;
   Vec3 post_contact_Kp_diag = Vec3(40.0, 40.0, 5500.0);
+  double post_contact_pre_surface_Kp_z = 50.0;
   Vec3 post_contact_Dp_diag = Vec3(10.0, 10.0, 175.0);
   Vec3 post_contact_KR_diag = Vec3(0.0, 0.0, 8.0);     // [tangent1, tangent2, normal]
   Vec3 post_contact_DR_diag = Vec3(0.01, 0.01, 4.0);   // [tangent1, tangent2, normal]
@@ -155,6 +165,7 @@ struct Parameters {
   // tangent while pressing, reusing the post_contact (align) gains -- only the
   // sweep trajectory below and the decoupled law (Method 2 bypass) are special.
   bool post_contact_grind_mode = false;
+  bool print_grind_debug = true;
   int grind_axis = 1;               // 1 = tangent1, 2 = tangent2
   double grind_amplitude_m = 0.03;  // sweep half-amplitude A [m]
   double grind_frequency_hz = 0.2;  // full back-and-forth cycle frequency f [Hz]

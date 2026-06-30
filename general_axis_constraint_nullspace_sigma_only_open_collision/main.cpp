@@ -58,6 +58,16 @@ const char* nullspaceModeName(NullspaceMode mode) {
   return "unknown";
 }
 
+const char* contactSearchModeName(ContactSearchMode mode) {
+  switch (mode) {
+    case ContactSearchMode::kForce:
+      return "force";
+    case ContactSearchMode::kPreSurface:
+      return "pre_surface";
+  }
+  return "unknown";
+}
+
 NullspaceMode defaultHoldNullspaceMode(NullspaceMode configured_mode) {
   if (configured_mode == NullspaceMode::kPostureOnly ||
       configured_mode == NullspaceMode::kSigmaOnly ||
@@ -95,7 +105,33 @@ void askStartupRunMode(Parameters& params) {
     params.hold_mode = true;
     params.use_phase_sequence = true;
     params.use_contact_search = true;
-    printf("Selected: phase sequence. Nullspace mode from parameters: %s.\n",
+
+    const ContactSearchMode default_search_mode = params.contact_search_mode;
+    printf("\nSelect sequence search mode:\n");
+    printf("  0 = force threshold search (old behavior)\n");
+    printf("  1 = pre-surface search (no force comparison, stop before plane)\n");
+    printf("Choice [0/1, Enter = %s]: ",
+           contactSearchModeName(default_search_mode));
+
+    if (!std::getline(std::cin, line)) {
+      line.clear();
+    }
+    const std::string search_choice = normalizedChoice(line);
+    params.contact_search_mode = default_search_mode;
+    if (search_choice == "0" || search_choice == "force" ||
+        search_choice == "force_threshold" || search_choice == "old") {
+      params.contact_search_mode = ContactSearchMode::kForce;
+    } else if (search_choice == "1" || search_choice == "pre_surface" ||
+               search_choice == "presurface" || search_choice == "geometry" ||
+               search_choice == "geometric") {
+      params.contact_search_mode = ContactSearchMode::kPreSurface;
+    } else if (!search_choice.empty()) {
+      printf("Unknown search-mode choice '%s'; using default %s.\n",
+             search_choice.c_str(), contactSearchModeName(default_search_mode));
+    }
+
+    printf("Selected: phase sequence with %s search. Nullspace mode from parameters: %s.\n",
+           contactSearchModeName(params.contact_search_mode),
            nullspaceModeName(params.nullspace_mode));
     return;
   }
@@ -335,6 +371,10 @@ int main() {
         params.contact_search_use_alignment_target_normal
             ? -R_alignment_target.col(2)  // -normal (normal = col 2)
             : normalizedOrFallback(params.contact_search_direction, -R_alignment_target.col(2));
+    const double post_contact_push_start =
+        params.contact_search_mode == ContactSearchMode::kPreSurface
+            ? -params.contact_search_surface_clearance
+            : params.post_contact_normal_push;
     const Mat3 R_contact_surface =
         makeSurfaceFrameFromNormalTangent(-contact_search_direction, params.alignment_target_tangent1);
     // Shared "approach" gains for orient_to_surface AND search_first_contact,
@@ -354,7 +394,11 @@ int main() {
     // post_contact_align gains, also used for the grind hold (align + grind share
     // one set). Tangents (tipping directions) stay soft so contact moment can
     // passively rotate the tool flat.
-    const Mat3 Kp_post_contact = params.post_contact_Kp_diag.asDiagonal();
+    Vec3 post_contact_Kp_diag_eff = params.post_contact_Kp_diag;
+    if (params.contact_search_mode == ContactSearchMode::kPreSurface) {
+      post_contact_Kp_diag_eff(2) = params.post_contact_pre_surface_Kp_z;
+    }
+    const Mat3 Kp_post_contact = post_contact_Kp_diag_eff.asDiagonal();
     const Mat3 Dp_post_contact = params.post_contact_Dp_diag.asDiagonal();
     const Mat3 KR_post_contact = params.constraint_enabled
         ? makeSpatialGainMatrix(params.post_contact_KR_diag, R_alignment_target)
@@ -745,27 +789,29 @@ int main() {
             printf("=== Gain-suggestion diagnostics only ===\n");
             printf("Reporting only: suggestions are not applied online. Edit parameters.txt manually to test them.\n");
 
-            printf("\n=== Method 1: Quasi-static candidate gains ===\n");
-            printf("axis order for all 3-vectors below: [tangent1, tangent2, normal]\n");
-            printf("formula: Kp=Fmax/dxmax, KR=Mmax/dtheta_max, D=2*zeta*sqrt(M*K)\n");
-            printf("inertia_source: %s\n",
-                   cartesian_inertia.valid
-                       ? "libfranka Lambda task-frame diagonal"
-                       : "parameters fallback");
-            printGainVec("M_eff_trans", translational_inertia);
-            printGainVec("I_eff_rot", rotational_inertia);
-            printGainVec("Fmax_N", params.quasi_force_limit);
-            printGainVec("dxmax_m", params.quasi_displacement_limit);
-            printGainVec("Mmax_Nm", params.quasi_moment_limit);
-            printGainVec("dtheta_max_rad", params.quasi_angle_limit);
-            printGainVec("Kp_suggested", quasi_gains.Kp);
-            printGainVec("Dp_suggested", quasi_gains.Dp);
-            printGainVec("KR_suggested", quasi_gains.KR);
-            printGainVec("DR_suggested", quasi_gains.DR);
-            printGainVec("Kp_active_post_contact", params.post_contact_Kp_diag);
-            printGainVec("Dp_active_post_contact", params.post_contact_Dp_diag);
-            printGainVec("KR_active_post_contact", params.post_contact_KR_diag);
-            printGainVec("DR_active_post_contact", params.post_contact_DR_diag);
+            if (params.print_method1_diagnostics) {
+              printf("\n=== Method 1: Quasi-static candidate gains ===\n");
+              printf("axis order for all 3-vectors below: [tangent1, tangent2, normal]\n");
+              printf("formula: Kp=Fmax/dxmax, KR=Mmax/dtheta_max, D=2*zeta*sqrt(M*K)\n");
+              printf("inertia_source: %s\n",
+                     cartesian_inertia.valid
+                         ? "libfranka Lambda task-frame diagonal"
+                         : "parameters fallback");
+              printGainVec("M_eff_trans", translational_inertia);
+              printGainVec("I_eff_rot", rotational_inertia);
+              printGainVec("Fmax_N", params.quasi_force_limit);
+              printGainVec("dxmax_m", params.quasi_displacement_limit);
+              printGainVec("Mmax_Nm", params.quasi_moment_limit);
+              printGainVec("dtheta_max_rad", params.quasi_angle_limit);
+              printGainVec("Kp_suggested", quasi_gains.Kp);
+              printGainVec("Dp_suggested", quasi_gains.Dp);
+              printGainVec("KR_suggested", quasi_gains.KR);
+              printGainVec("DR_suggested", quasi_gains.DR);
+              printGainVec("Kp_active_post_contact", post_contact_Kp_diag_eff);
+              printGainVec("Dp_active_post_contact", params.post_contact_Dp_diag);
+              printGainVec("KR_active_post_contact", params.post_contact_KR_diag);
+              printGainVec("DR_active_post_contact", params.post_contact_DR_diag);
+            }
 
             printf("\n=== Method 2: Adjoint pole-based candidate gains ===\n");
             printf("surface-frame rotational/source diagonals use [tangent1, tangent2, normal]\n");
@@ -833,7 +879,7 @@ int main() {
             const Mat6x6 D_tcp_cmd = adjointTransformedGain(D_pole, r_c_cmd);
 
             printf("source spring K_pole/D_pole (diagonal, from parameters):\n");
-            printGainVec("  Kp [N/m]    ", params.post_contact_Kp_diag);
+            printGainVec("  Kp [N/m]    ", post_contact_Kp_diag_eff);
             printGainVec("  KR [Nm/rad] ", params.post_contact_KR_diag);
             printGainVec("  Dp [Ns/m]   ", params.post_contact_Dp_diag);
             printGainVec("  DR [Nms/rad]", params.post_contact_DR_diag);
@@ -867,31 +913,33 @@ int main() {
             printSpatialGain6("  (B) manual pole (commanded)", D_tcp_cmd);
             printSpatialGainEigenvalues("  (B) D_TCP", D_tcp_cmd);
 
-            printf("\n=== Method 3: Least-squares effective moment identification ===\n");
-            printf("task-frame vectors and matrix diagonals use [tangent1, tangent2, normal]\n");
-            printf("model: M_C = K_rt*dx_C + D_rt*v_C + K_R*dtheta + D_R*omega\n");
-            printf("moment transfer: M_C = m - r_C x f\n");
-            const EffectiveMomentFit moment_fit =
-                fitEffectiveMomentModel(fit_effective_moment, params.effective_moment_fit_ridge);
-            if (moment_fit.valid) {
-              printf("samples = %ld | rms_moment_error = %.4g Nm\n",
-                     moment_fit.sample_count,
-                     moment_fit.rms_error);
-              printMat3Rows("K_rt_eff", moment_fit.K_rt);
-              printMat3Rows("D_rt_eff", moment_fit.D_rt);
-              printMat3Rows("K_R_eff", moment_fit.K_R);
-              printMat3Rows("D_R_eff", moment_fit.D_R);
-              const Vec3 diag_Krt = moment_fit.K_rt.diagonal();
-              const Vec3 diag_Drt = moment_fit.D_rt.diagonal();
-              const Vec3 diag_KR = moment_fit.K_R.diagonal();
-              const Vec3 diag_DR = moment_fit.D_R.diagonal();
-              printGainVec("diag_Krt_eff", diag_Krt);
-              printGainVec("diag_Drt_eff", diag_Drt);
-              printGainVec("diag_KR_eff", diag_KR);
-              printGainVec("diag_DR_eff", diag_DR);
-            } else {
-              printf("n/a: need at least 12 post-contact samples with sufficient excitation (got %ld)\n",
-                     fit_effective_moment.sample_count);
+            if (params.print_method3_diagnostics) {
+              printf("\n=== Method 3: Least-squares effective moment identification ===\n");
+              printf("task-frame vectors and matrix diagonals use [tangent1, tangent2, normal]\n");
+              printf("model: M_C = K_rt*dx_C + D_rt*v_C + K_R*dtheta + D_R*omega\n");
+              printf("moment transfer: M_C = m - r_C x f\n");
+              const EffectiveMomentFit moment_fit =
+                  fitEffectiveMomentModel(fit_effective_moment, params.effective_moment_fit_ridge);
+              if (moment_fit.valid) {
+                printf("samples = %ld | rms_moment_error = %.4g Nm\n",
+                       moment_fit.sample_count,
+                       moment_fit.rms_error);
+                printMat3Rows("K_rt_eff", moment_fit.K_rt);
+                printMat3Rows("D_rt_eff", moment_fit.D_rt);
+                printMat3Rows("K_R_eff", moment_fit.K_R);
+                printMat3Rows("D_R_eff", moment_fit.D_R);
+                const Vec3 diag_Krt = moment_fit.K_rt.diagonal();
+                const Vec3 diag_Drt = moment_fit.D_rt.diagonal();
+                const Vec3 diag_KR = moment_fit.K_R.diagonal();
+                const Vec3 diag_DR = moment_fit.D_R.diagonal();
+                printGainVec("diag_Krt_eff", diag_Krt);
+                printGainVec("diag_Drt_eff", diag_Drt);
+                printGainVec("diag_KR_eff", diag_KR);
+                printGainVec("diag_DR_eff", diag_DR);
+              } else {
+                printf("n/a: need at least 12 post-contact samples with sufficient excitation (got %ld)\n",
+                       fit_effective_moment.sample_count);
+              }
             }
           }
     };
@@ -1250,7 +1298,7 @@ int main() {
             if (!post_contact_hold_active) {
               post_contact_hold_active = true;
               post_contact_hold_push =
-                  postContactPush(params, post_align_time);
+                  postContactPush(params, post_align_time, post_contact_push_start);
               post_contact_hold_start_time = time;
               reportPostContactAlignment(
                   moment_contact_reached, post_align_time, post_force_delta_norm,
@@ -1282,6 +1330,13 @@ int main() {
         const double search_distance =
             std::min(params.contact_search_speed * (time - phase_start_time),
                      params.contact_search_max_distance);
+        const bool pre_surface_search =
+            params.contact_search_mode == ContactSearchMode::kPreSurface;
+        const Vec3 search_surface_normal = (-contact_search_direction).normalized();
+        const double height_above_surface =
+            search_surface_normal.dot(tool_contact_point - surface_point_runtime);
+        const Vec3 projected_surface_point =
+            tool_contact_point - height_above_surface * search_surface_normal;
 
         // During contact search, keep the full Cartesian target from the
         // original search behavior:
@@ -1292,13 +1347,6 @@ int main() {
         desired.p_d = p_start + search_distance * contact_search_direction;
         desired.pdot_d = params.contact_search_speed * contact_search_direction;
 
-        // Contact trigger only, not force control. The phase switch happens at
-        // the confirmed first-touch candidate, detected from force along the
-        // search direction after the minimum travel gate.
-        // Moment comparison is reserved for post_contact_align, where the
-        // tool rotates after the first contact.
-        const bool first_touch_distance_reached =
-            search_distance >= params.contact_search_first_touch_min_distance;
         const Vec3 force_delta_from_bias = external_force - contact_force_bias;
         const double force_along_search =
             force_delta_from_bias.dot(contact_search_direction);
@@ -1306,55 +1354,79 @@ int main() {
             params.contact_search_use_directional_force
                 ? force_along_search
                 : force_delta_from_bias.norm();
-        const bool force_threshold_reached =
-            search_force_signal >= params.contact_force_threshold;
-        if (!first_touch_candidate_saved &&
-            first_touch_distance_reached &&
-            force_threshold_reached) {
-          if (contact_search_candidate_start_time < 0.0) {
-            contact_search_candidate_start_time = time;
-          }
-        } else if (!first_touch_candidate_saved) {
-          contact_search_candidate_start_time = -1.0;
-        }
-        const double contact_search_candidate_time =
-            (contact_search_candidate_start_time >= 0.0)
-                ? (time - contact_search_candidate_start_time)
-                : 0.0;
         bool first_touch_candidate_just_saved = false;
-        if (!first_touch_candidate_saved &&
-            contact_search_candidate_start_time >= 0.0 &&
-            contact_search_candidate_time >= params.contact_search_confirm_time) {
-          first_touch_candidate_saved = true;
-          first_touch_candidate_just_saved = true;
-          first_touch_candidate_time = time - phase_start_time;
-          first_touch_candidate_distance = search_distance;
-          first_touch_candidate_signal = search_force_signal;
-          first_touch_candidate_force = external_force;
-          first_touch_candidate_moment = external_moment;
-          printf("\nFirst-touch candidate saved: dist=%.1f mm | force=%.1f N | confirmed=%.3f s\n",
-                 1000.0 * first_touch_candidate_distance,
-                 first_touch_candidate_signal,
-                 contact_search_candidate_time);
+        double contact_search_candidate_time = 0.0;
+        const bool pre_surface_reached =
+            height_above_surface <= params.contact_search_surface_clearance;
+        if (!pre_surface_search) {
+          // Contact trigger only, not force control. The phase switch happens at
+          // the confirmed first-touch candidate, detected from force along the
+          // search direction after the minimum travel gate.
+          // Moment comparison is reserved for post_contact_align, where the
+          // tool rotates after the first contact.
+          const bool first_touch_distance_reached =
+              search_distance >= params.contact_search_first_touch_min_distance;
+          const bool force_threshold_reached =
+              search_force_signal >= params.contact_force_threshold;
+          if (!first_touch_candidate_saved &&
+              first_touch_distance_reached &&
+              force_threshold_reached) {
+            if (contact_search_candidate_start_time < 0.0) {
+              contact_search_candidate_start_time = time;
+            }
+          } else if (!first_touch_candidate_saved) {
+            contact_search_candidate_start_time = -1.0;
+          }
+          contact_search_candidate_time =
+              (contact_search_candidate_start_time >= 0.0)
+                  ? (time - contact_search_candidate_start_time)
+                  : 0.0;
+          if (!first_touch_candidate_saved &&
+              contact_search_candidate_start_time >= 0.0 &&
+              contact_search_candidate_time >= params.contact_search_confirm_time) {
+            first_touch_candidate_saved = true;
+            first_touch_candidate_just_saved = true;
+            first_touch_candidate_time = time - phase_start_time;
+            first_touch_candidate_distance = search_distance;
+            first_touch_candidate_signal = search_force_signal;
+            first_touch_candidate_force = external_force;
+            first_touch_candidate_moment = external_moment;
+            printf("\nFirst-touch candidate saved: dist=%.1f mm | force=%.1f N | confirmed=%.3f s\n",
+                   1000.0 * first_touch_candidate_distance,
+                   first_touch_candidate_signal,
+                   contact_search_candidate_time);
+          }
         }
         const bool search_contact_detected =
-            first_touch_candidate_just_saved;
+            pre_surface_search ? pre_surface_reached : first_touch_candidate_just_saved;
         if (params.debug_period > 0.0 && time >= next_debug_time) {
-          printSearchDebug(time - phase_start_time,
-                            1000.0 * search_distance,
-                            search_force_signal,
-                            params.contact_force_threshold,
-                            first_touch_candidate_saved);
+          if (pre_surface_search) {
+            printf("search:     t=%5.1f s | distance=%6.1f mm | height=%+6.1f mm (target %.1f) | force=%5.1f N | mode=pre_surface\n",
+                   time - phase_start_time,
+                   1000.0 * search_distance,
+                   1000.0 * height_above_surface,
+                   1000.0 * params.contact_search_surface_clearance,
+                   search_force_signal);
+          } else {
+            printSearchDebug(time - phase_start_time,
+                              1000.0 * search_distance,
+                              search_force_signal,
+                              params.contact_force_threshold,
+                              first_touch_candidate_saved);
+          }
           next_debug_time = time + params.debug_period;
         }
         if (search_contact_detected) {
           const double search_phase_elapsed = time - phase_start_time;
           active_tool_contact_offset_ee = tool_contact_offset_ee;
-          surface_point_runtime = tool_contact_point;
+          surface_point_runtime =
+              pre_surface_search ? projected_surface_point : tool_contact_point;
           first_contact_tcp = p_EE;
-          first_contact_point = tool_contact_point;
+          first_contact_point =
+              pre_surface_search ? projected_surface_point : tool_contact_point;
           first_contact_search_distance = search_distance;
-          first_contact_force_delta = search_force_signal;
+          first_contact_force_delta =
+              pre_surface_search ? height_above_surface : search_force_signal;
           contact_found = true;
           contact_time = time;
           R_contact_start = R_EE;
@@ -1365,11 +1437,19 @@ int main() {
           next_debug_time = time;
           contact_force_bias = external_force;
           contact_moment_bias = external_moment;
-          printf("\nContact found: dist=%.1f mm | force=%.1f N | confirmed=%.3f s\n",
-                 1000.0 * search_distance,
-                 search_force_signal,
-                 contact_search_candidate_time);
-          if (first_touch_candidate_saved) {
+          if (pre_surface_search) {
+            printf("\nPre-surface reached: dist=%.1f mm | height=%.1f mm | target=%.1f mm | force=%.1f N (not used for switch)\n",
+                   1000.0 * search_distance,
+                   1000.0 * height_above_surface,
+                   1000.0 * params.contact_search_surface_clearance,
+                   search_force_signal);
+          } else {
+            printf("\nContact found: dist=%.1f mm | force=%.1f N | confirmed=%.3f s\n",
+                   1000.0 * search_distance,
+                   search_force_signal,
+                   contact_search_candidate_time);
+          }
+          if (!pre_surface_search && first_touch_candidate_saved) {
             printf("first_touch_reference: dist=%.1f mm | dt_before_switch=%.3f s\n",
                    1000.0 * first_touch_candidate_distance,
                    search_phase_elapsed - first_touch_candidate_time);
@@ -1446,7 +1526,8 @@ int main() {
               tool_contact_point + (post_contact_hold_push - edge_penetration) * n;
         } else {
           // Ramp the preload, pressing the fixed contact edge into the surface.
-          post_contact_push = postContactPush(params, post_align_time);
+          post_contact_push =
+              postContactPush(params, post_align_time, post_contact_push_start);
           edge_target =
               first_contact_point + post_contact_push * contact_search_direction;
         }
@@ -1599,7 +1680,7 @@ int main() {
             computeCartesianInertiaEstimate(joint_mass, J, R_alignment_target);
         if (inertia_base.valid && inertia_surf.valid) {
           Dp_post_cached = criticalDampingFromStiffness(
-              inertia_base.translational, params.post_contact_Kp_diag, zeta,
+              inertia_base.translational, post_contact_Kp_diag_eff, zeta,
               params.suggested_gain_max).asDiagonal();
           DR_post_cached = makeSpatialGainMatrix(
               criticalDampingFromStiffness(inertia_surf.rotational, params.post_contact_KR_diag,
@@ -1767,7 +1848,8 @@ int main() {
 
       Vec7 tau_task = J.transpose() * wrench;
 
-      if (grind_active && params.debug_period > 0.0 && time >= next_debug_time) {
+      if (grind_active && params.print_grind_debug &&
+          params.debug_period > 0.0 && time >= next_debug_time) {
         // sweep = commanded tangential offset; track_err = tangential position
         // error along the sweep axis; press = commanded force into the surface.
         const Vec3 n_grind = contact_search_direction;

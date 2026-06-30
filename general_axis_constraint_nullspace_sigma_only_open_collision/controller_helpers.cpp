@@ -128,8 +128,14 @@ double grindStrokeDuration(const Parameters& params) {
 }
 
 double postContactPush(const Parameters& params, double post_align_time) {
-  double push =
-      params.post_contact_normal_push + params.post_contact_push_speed * post_align_time;
+  return postContactPush(params, post_align_time, params.post_contact_normal_push);
+}
+
+double postContactPush(
+    const Parameters& params,
+    double post_align_time,
+    double start_push) {
+  double push = start_push + params.post_contact_push_speed * post_align_time;
   if (params.post_contact_max_push > 0.0) {
     push = std::min(params.post_contact_max_push, push);
   }
