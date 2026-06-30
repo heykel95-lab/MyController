@@ -60,7 +60,7 @@ constraint_enabled = 1
 #   n = R_y(b)*R_x(a)*[0,0,1] = [sin(b)cos(a), -sin(a), cos(b)cos(a)]
 # a = tilt about base x, b = tilt about base y. a = b = 0 -> horizontal n=[0,0,1].
 use_alignment_target_tilt_angle = 1
-alignment_target_tilt_angle_deg   = 0.0    # a, tilt about base x [deg]
+alignment_target_tilt_angle_deg   = 5.0    # a, tilt about base x [deg]
 alignment_target_tilt_angle_y_deg = 0.0    # b, tilt about base y [deg]
 
 # The in-plane axes (tangent1, tangent2) are derived automatically from the same
@@ -78,7 +78,7 @@ alignment_target_tilt_angle_y_deg = 0.0    # b, tilt about base y [deg]
 use_start_as_surface_point = 0
 surface_point_x = 0.545
 surface_point_y = -0.023
-surface_point_z = 0.01
+surface_point_z = -0.015
 
 # Physical tool axis in the EE frame.
 # Alignment enforces: R_desired * tool_axis_ee = tool_axis_target_sign * alignment_target_normal.
@@ -185,7 +185,7 @@ use_contact_search = 1
 #       surface_point in the Surface section), and switch when the tool contact
 #       point reaches it -- no force needed. Needs use_start_as_surface_point = 0
 #       with a real measured surface_point. A force trip still switches as a safety.
-search_use_predefined_surface = 1
+search_use_predefined_surface = 0
 # How close (along the plane normal [m]) the contact point must get to count as
 # "reached" in the predefined method.
 search_predefined_reach_tolerance_m = 0.002
@@ -226,7 +226,7 @@ align_orientation_to_surface_after_contact = 1
 post_contact_align_min_time = 2.0
 
 # Maximum time spent in this phase after first contact [s].
-post_contact_align_duration = 1.0
+post_contact_align_duration = 2.0
 
 # Moment-change early-exit threshold [Nm] (e.g. the second tool edge
 # touching down after passively tipping flat). Only checked once
@@ -458,24 +458,24 @@ print_gain_suggestion_diagnostics = 1
 # Last best instantaneous axis, base frame, relative to the active tool edge.
 # Used only for best-axis comparison diagnostics. Auto-updated from the best
 # per-cycle post_contact_align axis sample.
-last_best_axis_from_edge_x = -0.9756
-last_best_axis_from_edge_y = -0.1131
-last_best_axis_from_edge_z = 0.3699
-last_best_axis_dir_x = -0.049
-last_best_axis_dir_y = 0.996
-last_best_axis_dir_z = 0.069
-last_best_axis_pitch = -0.0090
+last_best_axis_from_edge_x = -0.8812
+last_best_axis_from_edge_y = -0.0987
+last_best_axis_from_edge_z = 0.2478
+last_best_axis_dir_x = -0.040
+last_best_axis_dir_y = 0.995
+last_best_axis_dir_z = 0.094
+last_best_axis_pitch = -0.0646
 
 # Last finite Chasles axis, base frame, relative to the active tool edge.
 # Used by Method 2 diagnostics and to save the coupled K_TCP/D_TCP matrices.
 # Auto-updated from the full start/end post_contact_align edge motion.
-last_chasles_axis_from_edge_x = -2.5469
-last_chasles_axis_from_edge_y = -1.3904
-last_chasles_axis_from_edge_z = 0.0459
-last_chasles_axis_dir_x = -0.451
-last_chasles_axis_dir_y = 0.836
-last_chasles_axis_dir_z = 0.313
-last_chasles_axis_pitch = -0.9289
+last_chasles_axis_from_edge_x = -0.5552
+last_chasles_axis_from_edge_y = -0.0776
+last_chasles_axis_from_edge_z = 0.1747
+last_chasles_axis_dir_x = -0.016
+last_chasles_axis_dir_y = 0.932
+last_chasles_axis_dir_z = 0.363
+last_chasles_axis_pitch = -0.1437
 
 # Gain print bounds and legacy reference-motion settings.
 # suggested_gain_min/max clamp printed suggested values;
