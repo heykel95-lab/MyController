@@ -520,10 +520,12 @@ Mat3 makeSurfaceFrameFromNormalTangent(const Vec3& normal_input, const Vec3& tan
   Vec3 tangent2 = normal.cross(tangent1);
   tangent2.normalize();
 
+  // Column order is [tangent1, tangent2, normal] (normal is the 3rd/z axis).
+  // All surface-frame gain diagonals and .col() accesses follow this order.
   Mat3 R_alignment_target;
-  R_alignment_target.col(0) = normal;
-  R_alignment_target.col(1) = tangent1;
-  R_alignment_target.col(2) = tangent2;
+  R_alignment_target.col(0) = tangent1;
+  R_alignment_target.col(1) = tangent2;
+  R_alignment_target.col(2) = normal;
   return R_alignment_target;
 }
 
@@ -553,7 +555,7 @@ Mat3 rotationBetweenUnitVectors(const Vec3& from_unit, const Vec3& to_unit) {
 
 Vec3 desiredToolAxisInBase(const Parameters& params, const Mat3& R_alignment_target) {
   const double sign = (params.tool_axis_target_sign >= 0.0) ? 1.0 : -1.0;
-  return sign * R_alignment_target.col(0);
+  return sign * R_alignment_target.col(2);  // normal = 3rd column
 }
 
 Vec3 currentToolAxisInBase(const Parameters& params, const Mat3& R_EE) {
@@ -652,7 +654,7 @@ DesiredMotion computeDesiredMotion(
   }
 
   if (params.constraint_enabled) {
-    const Vec3 normal = R_position_surface.col(0);
+    const Vec3 normal = R_position_surface.col(2);  // normal = 3rd column
 
     // Plane constraint for any surface orientation:
     //
@@ -673,13 +675,14 @@ Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_a
     return e_R;
   }
 
+  // e_R_task components follow R's column order [tangent1, tangent2, normal].
   Vec3 e_R_task = R_alignment_target.transpose() * e_R;
   e_R_task(0) =
-      params.constrain_rotation_about_alignment_normal ? e_R_task(0) : 0.0;
+      params.constrain_rotation_about_alignment_tangent1 ? e_R_task(0) : 0.0;
   e_R_task(1) =
-      params.constrain_rotation_about_alignment_tangent1 ? e_R_task(1) : 0.0;
+      params.constrain_rotation_about_alignment_tangent2 ? e_R_task(1) : 0.0;
   e_R_task(2) =
-      params.constrain_rotation_about_alignment_tangent2 ? e_R_task(2) : 0.0;
+      params.constrain_rotation_about_alignment_normal ? e_R_task(2) : 0.0;
 
   return R_alignment_target * e_R_task;
 }

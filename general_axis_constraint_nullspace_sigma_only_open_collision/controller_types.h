@@ -48,7 +48,7 @@ struct Parameters {
   // search contact; orient holds loosely); KR_tangent stiff enough for orient to
   // converge below orient_phase_error_threshold.
   Vec3 approach_Kp_diag = Vec3(150.0, 150.0, 150.0);
-  Vec3 approach_KR_diag = Vec3(8.0, 90.0, 90.0);
+  Vec3 approach_KR_diag = Vec3(90.0, 90.0, 8.0);  // [tangent1, tangent2, normal]
   Vec3 approach_Dp_diag = Vec3(20.0, 20.0, 20.0);
   Vec3 approach_DR_diag = Vec3(12.0, 12.0, 12.0);
   // When set, the approach Dp/DR above are ignored and damping is computed online
@@ -131,8 +131,8 @@ struct Parameters {
   double alignment_contact_force_threshold = 5.0;
   Vec3 post_contact_Kp_diag = Vec3(40.0, 40.0, 5500.0);
   Vec3 post_contact_Dp_diag = Vec3(10.0, 10.0, 175.0);
-  Vec3 post_contact_KR_diag = Vec3(8.0, 0.0, 0.0);
-  Vec3 post_contact_DR_diag = Vec3(4.0, 0.01, 0.01);
+  Vec3 post_contact_KR_diag = Vec3(0.0, 0.0, 8.0);     // [tangent1, tangent2, normal]
+  Vec3 post_contact_DR_diag = Vec3(0.01, 0.01, 4.0);   // [tangent1, tangent2, normal]
   // When set, the post_contact (align + grind) Dp/DR above are ignored and the
   // damping is computed online as D = factor*2*sqrt(M*K), M from libfranka inertia.
   bool post_contact_auto_damping = false;
@@ -160,8 +160,8 @@ struct Parameters {
   Vec3 delta_p = Vec3(0.005, 0.0, 0.0);
   double trajectory_duration = 8.0;
 
-  Vec3 Kp_diag = Vec3(150.0, 100.0, 100.0);
-  Vec3 Dp_diag = Vec3(25.0, 20.0, 20.0);
+  Vec3 Kp_diag = Vec3(100.0, 100.0, 150.0);  // [tangent1, tangent2, normal]
+  Vec3 Dp_diag = Vec3(20.0, 20.0, 25.0);     // [tangent1, tangent2, normal]
 
   Vec3 KR_diag = Vec3(3.0, 3.0, 3.0);
   Vec3 DR_diag = Vec3(3.5, 3.5, 3.5);

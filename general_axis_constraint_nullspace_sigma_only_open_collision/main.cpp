@@ -213,7 +213,7 @@ int main() {
         params.orientation_test_extra_tilt_deg * M_PI / 180.0;
     Mat3 R_d_orientation_test =
         (std::abs(orientation_test_extra_tilt_rad) > 1e-9)
-            ? Eigen::AngleAxisd(orientation_test_extra_tilt_rad, R_alignment_target.col(1)).toRotationMatrix() * R_d
+            ? Eigen::AngleAxisd(orientation_test_extra_tilt_rad, R_alignment_target.col(0)).toRotationMatrix() * R_d  // tangent1 = col 0
             : R_d_alignment_target;
     // This frame is based on the target normal and tangent hint from
     // parameters.txt. For the self-alignment test it can be a tilted tool
@@ -222,8 +222,8 @@ int main() {
         params.use_start_as_surface_point ? p_start : params.surface_point;
     const Vec3 contact_search_direction =
         params.contact_search_use_alignment_target_normal
-            ? -R_alignment_target.col(0)
-            : normalizedOrFallback(params.contact_search_direction, -R_alignment_target.col(0));
+            ? -R_alignment_target.col(2)  // -normal (normal = col 2)
+            : normalizedOrFallback(params.contact_search_direction, -R_alignment_target.col(2));
     const Mat3 R_contact_surface =
         makeSurfaceFrameFromNormalTangent(-contact_search_direction, params.alignment_target_tangent1);
     // Shared "approach" gains for orient_to_surface AND search_first_contact,
@@ -858,7 +858,7 @@ int main() {
           R_d_orientation_test =
               (std::abs(orientation_test_extra_tilt_rad) > 1e-9)
                   ? Eigen::AngleAxisd(orientation_test_extra_tilt_rad,
-                                      R_alignment_target.col(1)).toRotationMatrix() * R_d
+                                      R_alignment_target.col(0)).toRotationMatrix() * R_d  // tangent1 = col 0
                   : R_d_alignment_target;
           surface_point_runtime =
               params.use_start_as_surface_point ? p_start : params.surface_point;
@@ -1290,8 +1290,8 @@ int main() {
           post_contact_push = post_contact_hold_push;
           const Vec3 n = contact_search_direction;  // unit, into the surface
           const Vec3 grind_tangent = (params.grind_axis == 2)
-                                         ? R_alignment_target.col(2)
-                                         : R_alignment_target.col(1);
+                                         ? R_alignment_target.col(1)   // tangent2 = col 1
+                                         : R_alignment_target.col(0);  // tangent1 = col 0
           const double grind_time = time - post_contact_hold_start_time;
           double s = 0.0;
           double sdot = 0.0;
@@ -1377,7 +1377,7 @@ int main() {
         //
         // This couples the rotational correction into the translational error
         // so the tool behaves more like it is rotating around p_c.
-        const Vec3 p_c = surface_point_runtime + params.vcr_offset * R_alignment_target.col(0);
+        const Vec3 p_c = surface_point_runtime + params.vcr_offset * R_alignment_target.col(2);  // normal = col 2
         const Vec3 r_c = p_EE - p_c;
         e_p = e_p - e_R.cross(r_c);
       }
@@ -1610,8 +1610,8 @@ int main() {
         // error along the sweep axis; press = commanded force into the surface.
         const Vec3 n_grind = contact_search_direction;
         const Vec3 grind_tangent = (params.grind_axis == 2)
-                                       ? R_alignment_target.col(2)
-                                       : R_alignment_target.col(1);
+                                       ? R_alignment_target.col(1)   // tangent2 = col 1
+                                       : R_alignment_target.col(0);  // tangent1 = col 0
         const double grind_time = time - post_contact_hold_start_time;
         double sweep_s = 0.0;
         double sweep_sdot = 0.0;

@@ -228,18 +228,19 @@ Parameters readParameters(const std::string& filename) {
   p.orient_phase_min_time = getDouble("orient_phase_min_time", p.orient_phase_min_time);
   p.orient_phase_error_threshold =
       getDouble("orient_phase_error_threshold", p.orient_phase_error_threshold);
-  p.approach_Kp_diag(0) = getDouble("approach_Kp_normal", p.approach_Kp_diag(0));
-  p.approach_Kp_diag(1) = getDouble("approach_Kp_tangent1", p.approach_Kp_diag(1));
-  p.approach_Kp_diag(2) = getDouble("approach_Kp_tangent2", p.approach_Kp_diag(2));
-  p.approach_KR_diag(0) = getDouble("approach_KR_normal", p.approach_KR_diag(0));
-  p.approach_KR_diag(1) = getDouble("approach_KR_tangent1", p.approach_KR_diag(1));
-  p.approach_KR_diag(2) = getDouble("approach_KR_tangent2", p.approach_KR_diag(2));
-  p.approach_Dp_diag(0) = getDouble("approach_Dp_normal", p.approach_Dp_diag(0));
-  p.approach_Dp_diag(1) = getDouble("approach_Dp_tangent1", p.approach_Dp_diag(1));
-  p.approach_Dp_diag(2) = getDouble("approach_Dp_tangent2", p.approach_Dp_diag(2));
-  p.approach_DR_diag(0) = getDouble("approach_DR_normal", p.approach_DR_diag(0));
-  p.approach_DR_diag(1) = getDouble("approach_DR_tangent1", p.approach_DR_diag(1));
-  p.approach_DR_diag(2) = getDouble("approach_DR_tangent2", p.approach_DR_diag(2));
+  // Diag order is [tangent1, tangent2, normal] (matches R column order).
+  p.approach_Kp_diag(0) = getDouble("approach_Kp_tangent1", p.approach_Kp_diag(0));
+  p.approach_Kp_diag(1) = getDouble("approach_Kp_tangent2", p.approach_Kp_diag(1));
+  p.approach_Kp_diag(2) = getDouble("approach_Kp_normal", p.approach_Kp_diag(2));
+  p.approach_KR_diag(0) = getDouble("approach_KR_tangent1", p.approach_KR_diag(0));
+  p.approach_KR_diag(1) = getDouble("approach_KR_tangent2", p.approach_KR_diag(1));
+  p.approach_KR_diag(2) = getDouble("approach_KR_normal", p.approach_KR_diag(2));
+  p.approach_Dp_diag(0) = getDouble("approach_Dp_tangent1", p.approach_Dp_diag(0));
+  p.approach_Dp_diag(1) = getDouble("approach_Dp_tangent2", p.approach_Dp_diag(1));
+  p.approach_Dp_diag(2) = getDouble("approach_Dp_normal", p.approach_Dp_diag(2));
+  p.approach_DR_diag(0) = getDouble("approach_DR_tangent1", p.approach_DR_diag(0));
+  p.approach_DR_diag(1) = getDouble("approach_DR_tangent2", p.approach_DR_diag(1));
+  p.approach_DR_diag(2) = getDouble("approach_DR_normal", p.approach_DR_diag(2));
   p.approach_auto_damping = getBool("approach_auto_damping", p.approach_auto_damping);
   p.approach_auto_damping_factor =
       getDouble("approach_auto_damping_factor", p.approach_auto_damping_factor);
@@ -405,12 +406,13 @@ Parameters readParameters(const std::string& filename) {
   p.post_contact_Dp_diag(0) = getDouble("post_contact_Dp_x", p.post_contact_Dp_diag(0));
   p.post_contact_Dp_diag(1) = getDouble("post_contact_Dp_y", p.post_contact_Dp_diag(1));
   p.post_contact_Dp_diag(2) = getDouble("post_contact_Dp_z", p.post_contact_Dp_diag(2));
-  p.post_contact_KR_diag(0) = getDouble("post_contact_KR_normal", p.post_contact_KR_diag(0));
-  p.post_contact_KR_diag(1) = getDouble("post_contact_KR_tangent1", p.post_contact_KR_diag(1));
-  p.post_contact_KR_diag(2) = getDouble("post_contact_KR_tangent2", p.post_contact_KR_diag(2));
-  p.post_contact_DR_diag(0) = getDouble("post_contact_DR_normal", p.post_contact_DR_diag(0));
-  p.post_contact_DR_diag(1) = getDouble("post_contact_DR_tangent1", p.post_contact_DR_diag(1));
-  p.post_contact_DR_diag(2) = getDouble("post_contact_DR_tangent2", p.post_contact_DR_diag(2));
+  // Diag order [tangent1, tangent2, normal] (matches R column order).
+  p.post_contact_KR_diag(0) = getDouble("post_contact_KR_tangent1", p.post_contact_KR_diag(0));
+  p.post_contact_KR_diag(1) = getDouble("post_contact_KR_tangent2", p.post_contact_KR_diag(1));
+  p.post_contact_KR_diag(2) = getDouble("post_contact_KR_normal", p.post_contact_KR_diag(2));
+  p.post_contact_DR_diag(0) = getDouble("post_contact_DR_tangent1", p.post_contact_DR_diag(0));
+  p.post_contact_DR_diag(1) = getDouble("post_contact_DR_tangent2", p.post_contact_DR_diag(1));
+  p.post_contact_DR_diag(2) = getDouble("post_contact_DR_normal", p.post_contact_DR_diag(2));
   p.post_contact_auto_damping =
       getBool("post_contact_auto_damping", p.post_contact_auto_damping);
   p.post_contact_auto_damping_factor =
@@ -448,21 +450,22 @@ Parameters readParameters(const std::string& filename) {
   p.delta_p(2) = getDouble("delta_p_z", p.delta_p(2));
   p.trajectory_duration = getDouble("trajectory_duration", p.trajectory_duration);
 
-  p.Kp_diag(0) = getDoubleAlias("Kp_normal", "Kp_x", p.Kp_diag(0));
-  p.Kp_diag(1) = getDoubleAlias("Kp_tangent1", "Kp_y", p.Kp_diag(1));
-  p.Kp_diag(2) = getDoubleAlias("Kp_tangent2", "Kp_z", p.Kp_diag(2));
+  // Diag order [tangent1, tangent2, normal] (matches R column order).
+  p.Kp_diag(0) = getDoubleAlias("Kp_tangent1", "Kp_y", p.Kp_diag(0));
+  p.Kp_diag(1) = getDoubleAlias("Kp_tangent2", "Kp_z", p.Kp_diag(1));
+  p.Kp_diag(2) = getDoubleAlias("Kp_normal", "Kp_x", p.Kp_diag(2));
 
-  p.Dp_diag(0) = getDoubleAlias("Dp_normal", "Dp_x", p.Dp_diag(0));
-  p.Dp_diag(1) = getDoubleAlias("Dp_tangent1", "Dp_y", p.Dp_diag(1));
-  p.Dp_diag(2) = getDoubleAlias("Dp_tangent2", "Dp_z", p.Dp_diag(2));
+  p.Dp_diag(0) = getDoubleAlias("Dp_tangent1", "Dp_y", p.Dp_diag(0));
+  p.Dp_diag(1) = getDoubleAlias("Dp_tangent2", "Dp_z", p.Dp_diag(1));
+  p.Dp_diag(2) = getDoubleAlias("Dp_normal", "Dp_x", p.Dp_diag(2));
 
-  p.KR_diag(0) = getDoubleAlias("KR_normal", "KR_x", p.KR_diag(0));
-  p.KR_diag(1) = getDoubleAlias("KR_tangent1", "KR_y", p.KR_diag(1));
-  p.KR_diag(2) = getDoubleAlias("KR_tangent2", "KR_z", p.KR_diag(2));
+  p.KR_diag(0) = getDoubleAlias("KR_tangent1", "KR_y", p.KR_diag(0));
+  p.KR_diag(1) = getDoubleAlias("KR_tangent2", "KR_z", p.KR_diag(1));
+  p.KR_diag(2) = getDoubleAlias("KR_normal", "KR_x", p.KR_diag(2));
 
-  p.DR_diag(0) = getDoubleAlias("DR_normal", "DR_x", p.DR_diag(0));
-  p.DR_diag(1) = getDoubleAlias("DR_tangent1", "DR_y", p.DR_diag(1));
-  p.DR_diag(2) = getDoubleAlias("DR_tangent2", "DR_z", p.DR_diag(2));
+  p.DR_diag(0) = getDoubleAlias("DR_tangent1", "DR_y", p.DR_diag(0));
+  p.DR_diag(1) = getDoubleAlias("DR_tangent2", "DR_z", p.DR_diag(1));
+  p.DR_diag(2) = getDoubleAlias("DR_normal", "DR_x", p.DR_diag(2));
 
   p.collision_torque_acc = getDouble("collision_torque_acc", p.collision_torque_acc);
   p.collision_torque_nom = getDouble("collision_torque_nom", p.collision_torque_nom);

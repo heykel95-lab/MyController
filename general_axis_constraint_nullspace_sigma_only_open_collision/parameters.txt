@@ -442,24 +442,24 @@ print_gain_suggestion_diagnostics = 1
 # Last best instantaneous axis, base frame, relative to the active tool edge.
 # Used only for best-axis comparison diagnostics. Auto-updated from the best
 # per-cycle post_contact_align axis sample.
-last_best_axis_from_edge_x = 0.0678
-last_best_axis_from_edge_y = -0.1380
-last_best_axis_from_edge_z = 0.0252
-last_best_axis_dir_x = -0.581
-last_best_axis_dir_y = -0.115
-last_best_axis_dir_z = 0.806
-last_best_axis_pitch = -0.2602
+last_best_axis_from_edge_x = -0.0118
+last_best_axis_from_edge_y = 0.0775
+last_best_axis_from_edge_z = 0.0397
+last_best_axis_dir_x = -0.827
+last_best_axis_dir_y = -0.514
+last_best_axis_dir_z = 0.230
+last_best_axis_pitch = -0.0401
 
 # Last finite Chasles axis, base frame, relative to the active tool edge.
 # Used by Method 2 diagnostics and to save the coupled K_TCP/D_TCP matrices.
 # Auto-updated from the full start/end post_contact_align edge motion.
-last_chasles_axis_from_edge_x = 0.0013
+last_chasles_axis_from_edge_x = 0.0015
 last_chasles_axis_from_edge_y = -0.0233
-last_chasles_axis_from_edge_z = -0.0089
-last_chasles_axis_dir_x = -0.980
-last_chasles_axis_dir_y = -0.118
-last_chasles_axis_dir_z = 0.162
-last_chasles_axis_pitch = -0.0025
+last_chasles_axis_from_edge_z = -0.0095
+last_chasles_axis_dir_x = -0.977
+last_chasles_axis_dir_y = -0.132
+last_chasles_axis_dir_z = 0.169
+last_chasles_axis_pitch = -0.0011
 
 # Gain print bounds and legacy reference-motion settings.
 # suggested_gain_min/max clamp printed suggested values;
