@@ -216,6 +216,16 @@ void printParameters(const Parameters& params) {
          params.post_contact_apply_method2_tcp_wrench ? "on" : "off",
          params.method2_tcp_wrench_saved ? "yes" : "no",
          params.debug_period);
+  printf("alignment-target normal=[%+.3f, %+.3f, %+.3f] | tilt a(x)=%.1f deg, b(y)=%.1f deg%s\n",
+         params.alignment_target_normal(0),
+         params.alignment_target_normal(1),
+         params.alignment_target_normal(2),
+         params.alignment_target_tilt_angle_deg,
+         params.alignment_target_tilt_angle_y_deg,
+         params.derive_tilt_angles_from_plane_normal
+             ? " (derived from plane normal)"
+             : (params.use_alignment_target_tilt_angle ? " (from angles)"
+                                                       : " (manual normal)"));
 }
 
 // One short, fixed-format debug line per phase, all sharing the same
@@ -233,9 +243,18 @@ void printSearchDebug(double phase_time,
                       double distance_mm,
                       double force_n,
                       double force_limit_n,
-                      bool touch_saved) {
-  printf("search:     t=%5.1f s | distance=%6.1f mm | force=%5.1f N (limit %.1f) | touch=%s\n",
-         phase_time, distance_mm, force_n, force_limit_n, touch_saved ? "yes" : "no");
+                      bool touch_saved,
+                      bool show_to_plane,
+                      double to_plane_mm) {
+  if (show_to_plane) {
+    printf("search:     t=%5.1f s | distance=%6.1f mm | force=%5.1f N (limit %.1f) | "
+           "to_plane=%6.1f mm | touch=%s\n",
+           phase_time, distance_mm, force_n, force_limit_n, to_plane_mm,
+           touch_saved ? "yes" : "no");
+  } else {
+    printf("search:     t=%5.1f s | distance=%6.1f mm | force=%5.1f N (limit %.1f) | touch=%s\n",
+           phase_time, distance_mm, force_n, force_limit_n, touch_saved ? "yes" : "no");
+  }
 }
 
 void printAlignDebug(double phase_time,

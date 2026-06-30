@@ -24,7 +24,12 @@ struct Parameters {
   Vec3 surface_point = Vec3(0.0, 0.0, 0.0);
   Vec3 alignment_target_normal = Vec3(1.0, 0.0, 0.0);
   bool use_alignment_target_tilt_angle = false;
-  double alignment_target_tilt_angle_deg = 0.0;
+  // When set, the two tilt angles are computed FROM the virtual-plane normal
+  // vector (alignment_target_normal / surface_normal) instead of being read from
+  // file: a = -asin(n_y), b = atan2(n_x, n_z). Overrides the manual angle entries.
+  bool derive_tilt_angles_from_plane_normal = false;
+  double alignment_target_tilt_angle_deg = 0.0;    // a, about base x
+  double alignment_target_tilt_angle_y_deg = 0.0;  // b, about base y
   Vec3 alignment_target_tangent1 = Vec3(0.0, 1.0, 0.0);
   Vec3 tool_axis_ee = Vec3(0.0, 0.0, 1.0);
   double tool_axis_target_sign = -1.0;
@@ -38,6 +43,19 @@ struct Parameters {
   bool use_orientation_phase = true;
   double orient_phase_min_time = 0.5;
   double orient_phase_error_threshold = 0.03;
+  // Shared "approach" impedance for the orient_to_surface AND search_first_contact
+  // phases (alignment-target frame [normal, tangent1, tangent2]). One translation
+  // stiffness + one rotation stiffness, since translation and rotation are
+  // decoupled. Position is soft (gentle contact in search; orient holds loosely),
+  // KR_tangent stiff enough for orient to converge. Damping is computed online
+  // when approach_auto_damping = 1 (D = factor*2*sqrt(M*K), M from libfranka
+  // task-space inertia), else the manual approach_Dp/DR are used.
+  Vec3 approach_Kp_diag = Vec3(150.0, 150.0, 150.0);
+  Vec3 approach_KR_diag = Vec3(8.0, 90.0, 90.0);
+  Vec3 approach_Dp_diag = Vec3(20.0, 20.0, 20.0);
+  Vec3 approach_DR_diag = Vec3(12.0, 12.0, 12.0);
+  bool approach_auto_damping = false;
+  double approach_auto_damping_factor = 1.0;
   double post_contact_align_min_time = 0.3;
   double post_contact_align_duration = 15.0;
   double post_contact_best_axis_min_time = 0.60;
@@ -101,6 +119,13 @@ struct Parameters {
   double effective_moment_fit_ridge = 1e-8;
 
   bool use_contact_search = false;
+  // Search method. 0 = force-triggered (drive down until contact force). 1 =
+  // predefined-surface: drive down to the KNOWN plane (defined by the tilt
+  // angles + surface_point) and switch when the tool contact point reaches it,
+  // no force needed. Requires use_start_as_surface_point = 0 with a real table
+  // surface_point. A force trip still switches as a safety in this mode too.
+  bool search_use_predefined_surface = false;
+  double search_predefined_reach_tolerance_m = 0.002;
   bool contact_search_use_alignment_target_normal = true;
   Vec3 contact_search_direction = Vec3(0.0, 0.0, -1.0);
   double contact_search_speed = 0.005;
@@ -112,12 +137,25 @@ struct Parameters {
   double contact_force_threshold = 5.0;
   bool detect_contact_during_alignment = true;
   double alignment_contact_force_threshold = 5.0;
-  Vec3 contact_search_Kp_diag = Vec3(150.0, 150.0, 150.0);
-  Vec3 contact_search_Dp_diag = Vec3(25.0, 25.0, 25.0);
   Vec3 post_contact_Kp_diag = Vec3(40.0, 40.0, 5500.0);
   Vec3 post_contact_Dp_diag = Vec3(10.0, 10.0, 175.0);
   Vec3 post_contact_KR_diag = Vec3(8.0, 0.0, 0.0);
   Vec3 post_contact_DR_diag = Vec3(4.0, 0.01, 0.01);
+  // When set, the post_contact (align + grind) Dp/DR above are ignored and the
+  // damping is computed online as D = factor * 2*sqrt(M*K), with M the libfranka
+  // task-space inertia (Method 1's Lambda) and K the active stiffness. The factor
+  // is a critical-damping multiplier (1.0 = critical, <1 underdamped, >1 over).
+  bool post_contact_auto_damping = false;
+  double post_contact_auto_damping_factor = 1.0;
+
+  // Surface-grinding (schleifen) hold. When post_contact_grind_mode = 1, the
+  // post_contact_align hold sweeps the contact side-to-side along a surface
+  // tangent while pressing. It reuses the post_contact (align) stiffness and
+  // damping -- only the sweep trajectory below and the decoupled law are special.
+  bool post_contact_grind_mode = false;
+  int grind_axis = 1;               // 1 = tangent1, 2 = tangent2
+  double grind_amplitude_m = 0.03;  // sweep half-amplitude A [m]
+  double grind_frequency_hz = 0.2;  // full back-and-forth cycle frequency f [Hz]
 
   bool constrain_rotation_about_alignment_normal = true;
   bool constrain_rotation_about_alignment_tangent1 = true;
@@ -155,16 +193,6 @@ struct Parameters {
   std::string q_init_case = "horizontal_tool";
 
   bool use_custom_collision_behavior = false;
-
-  Array7 collision_torque_lower_acc = {{30.0, 30.0, 28.0, 28.0, 25.0, 25.0, 25.0}};
-  Array7 collision_torque_upper_acc = {{30.0, 30.0, 28.0, 28.0, 25.0, 25.0, 25.0}};
-  Array7 collision_torque_lower_nom = {{30.0, 30.0, 28.0, 28.0, 25.0, 25.0, 25.0}};
-  Array7 collision_torque_upper_nom = {{30.0, 30.0, 28.0, 28.0, 25.0, 25.0, 25.0}};
-
-  Array6 collision_force_lower_acc = {{30.0, 30.0, 30.0, 20.0, 20.0, 20.0}};
-  Array6 collision_force_upper_acc = {{30.0, 30.0, 30.0, 20.0, 20.0, 20.0}};
-  Array6 collision_force_lower_nom = {{30.0, 30.0, 30.0, 20.0, 20.0, 20.0}};
-  Array6 collision_force_upper_nom = {{30.0, 30.0, 30.0, 20.0, 20.0, 20.0}};
 };
 
 struct LogData {

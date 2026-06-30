@@ -50,7 +50,9 @@ void printSearchDebug(double phase_time,
                       double distance_mm,
                       double force_n,
                       double force_limit_n,
-                      bool touch_saved);
+                      bool touch_saved,
+                      bool show_to_plane = false,
+                      double to_plane_mm = 0.0);
 
 void printAlignDebug(double phase_time,
                      double tip_deg,

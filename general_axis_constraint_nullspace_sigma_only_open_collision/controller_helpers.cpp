@@ -100,6 +100,33 @@ double smoothStepDerivative(double r, double T) {
   return ds_dr / T;
 }
 
+void grindSweep(double t, double amplitude, double stroke_duration,
+                double& s, double& s_dot) {
+  if (stroke_duration <= 1e-9) {
+    s = 0.0;
+    s_dot = 0.0;
+    return;
+  }
+  // Reuse the delta_p trajectory's smoothStep shaping per stroke. Endpoints in
+  // units of amplitude: stroke 0 goes center -> +A, then ping-pong +A <-> -A.
+  // smoothStep gives zero velocity at both ends, so reversals are smooth.
+  const double tau = std::max(0.0, t) / stroke_duration;
+  const int k = static_cast<int>(std::floor(tau));
+  const double r = tau - std::floor(tau);
+  auto endpoint = [](int i) -> double {
+    if (i <= 0) return 0.0;
+    return (i % 2 == 1) ? 1.0 : -1.0;
+  };
+  const double a0 = endpoint(k);
+  const double a1 = endpoint(k + 1);
+  s = amplitude * (a0 + (a1 - a0) * smoothStep(r));
+  s_dot = amplitude * (a1 - a0) * smoothStepDerivative(r, stroke_duration);
+}
+
+double grindStrokeDuration(const Parameters& params) {
+  return (params.grind_frequency_hz > 1e-9) ? (0.5 / params.grind_frequency_hz) : 0.0;
+}
+
 double postContactPush(const Parameters& params, double post_align_time) {
   double push =
       params.post_contact_normal_push + params.post_contact_push_speed * post_align_time;

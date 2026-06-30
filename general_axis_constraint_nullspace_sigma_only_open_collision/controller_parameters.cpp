@@ -153,9 +153,39 @@ Parameters readParameters(const std::string& filename) {
       getDoubleAlias("alignment_target_tilt_angle_deg",
                      "surface_tilt_angle_deg",
                      p.alignment_target_tilt_angle_deg);
-  if (p.use_alignment_target_tilt_angle) {
-    const double tilt_rad = p.alignment_target_tilt_angle_deg * M_PI / 180.0;
-    p.alignment_target_normal = Vec3(0.0, -std::sin(tilt_rad), std::cos(tilt_rad));
+  p.alignment_target_tilt_angle_y_deg =
+      getDouble("alignment_target_tilt_angle_y_deg",
+                p.alignment_target_tilt_angle_y_deg);
+  p.derive_tilt_angles_from_plane_normal =
+      getBool("derive_tilt_angles_from_plane_normal",
+              p.derive_tilt_angles_from_plane_normal);
+  if (p.derive_tilt_angles_from_plane_normal) {
+    // Invert n = [sin(b)cos(a), -sin(a), cos(b)cos(a)] to get the two tilt
+    // angles from the virtual-plane normal vector the user provided above:
+    //   a = -asin(n_y),  b = atan2(n_x, n_z).
+    // Then rebuild the normal from those angles so everything downstream stays
+    // consistent (the round trip returns the same unit normal).
+    Vec3 n = p.alignment_target_normal;
+    n = (n.norm() > 1e-9) ? n.normalized() : Vec3(0.0, 0.0, 1.0);
+    const double ny = std::max(-1.0, std::min(1.0, n(1)));
+    const double ax = std::asin(-ny);
+    const double ay = std::atan2(n(0), n(2));
+    p.alignment_target_tilt_angle_deg = ax * 180.0 / M_PI;
+    p.alignment_target_tilt_angle_y_deg = ay * 180.0 / M_PI;
+    p.alignment_target_normal = Vec3(std::sin(ay) * std::cos(ax),
+                                     -std::sin(ax),
+                                     std::cos(ay) * std::cos(ax));
+    p.alignment_target_normal.normalize();
+  } else if (p.use_alignment_target_tilt_angle) {
+    // n = R_y(b) * R_x(a) * [0,0,1]
+    //   = [sin(b)cos(a), -sin(a), cos(b)cos(a)].
+    // a = tilt about base x (legacy single-angle meaning, b=0), b = tilt about base y.
+    const double ax = p.alignment_target_tilt_angle_deg * M_PI / 180.0;
+    const double ay = p.alignment_target_tilt_angle_y_deg * M_PI / 180.0;
+    p.alignment_target_normal = Vec3(std::sin(ay) * std::cos(ax),
+                                     -std::sin(ax),
+                                     std::cos(ay) * std::cos(ax));
+    p.alignment_target_normal.normalize();
   }
   p.alignment_target_tangent1(0) =
       getDouble("alignment_target_tangent1_x",
@@ -172,6 +202,14 @@ Parameters readParameters(const std::string& filename) {
                 getDoubleAlias("surface_tangent1_z",
                                "surface_tangent_hint_z",
                                p.alignment_target_tangent1(2)));
+  if (p.use_alignment_target_tilt_angle || p.derive_tilt_angles_from_plane_normal) {
+    // When the plane is defined by the tilt angles, the in-plane reference comes
+    // from the SAME rotation as the normal, so no separate tangent1 is needed:
+    //   tangent1 = R_y(b)*R_x(a)*[1,0,0] = [cos(b), 0, -sin(b)]
+    // (already unit and perpendicular to n; tangent2 = n x tangent1 follows).
+    const double ay = p.alignment_target_tilt_angle_y_deg * M_PI / 180.0;
+    p.alignment_target_tangent1 = Vec3(std::cos(ay), 0.0, -std::sin(ay));
+  }
   p.tool_axis_ee(0) = getDouble("tool_axis_ee_x", p.tool_axis_ee(0));
   p.tool_axis_ee(1) = getDouble("tool_axis_ee_y", p.tool_axis_ee(1));
   p.tool_axis_ee(2) = getDouble("tool_axis_ee_z", p.tool_axis_ee(2));
@@ -198,6 +236,21 @@ Parameters readParameters(const std::string& filename) {
   p.orient_phase_min_time = getDouble("orient_phase_min_time", p.orient_phase_min_time);
   p.orient_phase_error_threshold =
       getDouble("orient_phase_error_threshold", p.orient_phase_error_threshold);
+  p.approach_Kp_diag(0) = getDouble("approach_Kp_normal", p.approach_Kp_diag(0));
+  p.approach_Kp_diag(1) = getDouble("approach_Kp_tangent1", p.approach_Kp_diag(1));
+  p.approach_Kp_diag(2) = getDouble("approach_Kp_tangent2", p.approach_Kp_diag(2));
+  p.approach_KR_diag(0) = getDouble("approach_KR_normal", p.approach_KR_diag(0));
+  p.approach_KR_diag(1) = getDouble("approach_KR_tangent1", p.approach_KR_diag(1));
+  p.approach_KR_diag(2) = getDouble("approach_KR_tangent2", p.approach_KR_diag(2));
+  p.approach_Dp_diag(0) = getDouble("approach_Dp_normal", p.approach_Dp_diag(0));
+  p.approach_Dp_diag(1) = getDouble("approach_Dp_tangent1", p.approach_Dp_diag(1));
+  p.approach_Dp_diag(2) = getDouble("approach_Dp_tangent2", p.approach_Dp_diag(2));
+  p.approach_DR_diag(0) = getDouble("approach_DR_normal", p.approach_DR_diag(0));
+  p.approach_DR_diag(1) = getDouble("approach_DR_tangent1", p.approach_DR_diag(1));
+  p.approach_DR_diag(2) = getDouble("approach_DR_tangent2", p.approach_DR_diag(2));
+  p.approach_auto_damping = getBool("approach_auto_damping", p.approach_auto_damping);
+  p.approach_auto_damping_factor =
+      getDouble("approach_auto_damping_factor", p.approach_auto_damping_factor);
   p.post_contact_align_min_time =
       getDouble("post_contact_align_min_time", p.post_contact_align_min_time);
   p.post_contact_align_duration =
@@ -330,6 +383,10 @@ Parameters readParameters(const std::string& filename) {
       getDouble("effective_moment_fit_ridge", p.effective_moment_fit_ridge);
 
   p.use_contact_search = getBool("use_contact_search", p.use_contact_search);
+  p.search_use_predefined_surface =
+      getBool("search_use_predefined_surface", p.search_use_predefined_surface);
+  p.search_predefined_reach_tolerance_m =
+      getDouble("search_predefined_reach_tolerance_m", p.search_predefined_reach_tolerance_m);
   p.contact_search_use_alignment_target_normal =
       getBoolAlias("contact_search_use_alignment_target_normal",
                    "contact_search_use_surface_normal",
@@ -354,12 +411,6 @@ Parameters readParameters(const std::string& filename) {
       getBool("detect_contact_during_alignment", p.detect_contact_during_alignment);
   p.alignment_contact_force_threshold =
       getDouble("alignment_contact_force_threshold", p.alignment_contact_force_threshold);
-  p.contact_search_Kp_diag(0) = getDouble("contact_search_Kp_x", p.contact_search_Kp_diag(0));
-  p.contact_search_Kp_diag(1) = getDouble("contact_search_Kp_y", p.contact_search_Kp_diag(1));
-  p.contact_search_Kp_diag(2) = getDouble("contact_search_Kp_z", p.contact_search_Kp_diag(2));
-  p.contact_search_Dp_diag(0) = getDouble("contact_search_Dp_x", p.contact_search_Dp_diag(0));
-  p.contact_search_Dp_diag(1) = getDouble("contact_search_Dp_y", p.contact_search_Dp_diag(1));
-  p.contact_search_Dp_diag(2) = getDouble("contact_search_Dp_z", p.contact_search_Dp_diag(2));
   p.post_contact_Kp_diag(0) = getDouble("post_contact_Kp_x", p.post_contact_Kp_diag(0));
   p.post_contact_Kp_diag(1) = getDouble("post_contact_Kp_y", p.post_contact_Kp_diag(1));
   p.post_contact_Kp_diag(2) = getDouble("post_contact_Kp_z", p.post_contact_Kp_diag(2));
@@ -372,6 +423,15 @@ Parameters readParameters(const std::string& filename) {
   p.post_contact_DR_diag(0) = getDouble("post_contact_DR_normal", p.post_contact_DR_diag(0));
   p.post_contact_DR_diag(1) = getDouble("post_contact_DR_tangent1", p.post_contact_DR_diag(1));
   p.post_contact_DR_diag(2) = getDouble("post_contact_DR_tangent2", p.post_contact_DR_diag(2));
+  p.post_contact_auto_damping =
+      getBool("post_contact_auto_damping", p.post_contact_auto_damping);
+  p.post_contact_auto_damping_factor =
+      getDouble("post_contact_auto_damping_factor", p.post_contact_auto_damping_factor);
+
+  p.post_contact_grind_mode = getBool("post_contact_grind_mode", p.post_contact_grind_mode);
+  p.grind_axis = static_cast<int>(getDouble("grind_axis", p.grind_axis));
+  p.grind_amplitude_m = getDouble("grind_amplitude_m", p.grind_amplitude_m);
+  p.grind_frequency_hz = getDouble("grind_frequency_hz", p.grind_frequency_hz);
 
   p.constrain_rotation_about_alignment_normal =
       getBool("constrain_rotation_about_alignment_normal",
@@ -472,30 +532,6 @@ Parameters readParameters(const std::string& filename) {
   p.q_init[6] = getDouble("q_init_7", p.q_init[6]);
 
   p.use_custom_collision_behavior = getBool("use_custom_collision_behavior", p.use_custom_collision_behavior);
-
-  const double collision_joint_torque = getDouble("collision_joint_torque_threshold", 30.0);
-  for (int i = 0; i < 7; ++i) {
-    p.collision_torque_lower_acc[i] = collision_joint_torque;
-    p.collision_torque_upper_acc[i] = collision_joint_torque;
-    p.collision_torque_lower_nom[i] = collision_joint_torque;
-    p.collision_torque_upper_nom[i] = collision_joint_torque;
-  }
-
-  const double collision_cart_force = getDouble("collision_cartesian_force_threshold", 30.0);
-  for (int i = 0; i < 3; ++i) {
-    p.collision_force_lower_acc[i] = collision_cart_force;
-    p.collision_force_upper_acc[i] = collision_cart_force;
-    p.collision_force_lower_nom[i] = collision_cart_force;
-    p.collision_force_upper_nom[i] = collision_cart_force;
-  }
-
-  const double collision_cart_moment = getDouble("collision_cartesian_moment_threshold", 20.0);
-  for (int i = 3; i < 6; ++i) {
-    p.collision_force_lower_acc[i] = collision_cart_moment;
-    p.collision_force_upper_acc[i] = collision_cart_moment;
-    p.collision_force_lower_nom[i] = collision_cart_moment;
-    p.collision_force_upper_nom[i] = collision_cart_moment;
-  }
 
   return p;
 }

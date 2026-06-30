@@ -25,6 +25,17 @@ double smoothStep(double r);
 
 double smoothStepDerivative(double r, double T);
 
+// Side-to-side sweep offset built from the smoothStep trajectory primitive:
+// scalar position s [m] and velocity s_dot [m/s] of a ping-pong between -A and
+// +A, each stroke lasting stroke_duration [s]. Starts at center (s=0) and eases
+// with zero velocity at every reversal. Used by the grind hold.
+void grindSweep(double t, double amplitude, double stroke_duration,
+                double& s, double& s_dot);
+
+// One grind stroke (one direction) = half a full back-and-forth cycle, derived
+// from grind_frequency_hz. Returns 0 (no sweep) when the frequency is 0.
+double grindStrokeDuration(const Parameters& params);
+
 double postContactPush(const Parameters& params, double post_align_time);
 
 bool computeInstantaneousPoleFromTcp(
