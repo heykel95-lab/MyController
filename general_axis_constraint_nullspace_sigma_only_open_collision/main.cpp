@@ -243,6 +243,28 @@ int main() {
     const Mat3 DR_post_contact = params.constraint_enabled
         ? makeSpatialGainMatrix(params.post_contact_DR_diag, R_alignment_target)
         : params.post_contact_DR_diag.asDiagonal();
+    // Dedicated rotational gains for orient_to_surface, alignment-target frame,
+    // so the pre-contact reorientation is gentle.
+    const Mat3 KR_orient = params.constraint_enabled
+        ? makeSpatialGainMatrix(params.orient_KR_diag, R_alignment_target)
+        : params.orient_KR_diag.asDiagonal();
+    const Mat3 DR_orient = params.constraint_enabled
+        ? makeSpatialGainMatrix(params.orient_DR_diag, R_alignment_target)
+        : params.orient_DR_diag.asDiagonal();
+    // Surface-grinding gains, alignment-target frame (normal/tangent1/tangent2):
+    // position normal-soft/tangent-stiff, rotation normal-stiff/tangent-soft.
+    const Mat3 Kp_grind = params.constraint_enabled
+        ? makeSpatialGainMatrix(params.grind_Kp_diag, R_alignment_target)
+        : params.grind_Kp_diag.asDiagonal();
+    const Mat3 Dp_grind = params.constraint_enabled
+        ? makeSpatialGainMatrix(params.grind_Dp_diag, R_alignment_target)
+        : params.grind_Dp_diag.asDiagonal();
+    const Mat3 KR_grind = params.constraint_enabled
+        ? makeSpatialGainMatrix(params.grind_KR_diag, R_alignment_target)
+        : params.grind_KR_diag.asDiagonal();
+    const Mat3 DR_grind = params.constraint_enabled
+        ? makeSpatialGainMatrix(params.grind_DR_diag, R_alignment_target)
+        : params.grind_DR_diag.asDiagonal();
     ControlPhase initial_phase = ControlPhase::kSurfaceImpedance;
     if (params.orientation_test_only) {
       initial_phase = ControlPhase::kOrientToSurface;
@@ -272,6 +294,7 @@ int main() {
     // switching to surface impedance.
     bool post_contact_hold_active = false;
     double post_contact_hold_push = 0.0;
+    double post_contact_hold_start_time = 0.0;
     double first_touch_candidate_time = 0.0;
     double first_touch_candidate_distance = 0.0;
     double first_touch_candidate_signal = 0.0;
@@ -866,6 +889,7 @@ int main() {
           first_contact_force_delta = 0.0;
           post_contact_hold_active = false;
           post_contact_hold_push = 0.0;
+          post_contact_hold_start_time = 0.0;
           first_touch_candidate_time = 0.0;
           first_touch_candidate_distance = 0.0;
           first_touch_candidate_signal = 0.0;
@@ -1064,7 +1088,9 @@ int main() {
           last_valid_post_align_axis_valid = true;
           last_valid_post_align_axis_stable = best_axis_candidate_stable;
         }
-        if (params.debug_period > 0.0 && time >= next_debug_time) {
+        const bool grind_holding =
+            post_contact_hold_active && params.post_contact_grind_mode;
+        if (params.debug_period > 0.0 && time >= next_debug_time && !grind_holding) {
           // actual_tip_deg: measured rotation away from the orientation held
           // at first contact -- shows whether/how much the tool has
           // passively tipped so far, not just where it is now.
@@ -1104,6 +1130,7 @@ int main() {
               post_contact_hold_active = true;
               post_contact_hold_push =
                   postContactPush(params, post_align_time);
+              post_contact_hold_start_time = time;
               reportPostContactAlignment(
                   moment_contact_reached, post_align_time, post_force_delta_norm,
                   post_moment_delta_norm, p_EE, R_EE, tool_contact_point,
@@ -1250,7 +1277,34 @@ int main() {
         const double post_align_time = time - phase_start_time;
         double post_contact_push;
         Vec3 edge_target;
-        if (post_contact_hold_active) {
+        Vec3 edge_target_velocity = Vec3::Zero();
+        if (post_contact_hold_active && params.post_contact_grind_mode) {
+          // Surface-grinding (schleifen) hold. Press with constant preload along
+          // the normal at the contact plane, and sweep the contact side-to-side
+          // along a surface tangent using the smoothStep ping-pong trajectory
+          // (tangential error is NOT zeroed, so the stiff grind tangent gains
+          // follow the path):
+          //
+          //   s(t), s_dot(t) = grindSweep(t - t_hold0, A, stroke_duration)
+          //   p_edge_d       = p_contact_1 + push_hold * n + s(t) * t_axis
+          //
+          // Position is normal-soft (constant press) / tangent-stiff (tracks the
+          // sweep); rotation is normal-stiff (no yaw) / tangent-soft (stays flat).
+          // The press preload is the same one carried over from the align phase.
+          post_contact_push = post_contact_hold_push;
+          const Vec3 n = contact_search_direction;  // unit, into the surface
+          const Vec3 grind_tangent = (params.grind_axis == 2)
+                                         ? R_alignment_target.col(2)
+                                         : R_alignment_target.col(1);
+          const double grind_time = time - post_contact_hold_start_time;
+          double s = 0.0;
+          double sdot = 0.0;
+          grindSweep(grind_time, params.grind_amplitude_m,
+                     grindStrokeDuration(params), s, sdot);
+          edge_target =
+              first_contact_point + post_contact_hold_push * n + s * grind_tangent;
+          edge_target_velocity = sdot * grind_tangent;
+        } else if (post_contact_hold_active) {
           // Constant-press, free-slide hold (surface-impedance-like, with the
           // preload held on top). The preload is frozen at the value it had when
           // the align phase ended. Instead of anchoring the edge at a fixed
@@ -1278,7 +1332,7 @@ int main() {
         edge_target_debug = edge_target;
         post_contact_push_debug = post_contact_push;
         desired.p_d = edge_target - R_contact_start * tool_contact_offset_ee;
-        desired.pdot_d.setZero();
+        desired.pdot_d = edge_target_velocity;
       } else {
         if (contact_found) {
           impedance_time = params.use_contact_search ? (time - contact_time) : time;
@@ -1351,23 +1405,31 @@ int main() {
           params.use_search_direction_surface_after_alignment &&
           (phase == ControlPhase::kSurfaceImpedance) &&
           contact_found;
+      // Grinding hold uses its own surface-frame gains and the decoupled law.
+      const bool grind_active =
+          post_contact_hold_active && params.post_contact_grind_mode;
       const Mat3& Kp_used =
           (phase == ControlPhase::kPostContactAlign)
-              ? Kp_post_contact
+              ? (grind_active ? Kp_grind : Kp_post_contact)
               : (use_soft_translation ? Kp_search : (use_contact_surface_gains ? Kp_contact : Kp));
       const Mat3& Dp_used =
           (phase == ControlPhase::kPostContactAlign)
-              ? Dp_post_contact
+              ? (grind_active ? Dp_grind : Dp_post_contact)
               : (use_soft_translation ? Dp_search : (use_contact_surface_gains ? Dp_contact : Dp));
       const Mat3& KR_used =
-          (phase == ControlPhase::kPostContactAlign) ? KR_post_contact : KR;
+          (phase == ControlPhase::kPostContactAlign)
+              ? (grind_active ? KR_grind : KR_post_contact)
+              : (orienting_to_surface ? KR_orient : KR);
       const Mat3& DR_used =
-          (phase == ControlPhase::kPostContactAlign) ? DR_post_contact : DR;
+          (phase == ControlPhase::kPostContactAlign)
+              ? (grind_active ? DR_grind : DR_post_contact)
+              : (orienting_to_surface ? DR_orient : DR);
       Vec6 wrench;
       Vec3 f;
       Vec3 m;
       if (phase == ControlPhase::kPostContactAlign &&
-          params.post_contact_apply_method2_tcp_wrench) {
+          params.post_contact_apply_method2_tcp_wrench &&
+          !grind_active) {
         // Method 2 active-apply mode. The 6x6 K/D source is selected by, in
         // priority order:
         //   use_in_method2_k_d_diag = 1 -> block-diagonal post_align gains (no
@@ -1487,6 +1549,26 @@ int main() {
       // by mapping the task-space wrench through the Jacobian transpose.
 
       Vec7 tau_task = J.transpose() * wrench;
+
+      if (grind_active && params.debug_period > 0.0 && time >= next_debug_time) {
+        // sweep = commanded tangential offset; track_err = tangential position
+        // error along the sweep axis; press = commanded force into the surface.
+        const Vec3 n_grind = contact_search_direction;
+        const Vec3 grind_tangent = (params.grind_axis == 2)
+                                       ? R_alignment_target.col(2)
+                                       : R_alignment_target.col(1);
+        const double grind_time = time - post_contact_hold_start_time;
+        double sweep_s = 0.0;
+        double sweep_sdot = 0.0;
+        grindSweep(grind_time, params.grind_amplitude_m,
+                   grindStrokeDuration(params), sweep_s, sweep_sdot);
+        const double sweep_mm = 1000.0 * sweep_s;
+        const double track_err_mm = 1000.0 * e_p.dot(grind_tangent);
+        const double press_N = f.dot(n_grind);
+        printf("grind:      t=%5.1f s | sweep=%+6.1f mm | track_err=%+5.1f mm | press=%5.1f N\n",
+               grind_time, sweep_mm, track_err_mm, press_N);
+        next_debug_time = time + params.debug_period;
+      }
       // During contact search, keep the nullspace torque off.
       // The search phase should only move the TCP downward to find the table.
       // After contact is found, the normal surface impedance starts and the

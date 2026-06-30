@@ -153,9 +153,39 @@ Parameters readParameters(const std::string& filename) {
       getDoubleAlias("alignment_target_tilt_angle_deg",
                      "surface_tilt_angle_deg",
                      p.alignment_target_tilt_angle_deg);
-  if (p.use_alignment_target_tilt_angle) {
-    const double tilt_rad = p.alignment_target_tilt_angle_deg * M_PI / 180.0;
-    p.alignment_target_normal = Vec3(0.0, -std::sin(tilt_rad), std::cos(tilt_rad));
+  p.alignment_target_tilt_angle_y_deg =
+      getDouble("alignment_target_tilt_angle_y_deg",
+                p.alignment_target_tilt_angle_y_deg);
+  p.derive_tilt_angles_from_plane_normal =
+      getBool("derive_tilt_angles_from_plane_normal",
+              p.derive_tilt_angles_from_plane_normal);
+  if (p.derive_tilt_angles_from_plane_normal) {
+    // Invert n = [sin(b)cos(a), -sin(a), cos(b)cos(a)] to get the two tilt
+    // angles from the virtual-plane normal vector the user provided above:
+    //   a = -asin(n_y),  b = atan2(n_x, n_z).
+    // Then rebuild the normal from those angles so everything downstream stays
+    // consistent (the round trip returns the same unit normal).
+    Vec3 n = p.alignment_target_normal;
+    n = (n.norm() > 1e-9) ? n.normalized() : Vec3(0.0, 0.0, 1.0);
+    const double ny = std::max(-1.0, std::min(1.0, n(1)));
+    const double ax = std::asin(-ny);
+    const double ay = std::atan2(n(0), n(2));
+    p.alignment_target_tilt_angle_deg = ax * 180.0 / M_PI;
+    p.alignment_target_tilt_angle_y_deg = ay * 180.0 / M_PI;
+    p.alignment_target_normal = Vec3(std::sin(ay) * std::cos(ax),
+                                     -std::sin(ax),
+                                     std::cos(ay) * std::cos(ax));
+    p.alignment_target_normal.normalize();
+  } else if (p.use_alignment_target_tilt_angle) {
+    // n = R_y(b) * R_x(a) * [0,0,1]
+    //   = [sin(b)cos(a), -sin(a), cos(b)cos(a)].
+    // a = tilt about base x (legacy single-angle meaning, b=0), b = tilt about base y.
+    const double ax = p.alignment_target_tilt_angle_deg * M_PI / 180.0;
+    const double ay = p.alignment_target_tilt_angle_y_deg * M_PI / 180.0;
+    p.alignment_target_normal = Vec3(std::sin(ay) * std::cos(ax),
+                                     -std::sin(ax),
+                                     std::cos(ay) * std::cos(ax));
+    p.alignment_target_normal.normalize();
   }
   p.alignment_target_tangent1(0) =
       getDouble("alignment_target_tangent1_x",
@@ -198,6 +228,12 @@ Parameters readParameters(const std::string& filename) {
   p.orient_phase_min_time = getDouble("orient_phase_min_time", p.orient_phase_min_time);
   p.orient_phase_error_threshold =
       getDouble("orient_phase_error_threshold", p.orient_phase_error_threshold);
+  p.orient_KR_diag(0) = getDouble("orient_KR_normal", p.orient_KR_diag(0));
+  p.orient_KR_diag(1) = getDouble("orient_KR_tangent1", p.orient_KR_diag(1));
+  p.orient_KR_diag(2) = getDouble("orient_KR_tangent2", p.orient_KR_diag(2));
+  p.orient_DR_diag(0) = getDouble("orient_DR_normal", p.orient_DR_diag(0));
+  p.orient_DR_diag(1) = getDouble("orient_DR_tangent1", p.orient_DR_diag(1));
+  p.orient_DR_diag(2) = getDouble("orient_DR_tangent2", p.orient_DR_diag(2));
   p.post_contact_align_min_time =
       getDouble("post_contact_align_min_time", p.post_contact_align_min_time);
   p.post_contact_align_duration =
@@ -372,6 +408,23 @@ Parameters readParameters(const std::string& filename) {
   p.post_contact_DR_diag(0) = getDouble("post_contact_DR_normal", p.post_contact_DR_diag(0));
   p.post_contact_DR_diag(1) = getDouble("post_contact_DR_tangent1", p.post_contact_DR_diag(1));
   p.post_contact_DR_diag(2) = getDouble("post_contact_DR_tangent2", p.post_contact_DR_diag(2));
+
+  p.post_contact_grind_mode = getBool("post_contact_grind_mode", p.post_contact_grind_mode);
+  p.grind_axis = static_cast<int>(getDouble("grind_axis", p.grind_axis));
+  p.grind_amplitude_m = getDouble("grind_amplitude_m", p.grind_amplitude_m);
+  p.grind_frequency_hz = getDouble("grind_frequency_hz", p.grind_frequency_hz);
+  p.grind_Kp_diag(0) = getDouble("grind_Kp_normal", p.grind_Kp_diag(0));
+  p.grind_Kp_diag(1) = getDouble("grind_Kp_tangent1", p.grind_Kp_diag(1));
+  p.grind_Kp_diag(2) = getDouble("grind_Kp_tangent2", p.grind_Kp_diag(2));
+  p.grind_Dp_diag(0) = getDouble("grind_Dp_normal", p.grind_Dp_diag(0));
+  p.grind_Dp_diag(1) = getDouble("grind_Dp_tangent1", p.grind_Dp_diag(1));
+  p.grind_Dp_diag(2) = getDouble("grind_Dp_tangent2", p.grind_Dp_diag(2));
+  p.grind_KR_diag(0) = getDouble("grind_KR_normal", p.grind_KR_diag(0));
+  p.grind_KR_diag(1) = getDouble("grind_KR_tangent1", p.grind_KR_diag(1));
+  p.grind_KR_diag(2) = getDouble("grind_KR_tangent2", p.grind_KR_diag(2));
+  p.grind_DR_diag(0) = getDouble("grind_DR_normal", p.grind_DR_diag(0));
+  p.grind_DR_diag(1) = getDouble("grind_DR_tangent1", p.grind_DR_diag(1));
+  p.grind_DR_diag(2) = getDouble("grind_DR_tangent2", p.grind_DR_diag(2));
 
   p.constrain_rotation_about_alignment_normal =
       getBool("constrain_rotation_about_alignment_normal",

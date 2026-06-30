@@ -24,7 +24,12 @@ struct Parameters {
   Vec3 surface_point = Vec3(0.0, 0.0, 0.0);
   Vec3 alignment_target_normal = Vec3(1.0, 0.0, 0.0);
   bool use_alignment_target_tilt_angle = false;
-  double alignment_target_tilt_angle_deg = 0.0;
+  // When set, the two tilt angles are computed FROM the virtual-plane normal
+  // vector (alignment_target_normal / surface_normal) instead of being read from
+  // file: a = -asin(n_y), b = atan2(n_x, n_z). Overrides the manual angle entries.
+  bool derive_tilt_angles_from_plane_normal = false;
+  double alignment_target_tilt_angle_deg = 0.0;    // a, about base x
+  double alignment_target_tilt_angle_y_deg = 0.0;  // b, about base y
   Vec3 alignment_target_tangent1 = Vec3(0.0, 1.0, 0.0);
   Vec3 tool_axis_ee = Vec3(0.0, 0.0, 1.0);
   double tool_axis_target_sign = -1.0;
@@ -38,6 +43,12 @@ struct Parameters {
   bool use_orientation_phase = true;
   double orient_phase_min_time = 0.5;
   double orient_phase_error_threshold = 0.03;
+  // Dedicated rotational gains used only during orient_to_surface, alignment-target
+  // frame (normal/tangent1/tangent2). Softer than the stiff surface KR/DR so
+  // reorienting is not an aggressive snap, but stiff enough that the steady-state
+  // error converges below orient_phase_error_threshold and the phase switches.
+  Vec3 orient_KR_diag = Vec3(8.0, 90.0, 90.0);
+  Vec3 orient_DR_diag = Vec3(4.0, 18.0, 18.0);
   double post_contact_align_min_time = 0.3;
   double post_contact_align_duration = 15.0;
   double post_contact_best_axis_min_time = 0.60;
@@ -118,6 +129,20 @@ struct Parameters {
   Vec3 post_contact_Dp_diag = Vec3(10.0, 10.0, 175.0);
   Vec3 post_contact_KR_diag = Vec3(8.0, 0.0, 0.0);
   Vec3 post_contact_DR_diag = Vec3(4.0, 0.01, 0.01);
+
+  // Surface-grinding (schleifen) hold. When post_contact_grind_mode = 1, the
+  // post_contact_align hold sweeps the contact side-to-side along a surface
+  // tangent while pressing, using its own gains below (alignment-target frame):
+  // position normal-soft (constant press) / tangent-stiff (tracks the sweep);
+  // rotation normal-stiff (no yaw) / tangent-soft (stays flat).
+  bool post_contact_grind_mode = false;
+  int grind_axis = 1;               // 1 = tangent1, 2 = tangent2
+  double grind_amplitude_m = 0.03;  // sweep half-amplitude A [m]
+  double grind_frequency_hz = 0.2;  // full back-and-forth cycle frequency f [Hz]
+  Vec3 grind_Kp_diag = Vec3(1500.0, 4000.0, 4000.0);  // normal soft, tangents stiff
+  Vec3 grind_Dp_diag = Vec3(80.0, 180.0, 180.0);
+  Vec3 grind_KR_diag = Vec3(30.0, 2.0, 2.0);          // normal stiff, tangents soft
+  Vec3 grind_DR_diag = Vec3(8.0, 2.0, 2.0);
 
   bool constrain_rotation_about_alignment_normal = true;
   bool constrain_rotation_about_alignment_tangent1 = true;
