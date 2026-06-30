@@ -205,12 +205,12 @@ align_orientation_to_surface_after_contact = 1
 post_contact_align_min_time = 2.0
 
 # Maximum time spent in this phase after first contact [s].
-post_contact_align_duration = 1.0
+post_contact_align_duration = 6.0
 
 # Moment-change early-exit threshold [Nm] (e.g. the second tool edge
 # touching down after passively tipping flat). Only checked once
 # post_contact_align_min_time has elapsed.
-post_contact_moment_threshold = 90.0
+post_contact_moment_threshold = 150.0
 
 # Ignore the first transient screw-axis samples when picking the measured
 # "best" axis for comparison/gain suggestion; among stable samples, picks
@@ -250,15 +250,15 @@ post_contact_max_push = 0.031
 post_contact_hold_after_align = 1
 
 # Translational spring used only during this phase, base frame [x, y, z].
-# z (downward, into the table): soft-normal variant -- compliant (1500) with a
-# deeper push depth (above) so the press force/edge moment is unchanged but the
-# normal yields smoothly as the edge tips, instead of a stiff 5500 spike.
+# Run C: firm normal (z) for press + SOFT tangents (x,y) so the tool is free to
+# rotate about the edge. Only change from Run B: stiff tangents were pinning the
+# TCP, so the press just shoved the arm up instead of tipping the tool.
 post_contact_Kp_x = 40.0
 post_contact_Kp_y = 40.0
-post_contact_Kp_z = 1500.0
+post_contact_Kp_z = 5500.0
 post_contact_Dp_x = 10.0
 post_contact_Dp_y = 10.0
-post_contact_Dp_z = 90.0
+post_contact_Dp_z = 175.0
 
 # Rotational spring/damping used only during this phase, alignment-target frame
 # [normal, tangent1, tangent2]. Target is the pose held at first contact (no
@@ -281,7 +281,7 @@ post_contact_DR_tangent2 = 10.01
 # using the grind gains below. Position: normal soft (constant press) + tangents
 # stiff (track the sweep). Rotation: normal stiff (no yaw) + tangents soft (stay
 # flat). Bypasses the Method 2 coupled wrench.
-post_contact_grind_mode = 1
+post_contact_grind_mode = 0
 
 # Sweep path: a smoothStep ping-pong between -A and +A along the chosen surface
 # tangent (same trajectory primitive as the delta_p move). Each stroke eases
@@ -333,7 +333,7 @@ use_manual_method2_pole = 1
 # pole_from_edge = -edge_offset_base (~ y=-0.040 here) puts it at the TCP and
 # zeroes the coupling (collapses to the decoupled self-align wrench).
 manual_method2_pole_from_edge_x = 0.0
-manual_method2_pole_from_edge_y = 0.0
+manual_method2_pole_from_edge_y = 0.08
 manual_method2_pole_from_edge_z = 0.0
 # 1 = pin the pole to the first-contact pose, so K_TCP/D_TCP are computed once
 # and stay constant for the whole align phase (predictable; recommended for
@@ -342,78 +342,78 @@ method2_pole_freeze_at_contact = 1
 
 # Saved full 6x6 Method 2 TCP gains, base frame, rows/cols [fx fy fz mx my mz].
 # These are auto-updated after a baseline run with a valid finite Chasles axis.
-method2_K_tcp_00 = 40
+method2_K_tcp_00 = 3000
 method2_K_tcp_01 = 0
 method2_K_tcp_02 = 0
 method2_K_tcp_03 = 0
-method2_K_tcp_04 = -0.937811995
-method2_K_tcp_05 = 5.359763
+method2_K_tcp_04 = 71.4135088
+method2_K_tcp_05 = 782.118358
 method2_K_tcp_10 = 0
-method2_K_tcp_11 = 40
+method2_K_tcp_11 = 3000
 method2_K_tcp_12 = 0
-method2_K_tcp_13 = 0.937811995
+method2_K_tcp_13 = -71.4135088
 method2_K_tcp_14 = 0
-method2_K_tcp_15 = -0.221378053
+method2_K_tcp_15 = -374.027261
 method2_K_tcp_20 = 0
 method2_K_tcp_21 = 0
-method2_K_tcp_22 = 3000
-method2_K_tcp_23 = -401.982225
-method2_K_tcp_24 = 16.603354
+method2_K_tcp_22 = 500
+method2_K_tcp_23 = -130.35306
+method2_K_tcp_24 = 62.3378768
 method2_K_tcp_25 = 0
 method2_K_tcp_30 = 0
-method2_K_tcp_31 = 0.937811995
-method2_K_tcp_32 = -401.982225
-method2_K_tcp_33 = 63.8852237
-method2_K_tcp_34 = -2.22475106
-method2_K_tcp_35 = -0.00519027483
-method2_K_tcp_40 = -0.937811995
+method2_K_tcp_31 = -71.4135088
+method2_K_tcp_32 = -130.35306
+method2_K_tcp_33 = 45.6838034
+method2_K_tcp_34 = -16.2518659
+method2_K_tcp_35 = 8.90353303
+method2_K_tcp_40 = 71.4135088
 method2_K_tcp_41 = 0
-method2_K_tcp_42 = 16.603354
-method2_K_tcp_43 = -2.22475106
-method2_K_tcp_44 = 14.9631093
-method2_K_tcp_45 = 0.729389108
-method2_K_tcp_50 = 5.359763
-method2_K_tcp_51 = -0.221378053
+method2_K_tcp_42 = 62.3378768
+method2_K_tcp_43 = -16.2518659
+method2_K_tcp_44 = 24.4340042
+method2_K_tcp_45 = 19.0520592
+method2_K_tcp_50 = 782.118358
+method2_K_tcp_51 = -374.027261
 method2_K_tcp_52 = 0
-method2_K_tcp_53 = -0.00519027483
-method2_K_tcp_54 = 0.729389108
-method2_K_tcp_55 = 10.8701701
-method2_D_tcp_00 = 10
+method2_K_tcp_53 = 8.90353303
+method2_K_tcp_54 = 19.0520592
+method2_K_tcp_55 = 260.573153
+method2_D_tcp_00 = 100
 method2_D_tcp_01 = 0
 method2_D_tcp_02 = 0
 method2_D_tcp_03 = 0
-method2_D_tcp_04 = -0.234452999
-method2_D_tcp_05 = 1.33994075
+method2_D_tcp_04 = 2.38045029
+method2_D_tcp_05 = 26.0706119
 method2_D_tcp_10 = 0
-method2_D_tcp_11 = 10
+method2_D_tcp_11 = 100
 method2_D_tcp_12 = 0
-method2_D_tcp_13 = 0.234452999
+method2_D_tcp_13 = -2.38045029
 method2_D_tcp_14 = 0
-method2_D_tcp_15 = -0.0553445132
+method2_D_tcp_15 = -12.4675754
 method2_D_tcp_20 = 0
 method2_D_tcp_21 = 0
-method2_D_tcp_22 = 90
-method2_D_tcp_23 = -12.0594668
-method2_D_tcp_24 = 0.498100619
+method2_D_tcp_22 = 50
+method2_D_tcp_23 = -13.035306
+method2_D_tcp_24 = 6.23378768
 method2_D_tcp_25 = 0
 method2_D_tcp_30 = 0
-method2_D_tcp_31 = 0.234452999
-method2_D_tcp_32 = -12.0594668
-method2_D_tcp_33 = 11.6313939
-method2_D_tcp_34 = -0.0667425317
-method2_D_tcp_35 = -0.00129756871
-method2_D_tcp_40 = -0.234452999
+method2_D_tcp_31 = -2.38045029
+method2_D_tcp_32 = -13.035306
+method2_D_tcp_33 = 13.4650495
+method2_D_tcp_34 = -1.62518659
+method2_D_tcp_35 = 0.296784434
+method2_D_tcp_40 = 2.38045029
 method2_D_tcp_41 = 0
-method2_D_tcp_42 = 0.498100619
-method2_D_tcp_43 = -0.0667425317
-method2_D_tcp_44 = 10.017952
-method2_D_tcp_45 = -0.029705212
-method2_D_tcp_50 = 1.33994075
-method2_D_tcp_51 = -0.0553445132
+method2_D_tcp_42 = 6.23378768
+method2_D_tcp_43 = -1.62518659
+method2_D_tcp_44 = 10.8437917
+method2_D_tcp_45 = 0.621466199
+method2_D_tcp_50 = 26.0706119
+method2_D_tcp_51 = -12.4675754
 method2_D_tcp_52 = 0
-method2_D_tcp_53 = -0.00129756871
-method2_D_tcp_54 = -0.029705212
-method2_D_tcp_55 = 10.180152
+method2_D_tcp_53 = 0.296784434
+method2_D_tcp_54 = 0.621466199
+method2_D_tcp_55 = 18.3512484
 
 # Virtual center of rotation during this phase:
 # p_c = p_contact + vcr_offset * alignment_target_normal.
@@ -439,24 +439,24 @@ print_gain_suggestion_diagnostics = 1
 # Last best instantaneous axis, base frame, relative to the active tool edge.
 # Used only for best-axis comparison diagnostics. Auto-updated from the best
 # per-cycle post_contact_align axis sample.
-last_best_axis_from_edge_x = -0.1899
-last_best_axis_from_edge_y = 0.0539
-last_best_axis_from_edge_z = 0.2692
-last_best_axis_dir_x = 0.241
-last_best_axis_dir_y = 0.962
-last_best_axis_dir_z = 0.125
-last_best_axis_pitch = -0.0570
+last_best_axis_from_edge_x = -0.1325
+last_best_axis_from_edge_y = -0.0407
+last_best_axis_from_edge_z = 0.2026
+last_best_axis_dir_x = 0.065
+last_best_axis_dir_y = 0.910
+last_best_axis_dir_z = 0.410
+last_best_axis_pitch = -0.0431
 
 # Last finite Chasles axis, base frame, relative to the active tool edge.
 # Used by Method 2 diagnostics and to save the coupled K_TCP/D_TCP matrices.
 # Auto-updated from the full start/end post_contact_align edge motion.
-last_chasles_axis_from_edge_x = -0.5974
-last_chasles_axis_from_edge_y = -0.2779
-last_chasles_axis_from_edge_z = 0.2266
-last_chasles_axis_dir_x = -0.203
-last_chasles_axis_dir_y = 0.843
-last_chasles_axis_dir_z = 0.498
-last_chasles_axis_pitch = -0.2039
+last_chasles_axis_from_edge_x = 0.0028
+last_chasles_axis_from_edge_y = -0.0410
+last_chasles_axis_from_edge_z = -0.0085
+last_chasles_axis_dir_x = -0.998
+last_chasles_axis_dir_y = -0.066
+last_chasles_axis_dir_z = -0.015
+last_chasles_axis_pitch = 0.0162
 
 # Gain print bounds and legacy reference-motion settings.
 # suggested_gain_min/max clamp printed suggested values;
