@@ -338,7 +338,7 @@ int main() {
     const Mat3 R_contact_surface =
         makeSurfaceFrameFromNormalTangent(-contact_search_direction, params.alignment_target_tangent1);
     // Shared "approach" gains for orient_to_surface AND search_first_contact,
-    // alignment-target frame [normal, tangent1, tangent2].
+    // alignment-target frame [tangent1, tangent2, normal].
     const Mat3 Kp_approach = params.constraint_enabled
         ? makeSpatialGainMatrix(params.approach_Kp_diag, R_alignment_target)
         : params.approach_Kp_diag.asDiagonal();
@@ -567,7 +567,7 @@ int main() {
                  tcp_from_contact_mm(2),
                  tcp_from_contact_mm.norm());
           // Steady contact wrench and motion resolved into the alignment-target
-          // frame [normal, tangent1, tangent2], the same frame the post-contact
+          // frame [tangent1, tangent2, normal], the same frame the post-contact
           // gains and Method 1's quasi-static limits use. This gives real
           // per-axis force-vs-displacement and moment-vs-angle pairs so
           // quasi_force_limit/quasi_displacement_limit (and the moment/angle
@@ -602,7 +602,7 @@ int main() {
               fmtRatio(kr[i], sizeof(kr[i]), moment_surf(i), tip_surf(i), 5e-4);
             }
             printf("\n=== Post-align surface-frame breakdown (Method 1 inputs) ===\n");
-            printf("frame: alignment-target [normal, tangent1, tangent2]\n");
+            printf("frame: alignment-target [tangent1, tangent2, normal]\n");
             printf("force        [N]      = [%+9.2f, %+9.2f, %+9.2f]\n",
                    force_surf(0), force_surf(1), force_surf(2));
             printf("tcp_disp     [mm]     = [%+9.2f, %+9.2f, %+9.2f]\n",
@@ -746,6 +746,7 @@ int main() {
             printf("Reporting only: suggestions are not applied online. Edit parameters.txt manually to test them.\n");
 
             printf("\n=== Method 1: Quasi-static candidate gains ===\n");
+            printf("axis order for all 3-vectors below: [tangent1, tangent2, normal]\n");
             printf("formula: Kp=Fmax/dxmax, KR=Mmax/dtheta_max, D=2*zeta*sqrt(M*K)\n");
             printf("inertia_source: %s\n",
                    cartesian_inertia.valid
@@ -767,6 +768,7 @@ int main() {
             printGainVec("DR_active_post_contact", params.post_contact_DR_diag);
 
             printf("\n=== Method 2: Adjoint pole-based candidate gains ===\n");
+            printf("surface-frame rotational/source diagonals use [tangent1, tangent2, normal]\n");
             // The pole for the K/D adjoint suggestion comes from the stable
             // Chasles finite screw axis (computed from the start/end edge pose),
             // not the per-cycle best instantaneous pole, which jumps between
@@ -866,6 +868,7 @@ int main() {
             printSpatialGainEigenvalues("  (B) D_TCP", D_tcp_cmd);
 
             printf("\n=== Method 3: Least-squares effective moment identification ===\n");
+            printf("task-frame vectors and matrix diagonals use [tangent1, tangent2, normal]\n");
             printf("model: M_C = K_rt*dx_C + D_rt*v_C + K_R*dtheta + D_R*omega\n");
             printf("moment transfer: M_C = m - r_C x f\n");
             const EffectiveMomentFit moment_fit =

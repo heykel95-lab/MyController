@@ -147,7 +147,7 @@ orient_phase_error_threshold = 0.035
 
 # ----- Shared "approach" impedance (orient_to_surface + search_first_contact) -----
 # One translation stiffness + one rotation stiffness for BOTH early phases,
-# alignment-target frame [normal, tangent1, tangent2]. Position soft (gentle
+# alignment-target frame [tangent1, tangent2, normal]. Position soft (gentle
 # search contact; orient holds loosely); KR_tangent stiff enough that orient
 # converges below orient_phase_error_threshold.
 approach_Kp_normal = 150.0
@@ -285,7 +285,7 @@ post_contact_Dp_y = 10.0
 post_contact_Dp_z = 175.0
 
 # Rotational spring/damping used only during this phase, alignment-target frame
-# [normal, tangent1, tangent2]. Target is the pose held at first contact (no
+# [tangent1, tangent2, normal]. Target is the pose held at first contact (no
 # scripted rotation). Normal (yaw about the target axis) stays constrained;
 # tangent1/tangent2 (the tipping directions) stay very soft so real contact
 # moment can passively rotate the tool flat.
@@ -455,24 +455,24 @@ print_gain_suggestion_diagnostics = 1
 # Last best instantaneous axis, base frame, relative to the active tool edge.
 # Used only for best-axis comparison diagnostics. Auto-updated from the best
 # per-cycle post_contact_align axis sample.
-last_best_axis_from_edge_x = -0.0118
-last_best_axis_from_edge_y = 0.0775
-last_best_axis_from_edge_z = 0.0397
-last_best_axis_dir_x = -0.827
-last_best_axis_dir_y = -0.514
-last_best_axis_dir_z = 0.230
-last_best_axis_pitch = -0.0401
+last_best_axis_from_edge_x = -0.1951
+last_best_axis_from_edge_y = -0.1111
+last_best_axis_from_edge_z = 0.2603
+last_best_axis_dir_x = -0.108
+last_best_axis_dir_y = 0.891
+last_best_axis_dir_z = 0.440
+last_best_axis_pitch = -0.0992
 
 # Last finite Chasles axis, base frame, relative to the active tool edge.
 # Used by Method 2 diagnostics and to save the coupled K_TCP/D_TCP matrices.
 # Auto-updated from the full start/end post_contact_align edge motion.
-last_chasles_axis_from_edge_x = 0.0015
-last_chasles_axis_from_edge_y = -0.0233
-last_chasles_axis_from_edge_z = -0.0095
-last_chasles_axis_dir_x = -0.977
-last_chasles_axis_dir_y = -0.132
-last_chasles_axis_dir_z = 0.169
-last_chasles_axis_pitch = -0.0011
+last_chasles_axis_from_edge_x = 0.0034
+last_chasles_axis_from_edge_y = -0.0222
+last_chasles_axis_from_edge_z = -0.0069
+last_chasles_axis_dir_x = -0.973
+last_chasles_axis_dir_y = -0.190
+last_chasles_axis_dir_z = 0.130
+last_chasles_axis_pitch = -0.0037
 
 # Gain print bounds and legacy reference-motion settings.
 # suggested_gain_min/max clamp printed suggested values;
@@ -482,7 +482,9 @@ suggested_gain_angle_ref = 0.10
 suggested_gain_min = 0.01
 suggested_gain_max = 8000.0
 
-# Method 1: quasi-static initial selection, surface-frame normal/tangent1/tangent2.
+# Method 1: quasi-static initial selection. Parameter names stay semantic
+# (_normal/_tangent1/_tangent2), but printed/internal vectors are [tangent1,
+# tangent2, normal].
 # Kp = Fmax / dxmax, KR = Mmax / dtheta_max.
 # Limits chosen from the post_contact_align run operating point:
 #   normal: steady push ~114 N at the working 6500 N/m -> dx = 114/6500 ~ 17.5 mm.
@@ -525,8 +527,8 @@ effective_moment_fit_ridge = 1e-8
 # ====================================================================
 # Phase 4: surface_impedance
 # ====================================================================
-# Rotational constraint flags, alignment-target frame
-# (normal/tangent1/tangent2). 1 = keep rotational
+# Rotational constraint flags, alignment-target frame. Parameter names are
+# semantic; internal vectors are [tangent1, tangent2, normal]. 1 = keep rotational
 # stiffness on that component, 0 = no spring (damping still acts if DR_i >
 # 0; for a fully free component set both the flag and damping to 0).
 constrain_rotation_about_alignment_normal = 1

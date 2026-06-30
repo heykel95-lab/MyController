@@ -55,7 +55,7 @@ struct Parameters {
   double orient_phase_min_time = 0.5;
   double orient_phase_error_threshold = 0.03;
   // Shared "approach" impedance for orient_to_surface AND search_first_contact,
-  // alignment-target frame [normal, tangent1, tangent2]. Position soft (gentle
+  // Alignment-target frame [tangent1, tangent2, normal]. Position soft (gentle
   // search contact; orient holds loosely); KR_tangent stiff enough for orient to
   // converge below orient_phase_error_threshold.
   Vec3 approach_Kp_diag = Vec3(150.0, 150.0, 150.0);
@@ -119,8 +119,9 @@ struct Parameters {
   double suggested_gain_angle_ref = 0.10;
   double suggested_gain_min = 0.01;
   double suggested_gain_max = 8000.0;
-  Vec3 quasi_force_limit = Vec3(15.0, 10.0, 10.0);
-  Vec3 quasi_displacement_limit = Vec3(0.005, 0.010, 0.010);
+  // Method diagnostics use the same [tangent1, tangent2, normal] order.
+  Vec3 quasi_force_limit = Vec3(10.0, 10.0, 15.0);
+  Vec3 quasi_displacement_limit = Vec3(0.010, 0.010, 0.005);
   Vec3 quasi_moment_limit = Vec3(0.75, 0.75, 0.75);
   Vec3 quasi_angle_limit = Vec3(0.1745, 0.1745, 0.1745);
   Vec3 quasi_effective_mass = Vec3(1.0, 1.0, 1.0);

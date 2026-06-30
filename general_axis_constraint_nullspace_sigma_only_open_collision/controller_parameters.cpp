@@ -380,30 +380,31 @@ Parameters readParameters(const std::string& filename) {
   p.suggested_gain_min = getDouble("suggested_gain_min", p.suggested_gain_min);
   p.suggested_gain_max = getDouble("suggested_gain_max", p.suggested_gain_max);
 
-  p.quasi_force_limit(0) = getDouble("quasi_force_limit_normal", p.quasi_force_limit(0));
-  p.quasi_force_limit(1) = getDouble("quasi_force_limit_tangent1", p.quasi_force_limit(1));
-  p.quasi_force_limit(2) = getDouble("quasi_force_limit_tangent2", p.quasi_force_limit(2));
+  // Diag order is [tangent1, tangent2, normal] (matches R column order).
+  p.quasi_force_limit(0) = getDouble("quasi_force_limit_tangent1", p.quasi_force_limit(0));
+  p.quasi_force_limit(1) = getDouble("quasi_force_limit_tangent2", p.quasi_force_limit(1));
+  p.quasi_force_limit(2) = getDouble("quasi_force_limit_normal", p.quasi_force_limit(2));
   p.quasi_displacement_limit(0) =
-      getDouble("quasi_displacement_limit_normal", p.quasi_displacement_limit(0));
+      getDouble("quasi_displacement_limit_tangent1", p.quasi_displacement_limit(0));
   p.quasi_displacement_limit(1) =
-      getDouble("quasi_displacement_limit_tangent1", p.quasi_displacement_limit(1));
+      getDouble("quasi_displacement_limit_tangent2", p.quasi_displacement_limit(1));
   p.quasi_displacement_limit(2) =
-      getDouble("quasi_displacement_limit_tangent2", p.quasi_displacement_limit(2));
-  p.quasi_moment_limit(0) = getDouble("quasi_moment_limit_normal", p.quasi_moment_limit(0));
-  p.quasi_moment_limit(1) = getDouble("quasi_moment_limit_tangent1", p.quasi_moment_limit(1));
-  p.quasi_moment_limit(2) = getDouble("quasi_moment_limit_tangent2", p.quasi_moment_limit(2));
-  p.quasi_angle_limit(0) = getDouble("quasi_angle_limit_normal", p.quasi_angle_limit(0));
-  p.quasi_angle_limit(1) = getDouble("quasi_angle_limit_tangent1", p.quasi_angle_limit(1));
-  p.quasi_angle_limit(2) = getDouble("quasi_angle_limit_tangent2", p.quasi_angle_limit(2));
-  p.quasi_effective_mass(0) = getDouble("quasi_effective_mass_normal", p.quasi_effective_mass(0));
-  p.quasi_effective_mass(1) = getDouble("quasi_effective_mass_tangent1", p.quasi_effective_mass(1));
-  p.quasi_effective_mass(2) = getDouble("quasi_effective_mass_tangent2", p.quasi_effective_mass(2));
+      getDouble("quasi_displacement_limit_normal", p.quasi_displacement_limit(2));
+  p.quasi_moment_limit(0) = getDouble("quasi_moment_limit_tangent1", p.quasi_moment_limit(0));
+  p.quasi_moment_limit(1) = getDouble("quasi_moment_limit_tangent2", p.quasi_moment_limit(1));
+  p.quasi_moment_limit(2) = getDouble("quasi_moment_limit_normal", p.quasi_moment_limit(2));
+  p.quasi_angle_limit(0) = getDouble("quasi_angle_limit_tangent1", p.quasi_angle_limit(0));
+  p.quasi_angle_limit(1) = getDouble("quasi_angle_limit_tangent2", p.quasi_angle_limit(1));
+  p.quasi_angle_limit(2) = getDouble("quasi_angle_limit_normal", p.quasi_angle_limit(2));
+  p.quasi_effective_mass(0) = getDouble("quasi_effective_mass_tangent1", p.quasi_effective_mass(0));
+  p.quasi_effective_mass(1) = getDouble("quasi_effective_mass_tangent2", p.quasi_effective_mass(1));
+  p.quasi_effective_mass(2) = getDouble("quasi_effective_mass_normal", p.quasi_effective_mass(2));
   p.quasi_effective_inertia(0) =
-      getDouble("quasi_effective_inertia_normal", p.quasi_effective_inertia(0));
+      getDouble("quasi_effective_inertia_tangent1", p.quasi_effective_inertia(0));
   p.quasi_effective_inertia(1) =
-      getDouble("quasi_effective_inertia_tangent1", p.quasi_effective_inertia(1));
+      getDouble("quasi_effective_inertia_tangent2", p.quasi_effective_inertia(1));
   p.quasi_effective_inertia(2) =
-      getDouble("quasi_effective_inertia_tangent2", p.quasi_effective_inertia(2));
+      getDouble("quasi_effective_inertia_normal", p.quasi_effective_inertia(2));
   p.quasi_damping_ratio = getDouble("quasi_damping_ratio", p.quasi_damping_ratio);
   p.effective_moment_fit_ridge =
       getDouble("effective_moment_fit_ridge", p.effective_moment_fit_ridge);
