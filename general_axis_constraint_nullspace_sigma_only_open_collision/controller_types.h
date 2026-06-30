@@ -2,6 +2,13 @@
 
 #include "controller_common.h"
 
+enum class NullspaceMode {
+  kOff = 0,
+  kPostureOnly = 1,
+  kSigmaOnly = 2,
+  kPostureAndSigma = 3
+};
+
 struct Parameters {
   std::string robot_ip = "172.16.0.2";
   double experiment_duration = 10.0;
@@ -16,6 +23,10 @@ struct Parameters {
   double gripper_open_speed = 0.05;
 
   bool hold_mode = true;
+  double hold_Kp = 300.0;
+  double hold_Dp = 50.0;
+  bool hold_auto_damping = true;
+  double hold_auto_damping_factor = 1.0;
   bool use_manual_guidance_start = false;
   double manual_guidance_damping = 0.5;
 
@@ -152,6 +163,7 @@ struct Parameters {
   bool constrain_rotation_about_alignment_tangent2 = true;
 
   bool use_nullspace_optimization = true;
+  NullspaceMode nullspace_mode = NullspaceMode::kPostureAndSigma;
   double nullspace_k_start = 1.0;
   double nullspace_damping = 1.0;
   double nullspace_k_sigma = 0.5;

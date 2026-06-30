@@ -653,6 +653,12 @@ DesiredMotion computeDesiredMotion(
     desired.pdot_d = s_dot * params.delta_p;
   }
 
+  const bool startup_hold =
+      params.hold_mode && !params.use_phase_sequence && !params.use_contact_search;
+  if (startup_hold) {
+    return desired;
+  }
+
   if (params.constraint_enabled) {
     const Vec3 normal = R_position_surface.col(2);  // normal = 3rd column
 
@@ -697,7 +703,8 @@ Vec7 computeNullspaceTorque(
   Vec7 tau_nullspace = Vec7::Zero();
 
   // If nullspace optimization is disabled, return zero nullspace torque.
-  if (!params.use_nullspace_optimization) {
+  if (!params.use_nullspace_optimization ||
+      params.nullspace_mode == NullspaceMode::kOff) {
     return tau_nullspace;
   }
   // else, compute the nullspace torque to optimize the smallest singular value of the Jacobian.
@@ -731,7 +738,15 @@ Vec7 computeNullspaceTorque(
   //
   // This prevents the robot from slowly rotating/drifting in the nullspace
   // when the TCP is moved back and forth at the same Cartesian place.
-  tau_nullspace = N * (params.nullspace_k_start * (q_start - q_current) - params.nullspace_damping * dq);
+  if (params.nullspace_mode == NullspaceMode::kPostureOnly ||
+      params.nullspace_mode == NullspaceMode::kPostureAndSigma) {
+    tau_nullspace =
+        N * (params.nullspace_k_start * (q_start - q_current) - params.nullspace_damping * dq);
+  }
+
+  if (params.nullspace_mode == NullspaceMode::kPostureOnly) {
+    return tau_nullspace;
+  }
 
   Eigen::JacobiSVD<Mat6x7> svd_current(J, Eigen::ComputeFullU | Eigen::ComputeFullV);
   Vec7 n = svd_current.matrixV().col(6);
@@ -771,6 +786,10 @@ Vec7 computeNullspaceTorque(
 
   const Vec7 tau_sigma =
       N * (params.nullspace_k_sigma * sigma_direction * params.nullspace_alpha * n);
+
+  if (params.nullspace_mode == NullspaceMode::kSigmaOnly) {
+    return tau_sigma;
+  }
 
   return tau_nullspace + tau_sigma;
 }

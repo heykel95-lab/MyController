@@ -73,11 +73,12 @@ R_desired * tool_axis_ee = tool_axis_target_sign * alignment_target_normal
 
 ## Nullspace
 
-The nullspace term combines return-to-start posture regulation, damping, and a small singular-value improvement term:
+The nullspace term can run as the old combined behavior, or the startup hold
+prompt can isolate the terms for testing:
 
 ```text
 tau_null = N * (k_start * (q_start - q) - d_null * dq)
-           + N * (k_sigma * alpha * sign * n)
+tau_sigma = N * (k_sigma * alpha * sign * n)
 ```
 
 ## Contact Search

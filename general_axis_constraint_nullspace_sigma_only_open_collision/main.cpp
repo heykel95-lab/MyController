@@ -29,6 +29,114 @@ const char* phaseName(ControlPhase phase) {
   return "unknown";
 }
 
+std::string normalizedChoice(std::string input) {
+  input.erase(input.begin(),
+              std::find_if(input.begin(), input.end(), [](unsigned char c) {
+                return !std::isspace(c);
+              }));
+  input.erase(std::find_if(input.rbegin(), input.rend(), [](unsigned char c) {
+                return !std::isspace(c);
+              }).base(),
+              input.end());
+  std::transform(input.begin(), input.end(), input.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return input;
+}
+
+const char* nullspaceModeName(NullspaceMode mode) {
+  switch (mode) {
+    case NullspaceMode::kOff:
+      return "off";
+    case NullspaceMode::kPostureOnly:
+      return "tau_nullspace_only";
+    case NullspaceMode::kSigmaOnly:
+      return "tau_sigma_only";
+    case NullspaceMode::kPostureAndSigma:
+      return "tau_nullspace_plus_tau_sigma";
+  }
+  return "unknown";
+}
+
+NullspaceMode defaultHoldNullspaceMode(NullspaceMode configured_mode) {
+  if (configured_mode == NullspaceMode::kPostureOnly ||
+      configured_mode == NullspaceMode::kSigmaOnly ||
+      configured_mode == NullspaceMode::kOff) {
+    return configured_mode;
+  }
+  return NullspaceMode::kPostureOnly;
+}
+
+void askStartupRunMode(Parameters& params) {
+  const bool default_sequence =
+      params.use_phase_sequence && params.use_contact_search && !params.orientation_test_only;
+  printf("\n=== Startup choice ===\n");
+  printf("Select run mode before robot connection:\n");
+  printf("  s = phase sequence (orient/search/post_contact)\n");
+  printf("  h = hold at the start pose\n");
+  printf("Choice [s/h, Enter = %s]: ", default_sequence ? "s" : "h");
+
+  std::string line;
+  if (!std::getline(std::cin, line)) {
+    line.clear();
+  }
+  const std::string choice = normalizedChoice(line);
+  bool use_sequence = default_sequence;
+  if (choice == "s" || choice == "sequence") {
+    use_sequence = true;
+  } else if (choice == "h" || choice == "hold") {
+    use_sequence = false;
+  } else if (!choice.empty()) {
+    printf("Unknown run-mode choice '%s'; using default %s.\n",
+           choice.c_str(), default_sequence ? "sequence" : "hold");
+  }
+
+  if (use_sequence) {
+    params.hold_mode = true;
+    params.use_phase_sequence = true;
+    params.use_contact_search = true;
+    printf("Selected: phase sequence. Nullspace mode from parameters: %s.\n",
+           nullspaceModeName(params.nullspace_mode));
+    return;
+  }
+
+  params.hold_mode = true;
+  params.use_phase_sequence = false;
+  params.use_contact_search = false;
+  params.orientation_test_only = false;
+
+  const NullspaceMode default_nullspace =
+      defaultHoldNullspaceMode(params.nullspace_mode);
+  printf("\nSelect hold nullspace mode:\n");
+  printf("  0 = no nullspace torque\n");
+  printf("  1 = tau_nullspace only (posture spring + damping)\n");
+  printf("  2 = tau_sigma only (singular-value direction)\n");
+  printf("Choice [0/1/2, Enter = %s]: ",
+         default_nullspace == NullspaceMode::kOff ? "0" :
+         default_nullspace == NullspaceMode::kSigmaOnly ? "2" : "1");
+
+  if (!std::getline(std::cin, line)) {
+    line.clear();
+  }
+  const std::string nullspace_choice = normalizedChoice(line);
+  params.nullspace_mode = default_nullspace;
+  if (nullspace_choice == "0" || nullspace_choice == "off" ||
+      nullspace_choice == "none") {
+    params.nullspace_mode = NullspaceMode::kOff;
+  } else if (nullspace_choice == "1" || nullspace_choice == "tau_nullspace" ||
+             nullspace_choice == "nullspace" || nullspace_choice == "posture") {
+    params.nullspace_mode = NullspaceMode::kPostureOnly;
+  } else if (nullspace_choice == "2" || nullspace_choice == "tau_sigma" ||
+             nullspace_choice == "sigma") {
+    params.nullspace_mode = NullspaceMode::kSigmaOnly;
+  }
+  params.use_nullspace_optimization =
+      (params.nullspace_mode != NullspaceMode::kOff);
+
+  printf("Selected: hold mode with %s.\n",
+         nullspaceModeName(params.nullspace_mode));
+}
+
 // Main function
 
 int main() {
@@ -39,9 +147,11 @@ int main() {
     // ================================================================
     //Read parameters from file, with defaults for missing values.
     Parameters params = readParameters("parameters.txt");
+    askStartupRunMode(params);
     // Print the parameters to the console for confirmation before starting the experiment.
     printParameters(params);
-    if ((params.post_contact_eval_method2_tcp_wrench ||
+    if (params.use_contact_search &&
+        (params.post_contact_eval_method2_tcp_wrench ||
          params.post_contact_apply_method2_tcp_wrench) &&
         !params.method2_tcp_wrench_saved) {
       fprintf(stderr,
@@ -55,7 +165,8 @@ int main() {
     Robot robot(params.robot_ip);
 
     printf("\nPress Enter to recover/configure and move to q_init.\n");
-    std::cin.ignore();
+    std::string enter_line;
+    std::getline(std::cin, enter_line);
 
     // If the robot is in an error/reflex state, try to recover automatically.
     try {
@@ -251,6 +362,8 @@ int main() {
     const Mat3 DR_post_contact = params.constraint_enabled
         ? makeSpatialGainMatrix(params.post_contact_DR_diag, R_alignment_target)
         : params.post_contact_DR_diag.asDiagonal();
+    const Mat3 Kp_hold = Mat3::Identity() * params.hold_Kp;
+    const Mat3 Dp_hold = Mat3::Identity() * params.hold_Dp;
     ControlPhase initial_phase = ControlPhase::kSurfaceImpedance;
     if (params.orientation_test_only) {
       initial_phase = ControlPhase::kOrientToSurface;
@@ -291,6 +404,8 @@ int main() {
     double post_damp_phase_t = -1.0;
     Mat3 Dp_post_cached = Dp_post_contact;
     Mat3 DR_post_cached = DR_post_contact;
+    bool hold_damp_computed = false;
+    Mat3 Dp_hold_cached = Dp_hold;
     double first_touch_candidate_time = 0.0;
     double first_touch_candidate_distance = 0.0;
     double first_touch_candidate_signal = 0.0;
@@ -817,6 +932,11 @@ int main() {
       DesiredMotion desired;
       double impedance_time = time;
       const bool orienting_to_surface = (phase == ControlPhase::kOrientToSurface);
+      const bool startup_hold_active =
+          phase == ControlPhase::kSurfaceImpedance &&
+          params.hold_mode &&
+          !params.use_phase_sequence &&
+          !params.use_contact_search;
       const Mat3& R_d_phase =
           params.orientation_test_only ? R_d_orientation_test : R_d_alignment_target;
       const Vec3 external_force = external_wrench.head<3>();
@@ -886,6 +1006,8 @@ int main() {
           post_contact_hold_active = false;
           post_contact_hold_push = 0.0;
           post_contact_hold_start_time = 0.0;
+          hold_damp_computed = false;
+          Dp_hold_cached = Dp_hold;
           first_touch_candidate_time = 0.0;
           first_touch_candidate_distance = 0.0;
           first_touch_candidate_signal = 0.0;
@@ -1329,10 +1451,10 @@ int main() {
         post_contact_push_debug = post_contact_push;
         desired.p_d = edge_target - R_contact_start * tool_contact_offset_ee;
         desired.pdot_d = edge_target_velocity;
-      } else {
-        if (contact_found) {
-          impedance_time = params.use_contact_search ? (time - contact_time) : time;
-        }
+            } else {
+              if (contact_found) {
+                impedance_time = params.use_contact_search ? (time - contact_time) : time;
+              }
         const Mat3& R_position_surface =
             (params.use_search_direction_surface_after_alignment &&
              phase == ControlPhase::kSurfaceImpedance &&
@@ -1361,11 +1483,13 @@ int main() {
           (contact_found && params.align_orientation_to_surface_after_contact);
       const Mat3& R_d_used = (phase == ControlPhase::kPostContactAlign)
           ? R_contact_start
-          : (params.orientation_test_only
-                 ? R_d_orientation_test
-                 : (phase == ControlPhase::kSurfaceImpedance && contact_found
-                        ? R_after_contact_align
-                        : (use_surface_orientation ? R_d_alignment_target : R_d)));
+                : (params.orientation_test_only
+                       ? R_d_orientation_test
+                       : (startup_hold_active
+                              ? R_d
+                              : (phase == ControlPhase::kSurfaceImpedance && contact_found
+                                     ? R_after_contact_align
+                                     : (use_surface_orientation ? R_d_alignment_target : R_d))));
       Vec3 e_R = applyRotationalAxisMask(params, orientationError(R_EE, R_d_used), R_alignment_target);
 
       if (phase == ControlPhase::kSurfaceImpedance && params.use_virtual_center_after_contact) {
@@ -1382,8 +1506,8 @@ int main() {
         e_p = e_p - e_R.cross(r_c);
       }
 
-      if (phase == ControlPhase::kSurfaceImpedance &&
-          params.print_impedance_debug &&
+            if (phase == ControlPhase::kSurfaceImpedance &&
+                params.print_impedance_debug &&
           params.debug_period > 0.0 &&
           time >= next_debug_time) {
         printImpedanceDebug(impedance_time,
@@ -1414,6 +1538,9 @@ int main() {
       if (!is_approach_phase) {
         approach_damp_computed = false;  // recompute next time the group is entered
       }
+            if (!startup_hold_active) {
+              hold_damp_computed = false;
+            }
       if (is_approach_phase && params.approach_auto_damping && !approach_damp_computed) {
         std::array<double, 49> mass_array = model.mass(state);
         Map<const Mat7x7> joint_mass(mass_array.data());
@@ -1431,6 +1558,30 @@ int main() {
               R_alignment_target);
           approach_damp_computed = true;
         }
+      }
+      if (startup_hold_active && params.hold_auto_damping &&
+          !hold_damp_computed) {
+        std::array<double, 49> mass_array = model.mass(state);
+        Map<const Mat7x7> joint_mass(mass_array.data());
+        const CartesianInertiaEstimate inertia_base =
+            computeCartesianInertiaEstimate(joint_mass, J, Mat3::Identity());
+        if (inertia_base.valid) {
+          Dp_hold_cached = criticalDampingFromStiffness(
+              inertia_base.translational,
+              Vec3::Constant(params.hold_Kp),
+              params.hold_auto_damping_factor,
+              params.suggested_gain_max).asDiagonal();
+          printf("hold damping: auto critical D=[%.1f, %.1f, %.1f] Ns/m (factor %.2f)\n",
+                 Dp_hold_cached(0, 0),
+                 Dp_hold_cached(1, 1),
+                 Dp_hold_cached(2, 2),
+                 params.hold_auto_damping_factor);
+        } else {
+          Dp_hold_cached = Dp_hold;
+          printf("hold damping: inertia estimate unavailable, using hold_Dp=%.1f Ns/m\n",
+                 params.hold_Dp);
+        }
+        hold_damp_computed = true;
       }
       if (phase == ControlPhase::kPostContactAlign && params.post_contact_auto_damping &&
           post_damp_phase_t != phase_start_time) {
@@ -1462,15 +1613,23 @@ int main() {
           params.post_contact_auto_damping ? Dp_post_cached : Dp_post_contact;
       const Mat3& DR_post_eff =
           params.post_contact_auto_damping ? DR_post_cached : DR_post_contact;
+      const Mat3& Dp_hold_eff =
+          params.hold_auto_damping ? Dp_hold_cached : Dp_hold;
 
       const Mat3& Kp_used =
           (phase == ControlPhase::kPostContactAlign)
               ? Kp_post_contact
-              : (is_approach_phase ? Kp_approach : (use_contact_surface_gains ? Kp_contact : Kp));
+              : (startup_hold_active
+                     ? Kp_hold
+                     : (is_approach_phase ? Kp_approach
+                                          : (use_contact_surface_gains ? Kp_contact : Kp)));
       const Mat3& Dp_used =
           (phase == ControlPhase::kPostContactAlign)
               ? Dp_post_eff
-              : (is_approach_phase ? Dp_approach_eff : (use_contact_surface_gains ? Dp_contact : Dp));
+              : (startup_hold_active
+                     ? Dp_hold_eff
+                     : (is_approach_phase ? Dp_approach_eff
+                                          : (use_contact_surface_gains ? Dp_contact : Dp)));
       const Mat3& KR_used =
           (phase == ControlPhase::kPostContactAlign)
               ? KR_post_contact

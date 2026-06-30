@@ -22,6 +22,19 @@ print_impedance_debug = 0
 # 1 = static holding/compliance test, 0 = smooth relative trajectory test.
 hold_mode = 1
 
+# Hold-mode Cartesian position stiffness [N/m]. When you choose hold at startup,
+# the controller holds the captured start TCP position with this K in base x/y/z.
+hold_Kp = 300.0
+
+# Hold-mode damping fallback [Ns/m]. With hold_auto_damping = 1 this is used only
+# if the online Cartesian inertia estimate is unavailable.
+hold_Dp = 50.0
+
+# 1 = compute D once at hold entry as:
+#   D = hold_auto_damping_factor * 2 * sqrt(M_task * hold_Kp)
+hold_auto_damping = 1
+hold_auto_damping_factor = 1.0
+
 # 1 = after q_init/gripper setup, enter a compliant manual-guidance phase.
 # Move the robot by hand, then press p + Enter; the current pose becomes the
 # start pose for search_first_contact / post_contact_align.
@@ -600,7 +613,13 @@ q_init_table_7 = 0.745537
 # Uses the 1D nullspace direction n of the 6x7 Jacobian: compares
 # J(q + alpha*n) with J(q - alpha*n) and prefers the direction with larger
 # sigma_min(J), while a restoring spring keeps q close to the start posture.
+# nullspace_mode:
+#   0/off     = no nullspace torque
+#   1/posture = tau_nullspace only: N * (k_start*(q_start-q) - d*dq)
+#   2/sigma   = tau_sigma only: singular-value direction
+#   3/both    = old combined behavior
 use_nullspace_optimization = 1
+nullspace_mode = 3
 nullspace_damping = 2.0
 nullspace_k_start = 2.0
 nullspace_k_sigma = 0.1

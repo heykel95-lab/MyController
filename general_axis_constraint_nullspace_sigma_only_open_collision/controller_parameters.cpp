@@ -56,6 +56,31 @@ double parseDoubleValue(const std::string& input) {
   return sign * numerator * M_PI / denominator;
 }
 
+NullspaceMode parseNullspaceMode(const std::string& input, NullspaceMode fallback) {
+  std::string value = removeSpaces(input);
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+
+  if (value == "0" || value == "off" || value == "none" || value == "no") {
+    return NullspaceMode::kOff;
+  }
+  if (value == "1" || value == "posture" || value == "tau_nullspace" ||
+      value == "tau-nullspace" || value == "nullspace") {
+    return NullspaceMode::kPostureOnly;
+  }
+  if (value == "2" || value == "sigma" || value == "tau_sigma" ||
+      value == "tau-sigma") {
+    return NullspaceMode::kSigmaOnly;
+  }
+  if (value == "3" || value == "both" || value == "combined" ||
+      value == "postureandsigma" || value == "posture+sigma") {
+    return NullspaceMode::kPostureAndSigma;
+  }
+
+  return fallback;
+}
+
 Parameters readParameters(const std::string& filename) {
   Parameters p;
   std::ifstream file(filename);
@@ -96,6 +121,9 @@ Parameters readParameters(const std::string& filename) {
   auto getBool = [&](const std::string& key, bool def) {
     return values.count(key) ? (std::stoi(values[key]) != 0) : def;
   };
+  auto getNullspaceMode = [&](const std::string& key, NullspaceMode def) {
+    return values.count(key) ? parseNullspaceMode(values[key], def) : def;
+  };
   auto getDoubleAlias = [&](const std::string& new_key, const std::string& old_key, double def) {
     return getDouble(new_key, getDouble(old_key, def));
   };
@@ -130,6 +158,11 @@ Parameters readParameters(const std::string& filename) {
 
   p.hold_mode = getBool("hold_mode", p.hold_mode);
   p.hold_mode = getBool("use_current_pose", p.hold_mode);
+  p.hold_Kp = getDouble("hold_Kp", p.hold_Kp);
+  p.hold_Dp = getDouble("hold_Dp", p.hold_Dp);
+  p.hold_auto_damping = getBool("hold_auto_damping", p.hold_auto_damping);
+  p.hold_auto_damping_factor =
+      getDouble("hold_auto_damping_factor", p.hold_auto_damping_factor);
   p.use_manual_guidance_start =
       getBool("use_manual_guidance_start", p.use_manual_guidance_start);
   p.manual_guidance_damping =
@@ -440,6 +473,11 @@ Parameters readParameters(const std::string& filename) {
                            p.constrain_rotation_about_alignment_tangent2));
 
   p.use_nullspace_optimization = getBool("use_nullspace_optimization", p.use_nullspace_optimization);
+  p.nullspace_mode = p.use_nullspace_optimization
+      ? NullspaceMode::kPostureAndSigma
+      : NullspaceMode::kOff;
+  p.nullspace_mode = getNullspaceMode("nullspace_mode", p.nullspace_mode);
+  p.use_nullspace_optimization = (p.nullspace_mode != NullspaceMode::kOff);
   p.nullspace_k_start = getDouble("nullspace_k_start", p.nullspace_k_start);
   p.nullspace_damping = getDouble("nullspace_damping", p.nullspace_damping);
   p.nullspace_k_sigma = getDouble("nullspace_k_sigma", p.nullspace_k_sigma);

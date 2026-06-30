@@ -196,13 +196,37 @@ void printJointStartEndTableDeg(const Vec7& q_start, const Vec7& q_final) {
   }
 }
 
+const char* nullspaceModeText(NullspaceMode mode) {
+  switch (mode) {
+    case NullspaceMode::kOff:
+      return "off";
+    case NullspaceMode::kPostureOnly:
+      return "tau_nullspace_only";
+    case NullspaceMode::kSigmaOnly:
+      return "tau_sigma_only";
+    case NullspaceMode::kPostureAndSigma:
+      return "tau_nullspace_plus_tau_sigma";
+  }
+  return "unknown";
+}
+
 void printParameters(const Parameters& params) {
   printf("\n=== Setup ===\n");
-  printf("phase_sequence: %s | orientation_phase: %s | contact_search: %s | orientation_test: %s\n",
+  printf("phase_sequence: %s | hold_mode: %s | orientation_phase: %s | contact_search: %s | orientation_test: %s\n",
          params.use_phase_sequence ? "on" : "off",
+         params.hold_mode ? "on" : "off",
          params.use_orientation_phase ? "on" : "off",
          params.use_contact_search ? "on" : "off",
          params.orientation_test_only ? "on" : "off");
+  printf("nullspace: %s\n", nullspaceModeText(params.nullspace_mode));
+  printf("hold: Kp=%.1f N/m | damping=%s",
+         params.hold_Kp,
+         params.hold_auto_damping ? "auto-critical" : "manual");
+  if (params.hold_auto_damping) {
+    printf(" (factor %.2f)\n", params.hold_auto_damping_factor);
+  } else {
+    printf(" (Dp=%.1f Ns/m)\n", params.hold_Dp);
+  }
   printf("manual_guidance_start: %s | manual_damping=%.2f\n",
          params.use_manual_guidance_start ? "on" : "off",
          params.manual_guidance_damping);
