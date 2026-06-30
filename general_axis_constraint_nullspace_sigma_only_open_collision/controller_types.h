@@ -43,12 +43,18 @@ struct Parameters {
   bool use_orientation_phase = true;
   double orient_phase_min_time = 0.5;
   double orient_phase_error_threshold = 0.03;
-  // Dedicated rotational gains used only during orient_to_surface, alignment-target
-  // frame (normal/tangent1/tangent2). Softer than the stiff surface KR/DR so
-  // reorienting is not an aggressive snap, but stiff enough that the steady-state
-  // error converges below orient_phase_error_threshold and the phase switches.
-  Vec3 orient_KR_diag = Vec3(8.0, 90.0, 90.0);
-  Vec3 orient_DR_diag = Vec3(4.0, 18.0, 18.0);
+  // Shared "approach" impedance for orient_to_surface AND search_first_contact,
+  // alignment-target frame [normal, tangent1, tangent2]. Position soft (gentle
+  // search contact; orient holds loosely); KR_tangent stiff enough for orient to
+  // converge below orient_phase_error_threshold.
+  Vec3 approach_Kp_diag = Vec3(150.0, 150.0, 150.0);
+  Vec3 approach_KR_diag = Vec3(8.0, 90.0, 90.0);
+  Vec3 approach_Dp_diag = Vec3(20.0, 20.0, 20.0);
+  Vec3 approach_DR_diag = Vec3(12.0, 12.0, 12.0);
+  // When set, the approach Dp/DR above are ignored and damping is computed online
+  // as D = factor*2*sqrt(M*K), with M the libfranka task-space inertia.
+  bool approach_auto_damping = false;
+  double approach_auto_damping_factor = 1.0;
   double post_contact_align_min_time = 0.3;
   double post_contact_align_duration = 15.0;
   double post_contact_best_axis_min_time = 0.60;
@@ -123,26 +129,23 @@ struct Parameters {
   double contact_force_threshold = 5.0;
   bool detect_contact_during_alignment = true;
   double alignment_contact_force_threshold = 5.0;
-  Vec3 contact_search_Kp_diag = Vec3(150.0, 150.0, 150.0);
-  Vec3 contact_search_Dp_diag = Vec3(25.0, 25.0, 25.0);
   Vec3 post_contact_Kp_diag = Vec3(40.0, 40.0, 5500.0);
   Vec3 post_contact_Dp_diag = Vec3(10.0, 10.0, 175.0);
   Vec3 post_contact_KR_diag = Vec3(8.0, 0.0, 0.0);
   Vec3 post_contact_DR_diag = Vec3(4.0, 0.01, 0.01);
+  // When set, the post_contact (align + grind) Dp/DR above are ignored and the
+  // damping is computed online as D = factor*2*sqrt(M*K), M from libfranka inertia.
+  bool post_contact_auto_damping = false;
+  double post_contact_auto_damping_factor = 1.0;
 
   // Surface-grinding (schleifen) hold. When post_contact_grind_mode = 1, the
   // post_contact_align hold sweeps the contact side-to-side along a surface
-  // tangent while pressing, using its own gains below (alignment-target frame):
-  // position normal-soft (constant press) / tangent-stiff (tracks the sweep);
-  // rotation normal-stiff (no yaw) / tangent-soft (stays flat).
+  // tangent while pressing, reusing the post_contact (align) gains -- only the
+  // sweep trajectory below and the decoupled law (Method 2 bypass) are special.
   bool post_contact_grind_mode = false;
   int grind_axis = 1;               // 1 = tangent1, 2 = tangent2
   double grind_amplitude_m = 0.03;  // sweep half-amplitude A [m]
   double grind_frequency_hz = 0.2;  // full back-and-forth cycle frequency f [Hz]
-  Vec3 grind_Kp_diag = Vec3(1500.0, 4000.0, 4000.0);  // normal soft, tangents stiff
-  Vec3 grind_Dp_diag = Vec3(80.0, 180.0, 180.0);
-  Vec3 grind_KR_diag = Vec3(30.0, 2.0, 2.0);          // normal stiff, tangents soft
-  Vec3 grind_DR_diag = Vec3(8.0, 2.0, 2.0);
 
   bool constrain_rotation_about_alignment_normal = true;
   bool constrain_rotation_about_alignment_tangent1 = true;

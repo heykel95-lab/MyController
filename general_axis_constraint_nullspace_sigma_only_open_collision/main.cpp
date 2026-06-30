@@ -226,45 +226,31 @@ int main() {
             : normalizedOrFallback(params.contact_search_direction, -R_alignment_target.col(0));
     const Mat3 R_contact_surface =
         makeSurfaceFrameFromNormalTangent(-contact_search_direction, params.alignment_target_tangent1);
-    const Mat3 Kp_search = params.contact_search_Kp_diag.asDiagonal();
-    const Mat3 Dp_search = params.contact_search_Dp_diag.asDiagonal();
+    // Shared "approach" gains for orient_to_surface AND search_first_contact,
+    // alignment-target frame [normal, tangent1, tangent2].
+    const Mat3 Kp_approach = params.constraint_enabled
+        ? makeSpatialGainMatrix(params.approach_Kp_diag, R_alignment_target)
+        : params.approach_Kp_diag.asDiagonal();
+    const Mat3 Dp_approach = params.constraint_enabled
+        ? makeSpatialGainMatrix(params.approach_Dp_diag, R_alignment_target)
+        : params.approach_Dp_diag.asDiagonal();
+    const Mat3 KR_approach = params.constraint_enabled
+        ? makeSpatialGainMatrix(params.approach_KR_diag, R_alignment_target)
+        : params.approach_KR_diag.asDiagonal();
+    const Mat3 DR_approach = params.constraint_enabled
+        ? makeSpatialGainMatrix(params.approach_DR_diag, R_alignment_target)
+        : params.approach_DR_diag.asDiagonal();
+    // post_contact_align gains, also used for the grind hold (align + grind share
+    // one set). Tangents (tipping directions) stay soft so contact moment can
+    // passively rotate the tool flat.
     const Mat3 Kp_post_contact = params.post_contact_Kp_diag.asDiagonal();
     const Mat3 Dp_post_contact = params.post_contact_Dp_diag.asDiagonal();
-    // Rotational compliance used only during post_contact_align, in the
-    // alignment-target frame (normal/tangent1/tangent2), same convention as the
-    // global KR/DR below. Normal (yaw about the push axis) stays at a
-    // constrained stiffness; tangent1/tangent2 (the tipping directions) are
-    // intentionally very soft so a real contact moment at the pressed edge
-    // can passively rotate the tool flat instead of being resisted by the
-    // spring.
     const Mat3 KR_post_contact = params.constraint_enabled
         ? makeSpatialGainMatrix(params.post_contact_KR_diag, R_alignment_target)
         : params.post_contact_KR_diag.asDiagonal();
     const Mat3 DR_post_contact = params.constraint_enabled
         ? makeSpatialGainMatrix(params.post_contact_DR_diag, R_alignment_target)
         : params.post_contact_DR_diag.asDiagonal();
-    // Dedicated rotational gains for orient_to_surface, alignment-target frame,
-    // so the pre-contact reorientation is gentle.
-    const Mat3 KR_orient = params.constraint_enabled
-        ? makeSpatialGainMatrix(params.orient_KR_diag, R_alignment_target)
-        : params.orient_KR_diag.asDiagonal();
-    const Mat3 DR_orient = params.constraint_enabled
-        ? makeSpatialGainMatrix(params.orient_DR_diag, R_alignment_target)
-        : params.orient_DR_diag.asDiagonal();
-    // Surface-grinding gains, alignment-target frame (normal/tangent1/tangent2):
-    // position normal-soft/tangent-stiff, rotation normal-stiff/tangent-soft.
-    const Mat3 Kp_grind = params.constraint_enabled
-        ? makeSpatialGainMatrix(params.grind_Kp_diag, R_alignment_target)
-        : params.grind_Kp_diag.asDiagonal();
-    const Mat3 Dp_grind = params.constraint_enabled
-        ? makeSpatialGainMatrix(params.grind_Dp_diag, R_alignment_target)
-        : params.grind_Dp_diag.asDiagonal();
-    const Mat3 KR_grind = params.constraint_enabled
-        ? makeSpatialGainMatrix(params.grind_KR_diag, R_alignment_target)
-        : params.grind_KR_diag.asDiagonal();
-    const Mat3 DR_grind = params.constraint_enabled
-        ? makeSpatialGainMatrix(params.grind_DR_diag, R_alignment_target)
-        : params.grind_DR_diag.asDiagonal();
     ControlPhase initial_phase = ControlPhase::kSurfaceImpedance;
     if (params.orientation_test_only) {
       initial_phase = ControlPhase::kOrientToSurface;
@@ -295,6 +281,16 @@ int main() {
     bool post_contact_hold_active = false;
     double post_contact_hold_push = 0.0;
     double post_contact_hold_start_time = 0.0;
+    // Auto-damping cache: computed once and held, not every cycle. Approach
+    // (orient + search) is computed ONCE for the whole group (they share gains);
+    // post_contact once at contact. Both reset/recompute when the group is
+    // re-entered (e.g. re-guidance restart).
+    bool approach_damp_computed = false;
+    Mat3 Dp_approach_cached = Dp_approach;
+    Mat3 DR_approach_cached = DR_approach;
+    double post_damp_phase_t = -1.0;
+    Mat3 Dp_post_cached = Dp_post_contact;
+    Mat3 DR_post_cached = DR_post_contact;
     double first_touch_candidate_time = 0.0;
     double first_touch_candidate_distance = 0.0;
     double first_touch_candidate_signal = 0.0;
@@ -1397,33 +1393,92 @@ int main() {
         next_debug_time = time + params.debug_period;
       }
 
-      // Defining the stiffness and damping matrices to be used in the impedance control law,
-      // based on the current mode (searching for contact or impedance control).
-      const bool use_soft_translation =
-          phase == ControlPhase::kSearchFirstContact;
+      // Defining the stiffness and damping matrices to be used in the impedance control law.
+      // Unified gain sets: orient + search share the "approach" set; align + grind
+      // share the post_contact set. surface_impedance uses the surface set.
+      const bool is_approach_phase =
+          orienting_to_surface || (phase == ControlPhase::kSearchFirstContact);
       const bool use_contact_surface_gains =
           params.use_search_direction_surface_after_alignment &&
           (phase == ControlPhase::kSurfaceImpedance) &&
           contact_found;
-      // Grinding hold uses its own surface-frame gains and the decoupled law.
+      // Grinding hold shares the post_contact (align) gains; only its sweep
+      // trajectory and the decoupled law (Method 2 bypass) are special.
       const bool grind_active =
           post_contact_hold_active && params.post_contact_grind_mode;
+
+      // Auto-damping: optionally replace the manual Dp/DR with critically-damped
+      // values D = factor * 2*sqrt(M*K) from the libfranka task-space inertia and
+      // the active stiffness. Computed ONCE per phase entry (keyed on
+      // phase_start_time) and cached, not every cycle.
+      if (!is_approach_phase) {
+        approach_damp_computed = false;  // recompute next time the group is entered
+      }
+      if (is_approach_phase && params.approach_auto_damping && !approach_damp_computed) {
+        std::array<double, 49> mass_array = model.mass(state);
+        Map<const Mat7x7> joint_mass(mass_array.data());
+        const double zeta = params.approach_auto_damping_factor;
+        const CartesianInertiaEstimate inertia =
+            computeCartesianInertiaEstimate(joint_mass, J, R_alignment_target);
+        if (inertia.valid) {
+          Dp_approach_cached = makeSpatialGainMatrix(
+              criticalDampingFromStiffness(inertia.translational, params.approach_Kp_diag,
+                                           zeta, params.suggested_gain_max),
+              R_alignment_target);
+          DR_approach_cached = makeSpatialGainMatrix(
+              criticalDampingFromStiffness(inertia.rotational, params.approach_KR_diag,
+                                           zeta, params.suggested_gain_max),
+              R_alignment_target);
+          approach_damp_computed = true;
+        }
+      }
+      if (phase == ControlPhase::kPostContactAlign && params.post_contact_auto_damping &&
+          post_damp_phase_t != phase_start_time) {
+        std::array<double, 49> mass_array = model.mass(state);
+        Map<const Mat7x7> joint_mass(mass_array.data());
+        const double zeta = params.post_contact_auto_damping_factor;
+        // Position uses base-frame inertia (post_contact Kp is base x/y/z),
+        // rotation uses the alignment-target-frame inertia (KR is in that frame).
+        const CartesianInertiaEstimate inertia_base =
+            computeCartesianInertiaEstimate(joint_mass, J, Mat3::Identity());
+        const CartesianInertiaEstimate inertia_surf =
+            computeCartesianInertiaEstimate(joint_mass, J, R_alignment_target);
+        if (inertia_base.valid && inertia_surf.valid) {
+          Dp_post_cached = criticalDampingFromStiffness(
+              inertia_base.translational, params.post_contact_Kp_diag, zeta,
+              params.suggested_gain_max).asDiagonal();
+          DR_post_cached = makeSpatialGainMatrix(
+              criticalDampingFromStiffness(inertia_surf.rotational, params.post_contact_KR_diag,
+                                           zeta, params.suggested_gain_max),
+              R_alignment_target);
+          post_damp_phase_t = phase_start_time;
+        }
+      }
+      const Mat3& Dp_approach_eff =
+          params.approach_auto_damping ? Dp_approach_cached : Dp_approach;
+      const Mat3& DR_approach_eff =
+          params.approach_auto_damping ? DR_approach_cached : DR_approach;
+      const Mat3& Dp_post_eff =
+          params.post_contact_auto_damping ? Dp_post_cached : Dp_post_contact;
+      const Mat3& DR_post_eff =
+          params.post_contact_auto_damping ? DR_post_cached : DR_post_contact;
+
       const Mat3& Kp_used =
           (phase == ControlPhase::kPostContactAlign)
-              ? (grind_active ? Kp_grind : Kp_post_contact)
-              : (use_soft_translation ? Kp_search : (use_contact_surface_gains ? Kp_contact : Kp));
+              ? Kp_post_contact
+              : (is_approach_phase ? Kp_approach : (use_contact_surface_gains ? Kp_contact : Kp));
       const Mat3& Dp_used =
           (phase == ControlPhase::kPostContactAlign)
-              ? (grind_active ? Dp_grind : Dp_post_contact)
-              : (use_soft_translation ? Dp_search : (use_contact_surface_gains ? Dp_contact : Dp));
+              ? Dp_post_eff
+              : (is_approach_phase ? Dp_approach_eff : (use_contact_surface_gains ? Dp_contact : Dp));
       const Mat3& KR_used =
           (phase == ControlPhase::kPostContactAlign)
-              ? (grind_active ? KR_grind : KR_post_contact)
-              : (orienting_to_surface ? KR_orient : KR);
+              ? KR_post_contact
+              : (is_approach_phase ? KR_approach : KR);
       const Mat3& DR_used =
           (phase == ControlPhase::kPostContactAlign)
-              ? (grind_active ? DR_grind : DR_post_contact)
-              : (orienting_to_surface ? DR_orient : DR);
+              ? DR_post_eff
+              : (is_approach_phase ? DR_approach_eff : DR);
       Vec6 wrench;
       Vec3 f;
       Vec3 m;
@@ -1447,15 +1502,15 @@ int main() {
           K_tcp_base.block<3, 3>(0, 0) = Kp_post_contact;
           K_tcp_base.block<3, 3>(3, 3) = KR_post_contact;
           D_tcp_base = Mat6x6::Zero();
-          D_tcp_base.block<3, 3>(0, 0) = Dp_post_contact;
-          D_tcp_base.block<3, 3>(3, 3) = DR_post_contact;
+          D_tcp_base.block<3, 3>(0, 0) = Dp_post_eff;
+          D_tcp_base.block<3, 3>(3, 3) = DR_post_eff;
         } else if (params.use_manual_method2_pole) {
           Mat6x6 K_pole = Mat6x6::Zero();
           K_pole.block<3, 3>(0, 0) = Kp_post_contact;
           K_pole.block<3, 3>(3, 3) = KR_post_contact;
           Mat6x6 D_pole = Mat6x6::Zero();
-          D_pole.block<3, 3>(0, 0) = Dp_post_contact;
-          D_pole.block<3, 3>(3, 3) = DR_post_contact;
+          D_pole.block<3, 3>(0, 0) = Dp_post_eff;
+          D_pole.block<3, 3>(3, 3) = DR_post_eff;
           // Frozen: reference the contact-time pose (constant through align), so
           // K_TCP/D_TCP are a single fixed spring. Live: reference the moving
           // edge, so they refresh each cycle.

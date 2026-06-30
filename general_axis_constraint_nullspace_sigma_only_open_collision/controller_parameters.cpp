@@ -228,12 +228,21 @@ Parameters readParameters(const std::string& filename) {
   p.orient_phase_min_time = getDouble("orient_phase_min_time", p.orient_phase_min_time);
   p.orient_phase_error_threshold =
       getDouble("orient_phase_error_threshold", p.orient_phase_error_threshold);
-  p.orient_KR_diag(0) = getDouble("orient_KR_normal", p.orient_KR_diag(0));
-  p.orient_KR_diag(1) = getDouble("orient_KR_tangent1", p.orient_KR_diag(1));
-  p.orient_KR_diag(2) = getDouble("orient_KR_tangent2", p.orient_KR_diag(2));
-  p.orient_DR_diag(0) = getDouble("orient_DR_normal", p.orient_DR_diag(0));
-  p.orient_DR_diag(1) = getDouble("orient_DR_tangent1", p.orient_DR_diag(1));
-  p.orient_DR_diag(2) = getDouble("orient_DR_tangent2", p.orient_DR_diag(2));
+  p.approach_Kp_diag(0) = getDouble("approach_Kp_normal", p.approach_Kp_diag(0));
+  p.approach_Kp_diag(1) = getDouble("approach_Kp_tangent1", p.approach_Kp_diag(1));
+  p.approach_Kp_diag(2) = getDouble("approach_Kp_tangent2", p.approach_Kp_diag(2));
+  p.approach_KR_diag(0) = getDouble("approach_KR_normal", p.approach_KR_diag(0));
+  p.approach_KR_diag(1) = getDouble("approach_KR_tangent1", p.approach_KR_diag(1));
+  p.approach_KR_diag(2) = getDouble("approach_KR_tangent2", p.approach_KR_diag(2));
+  p.approach_Dp_diag(0) = getDouble("approach_Dp_normal", p.approach_Dp_diag(0));
+  p.approach_Dp_diag(1) = getDouble("approach_Dp_tangent1", p.approach_Dp_diag(1));
+  p.approach_Dp_diag(2) = getDouble("approach_Dp_tangent2", p.approach_Dp_diag(2));
+  p.approach_DR_diag(0) = getDouble("approach_DR_normal", p.approach_DR_diag(0));
+  p.approach_DR_diag(1) = getDouble("approach_DR_tangent1", p.approach_DR_diag(1));
+  p.approach_DR_diag(2) = getDouble("approach_DR_tangent2", p.approach_DR_diag(2));
+  p.approach_auto_damping = getBool("approach_auto_damping", p.approach_auto_damping);
+  p.approach_auto_damping_factor =
+      getDouble("approach_auto_damping_factor", p.approach_auto_damping_factor);
   p.post_contact_align_min_time =
       getDouble("post_contact_align_min_time", p.post_contact_align_min_time);
   p.post_contact_align_duration =
@@ -390,12 +399,6 @@ Parameters readParameters(const std::string& filename) {
       getBool("detect_contact_during_alignment", p.detect_contact_during_alignment);
   p.alignment_contact_force_threshold =
       getDouble("alignment_contact_force_threshold", p.alignment_contact_force_threshold);
-  p.contact_search_Kp_diag(0) = getDouble("contact_search_Kp_x", p.contact_search_Kp_diag(0));
-  p.contact_search_Kp_diag(1) = getDouble("contact_search_Kp_y", p.contact_search_Kp_diag(1));
-  p.contact_search_Kp_diag(2) = getDouble("contact_search_Kp_z", p.contact_search_Kp_diag(2));
-  p.contact_search_Dp_diag(0) = getDouble("contact_search_Dp_x", p.contact_search_Dp_diag(0));
-  p.contact_search_Dp_diag(1) = getDouble("contact_search_Dp_y", p.contact_search_Dp_diag(1));
-  p.contact_search_Dp_diag(2) = getDouble("contact_search_Dp_z", p.contact_search_Dp_diag(2));
   p.post_contact_Kp_diag(0) = getDouble("post_contact_Kp_x", p.post_contact_Kp_diag(0));
   p.post_contact_Kp_diag(1) = getDouble("post_contact_Kp_y", p.post_contact_Kp_diag(1));
   p.post_contact_Kp_diag(2) = getDouble("post_contact_Kp_z", p.post_contact_Kp_diag(2));
@@ -408,23 +411,15 @@ Parameters readParameters(const std::string& filename) {
   p.post_contact_DR_diag(0) = getDouble("post_contact_DR_normal", p.post_contact_DR_diag(0));
   p.post_contact_DR_diag(1) = getDouble("post_contact_DR_tangent1", p.post_contact_DR_diag(1));
   p.post_contact_DR_diag(2) = getDouble("post_contact_DR_tangent2", p.post_contact_DR_diag(2));
+  p.post_contact_auto_damping =
+      getBool("post_contact_auto_damping", p.post_contact_auto_damping);
+  p.post_contact_auto_damping_factor =
+      getDouble("post_contact_auto_damping_factor", p.post_contact_auto_damping_factor);
 
   p.post_contact_grind_mode = getBool("post_contact_grind_mode", p.post_contact_grind_mode);
   p.grind_axis = static_cast<int>(getDouble("grind_axis", p.grind_axis));
   p.grind_amplitude_m = getDouble("grind_amplitude_m", p.grind_amplitude_m);
   p.grind_frequency_hz = getDouble("grind_frequency_hz", p.grind_frequency_hz);
-  p.grind_Kp_diag(0) = getDouble("grind_Kp_normal", p.grind_Kp_diag(0));
-  p.grind_Kp_diag(1) = getDouble("grind_Kp_tangent1", p.grind_Kp_diag(1));
-  p.grind_Kp_diag(2) = getDouble("grind_Kp_tangent2", p.grind_Kp_diag(2));
-  p.grind_Dp_diag(0) = getDouble("grind_Dp_normal", p.grind_Dp_diag(0));
-  p.grind_Dp_diag(1) = getDouble("grind_Dp_tangent1", p.grind_Dp_diag(1));
-  p.grind_Dp_diag(2) = getDouble("grind_Dp_tangent2", p.grind_Dp_diag(2));
-  p.grind_KR_diag(0) = getDouble("grind_KR_normal", p.grind_KR_diag(0));
-  p.grind_KR_diag(1) = getDouble("grind_KR_tangent1", p.grind_KR_diag(1));
-  p.grind_KR_diag(2) = getDouble("grind_KR_tangent2", p.grind_KR_diag(2));
-  p.grind_DR_diag(0) = getDouble("grind_DR_normal", p.grind_DR_diag(0));
-  p.grind_DR_diag(1) = getDouble("grind_DR_tangent1", p.grind_DR_diag(1));
-  p.grind_DR_diag(2) = getDouble("grind_DR_tangent2", p.grind_DR_diag(2));
 
   p.constrain_rotation_about_alignment_normal =
       getBool("constrain_rotation_about_alignment_normal",

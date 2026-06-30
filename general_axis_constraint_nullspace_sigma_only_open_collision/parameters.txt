@@ -132,15 +132,32 @@ orient_phase_min_time = 0.5
 # otherwise the phase never switches. 0.035 rad ~ 2 deg.
 orient_phase_error_threshold = 0.035
 
-# Dedicated rotational gains used ONLY during orient_to_surface, alignment-target
-# frame [normal, tangent1, tangent2]. Softer than the surface KR/DR so reorienting
-# is gentle, but stiff enough to converge below orient_phase_error_threshold.
-orient_KR_normal = 8.0
-orient_KR_tangent1 = 90.0
-orient_KR_tangent2 = 90.0
-orient_DR_normal = 4.0
-orient_DR_tangent1 = 18.0
-orient_DR_tangent2 = 18.0
+# ----- Shared "approach" impedance (orient_to_surface + search_first_contact) -----
+# One translation stiffness + one rotation stiffness for BOTH early phases,
+# alignment-target frame [normal, tangent1, tangent2]. Position soft (gentle
+# search contact; orient holds loosely); KR_tangent stiff enough that orient
+# converges below orient_phase_error_threshold.
+approach_Kp_normal = 150.0
+approach_Kp_tangent1 = 150.0
+approach_Kp_tangent2 = 150.0
+approach_KR_normal = 8.0
+approach_KR_tangent1 = 90.0
+approach_KR_tangent2 = 90.0
+# Auto-damping for orient + search. 1 = ignore approach_Dp/DR below and compute
+#   D = approach_auto_damping_factor * 2 * sqrt(M * K)
+# online from the libfranka task-space inertia M and the approach stiffness K.
+# factor: 1.0 = critical, <1 lighter, >1 heavier.
+# factor 1.9 ~ matches the old manual approach_DR_tangent (~12) on the rotation-
+# tangent axis (the orient-convergence DOF). Other axes will differ (the old D
+# was flat, not inertia-scaled). 1.0 = true critical.
+approach_auto_damping = 1
+approach_auto_damping_factor = 1.9
+approach_Dp_normal = 20.0
+approach_Dp_tangent1 = 20.0
+approach_Dp_tangent2 = 20.0
+approach_DR_normal = 12.0
+approach_DR_tangent1 = 12.0
+approach_DR_tangent2 = 12.0
 
 # 1 = test only the rotation part (hold TCP, rotate toward R_d_alignment_target, skip
 # contact search). Set back to 0 once orientation control is verified.
@@ -164,6 +181,7 @@ alignment_contact_force_threshold = 12.0
 use_contact_search = 1
 
 # 1 = search along -alignment_target_normal. 0 = use the manual direction below.
+# switch to search along the surface normal
 contact_search_use_alignment_target_normal = 0
 contact_search_direction_x = 0.0
 contact_search_direction_y = 0.0
@@ -184,15 +202,8 @@ contact_search_use_directional_force = 1
 contact_search_confirm_time = 0.0
 contact_force_threshold = 12.0
 
-# Soft Cartesian gains used only during contact search -- kept much lower
-# than post_contact gains since the conservative phase-switch gate can keep
-# searching after first physical touch.
-contact_search_Kp_x = 150.0
-contact_search_Kp_y = 150.0
-contact_search_Kp_z = 150.0
-contact_search_Dp_x = 25.0
-contact_search_Dp_y = 25.0
-contact_search_Dp_z = 25.0
+# Cartesian gains during contact search come from the shared "approach" block
+# in Phase 1 (approach_Kp/KR/Dp/DR) -- the same set orient uses.
 
 # 1 = once contact is found, target a tool orientation parallel to the
 # surface (for the horizontal table, tool z points down along -base z).
@@ -205,7 +216,7 @@ align_orientation_to_surface_after_contact = 1
 post_contact_align_min_time = 2.0
 
 # Maximum time spent in this phase after first contact [s].
-post_contact_align_duration = 6.0
+post_contact_align_duration = 5.0
 
 # Moment-change early-exit threshold [Nm] (e.g. the second tool edge
 # touching down after passively tipping flat). Only checked once
@@ -253,9 +264,9 @@ post_contact_hold_after_align = 1
 # Run C: firm normal (z) for press + SOFT tangents (x,y) so the tool is free to
 # rotate about the edge. Only change from Run B: stiff tangents were pinning the
 # TCP, so the press just shoved the arm up instead of tipping the tool.
-post_contact_Kp_x = 40.0
-post_contact_Kp_y = 40.0
-post_contact_Kp_z = 5500.0
+post_contact_Kp_x = 2000.0
+post_contact_Kp_y = 2000.0
+post_contact_Kp_z = 3000.0
 post_contact_Dp_x = 10.0
 post_contact_Dp_y = 10.0
 post_contact_Dp_z = 175.0
@@ -272,16 +283,24 @@ post_contact_DR_normal = 10.0
 post_contact_DR_tangent1 = 10.01
 post_contact_DR_tangent2 = 10.01
 
+# Auto-damping for align + grind. 1 = ignore post_contact_Dp/DR above and compute
+#   D = post_contact_auto_damping_factor * 2 * sqrt(M * K)
+# online from the libfranka inertia. Position uses base-frame inertia (Kp is base
+# x/y/z), rotation uses the alignment-target-frame inertia. factor: 1.0 = critical.
+# factor 0.6 ~ matches the old manual post_contact_Dp_z (~175) on the position-
+# normal axis (the press DOF). Other axes will differ. 1.0 = true critical.
+post_contact_auto_damping = 1
+post_contact_auto_damping_factor = 0.8
+
 # --------------------------------------------------------------
 # Surface-grinding (schleifen) hold
 # --------------------------------------------------------------
 # 1 = once post_contact_align ends and the hold begins (needs
 # post_contact_hold_after_align = 1), instead of a free-slide hold, press with
-# the frozen preload and sweep the contact side-to-side along a surface tangent,
-# using the grind gains below. Position: normal soft (constant press) + tangents
-# stiff (track the sweep). Rotation: normal stiff (no yaw) + tangents soft (stay
-# flat). Bypasses the Method 2 coupled wrench.
-post_contact_grind_mode = 0
+# the frozen preload and sweep the contact side-to-side along a surface tangent.
+# Grind reuses the post_contact (align) gains -- align and grind share one set;
+# only the sweep trajectory below and the decoupled law (Method 2 bypass) differ.
+post_contact_grind_mode = 1
 
 # Sweep path: a smoothStep ping-pong between -A and +A along the chosen surface
 # tangent (same trajectory primitive as the delta_p move). Each stroke eases
@@ -290,22 +309,6 @@ post_contact_grind_mode = 0
 grind_axis = 1
 grind_amplitude_m = 0.03
 grind_frequency_hz = 0.2
-
-# Grind gains, alignment-target frame [normal, tangent1, tangent2].
-# Position: normal soft (constant press ~ Kp_normal * push), tangents stiff.
-grind_Kp_normal = 1500.0
-grind_Kp_tangent1 = 4000.0
-grind_Kp_tangent2 = 4000.0
-grind_Dp_normal = 80.0
-grind_Dp_tangent1 = 180.0
-grind_Dp_tangent2 = 180.0
-# Rotation: normal stiff (hold yaw), tangents soft (stay flat on the surface).
-grind_KR_normal = 30.0
-grind_KR_tangent1 = 2.0
-grind_KR_tangent2 = 2.0
-grind_DR_normal = 8.0
-grind_DR_tangent1 = 2.0
-grind_DR_tangent2 = 2.0
 
 # Method 2 validation modes.
 # eval = 1 computes the saved 6x6 TCP wrench side-by-side but still commands
@@ -439,24 +442,24 @@ print_gain_suggestion_diagnostics = 1
 # Last best instantaneous axis, base frame, relative to the active tool edge.
 # Used only for best-axis comparison diagnostics. Auto-updated from the best
 # per-cycle post_contact_align axis sample.
-last_best_axis_from_edge_x = -0.1325
-last_best_axis_from_edge_y = -0.0407
-last_best_axis_from_edge_z = 0.2026
-last_best_axis_dir_x = 0.065
-last_best_axis_dir_y = 0.910
-last_best_axis_dir_z = 0.410
-last_best_axis_pitch = -0.0431
+last_best_axis_from_edge_x = 0.0678
+last_best_axis_from_edge_y = -0.1380
+last_best_axis_from_edge_z = 0.0252
+last_best_axis_dir_x = -0.581
+last_best_axis_dir_y = -0.115
+last_best_axis_dir_z = 0.806
+last_best_axis_pitch = -0.2602
 
 # Last finite Chasles axis, base frame, relative to the active tool edge.
 # Used by Method 2 diagnostics and to save the coupled K_TCP/D_TCP matrices.
 # Auto-updated from the full start/end post_contact_align edge motion.
-last_chasles_axis_from_edge_x = 0.0028
-last_chasles_axis_from_edge_y = -0.0410
-last_chasles_axis_from_edge_z = -0.0085
-last_chasles_axis_dir_x = -0.998
-last_chasles_axis_dir_y = -0.066
-last_chasles_axis_dir_z = -0.015
-last_chasles_axis_pitch = 0.0162
+last_chasles_axis_from_edge_x = 0.0013
+last_chasles_axis_from_edge_y = -0.0233
+last_chasles_axis_from_edge_z = -0.0089
+last_chasles_axis_dir_x = -0.980
+last_chasles_axis_dir_y = -0.118
+last_chasles_axis_dir_z = 0.162
+last_chasles_axis_pitch = -0.0025
 
 # Gain print bounds and legacy reference-motion settings.
 # suggested_gain_min/max clamp printed suggested values;
