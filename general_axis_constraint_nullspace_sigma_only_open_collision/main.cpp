@@ -567,6 +567,7 @@ int main() {
     bool gate_before_align_passed = false;
     Vec3 gate_before_align_hold_pd = Vec3::Zero();
     double gate_before_align_paused_time = 0.0;  // frozen search clock while gated
+    bool gate_a_hold_active = false;  // this cycle: lock the tool stiffly at Gate A
     bool gate_after_align_armed = false;
     bool gate_after_align_passed = false;
     Mat3 R_contact_start = R_d_alignment_target;
@@ -1120,6 +1121,7 @@ int main() {
       Map<const Mat4x4> T_EE(state.O_T_EE.data());
       Vec3 p_EE = T_EE.block<3, 1>(0, 3);
       Mat3 R_EE = T_EE.block<3, 3>(0, 0);
+      gate_a_hold_active = false;  // set true only while paused/blocking at Gate A
 
       // Phase sequence (use_phase_sequence = 1):
       //   1. orient_to_surface  - rotate in place until R_EE ~= R_d_alignment_target
@@ -1538,7 +1540,10 @@ int main() {
             pre_surface_reached && !gate_before_align_passed) {
           if (!gate_before_align_armed) {
             gate_before_align_armed = true;
-            gate_before_align_hold_pd = desired.p_d;  // freeze target here
+            // Freeze on the tool's ACTUAL position (not the leading commanded
+            // target), so the stiff hold is centered where the tool is -- no
+            // one-sided pull that let it be pushed down but not up.
+            gate_before_align_hold_pd = p_EE;
             gate_continue.store(false);
             printf("\n[GATE] Reached %.0f mm above the plane. Press Enter to start "
                    "the alignment press (e+Enter stops).\n",
@@ -1550,6 +1555,7 @@ int main() {
             printf("[GATE] Continuing to the alignment press.\n");
           } else {
             gate_a_blocking = true;
+            gate_a_hold_active = true;  // use the stiff gate hold gains this cycle
             desired.p_d = gate_before_align_hold_pd;
             desired.pdot_d.setZero();
             // Freeze the search clock so search_distance does not creep to the
@@ -1900,20 +1906,28 @@ int main() {
       const Mat3& Dp_hold_eff =
           params.hold_auto_damping ? Dp_hold_cached : Dp_hold;
 
+      // Stiff, isotropic position hold used only while paused at Gate A, so the
+      // tool locks in place instead of holding with the soft search gains.
+      const Mat3 Kp_gate = Mat3::Identity() * params.gate_hold_Kp;
+      const Mat3 Dp_gate = Mat3::Identity() * params.gate_hold_Dp;
       const Mat3& Kp_used =
-          (phase == ControlPhase::kPostContactAlign)
+          gate_a_hold_active
+              ? Kp_gate
+              : ((phase == ControlPhase::kPostContactAlign)
               ? Kp_post_contact
               : (startup_hold_active
                      ? Kp_hold
                      : (is_approach_phase ? Kp_approach
-                                          : (use_contact_surface_gains ? Kp_contact : Kp)));
+                                          : (use_contact_surface_gains ? Kp_contact : Kp))));
       const Mat3& Dp_used =
-          (phase == ControlPhase::kPostContactAlign)
+          gate_a_hold_active
+              ? Dp_gate
+              : ((phase == ControlPhase::kPostContactAlign)
               ? Dp_post_eff
               : (startup_hold_active
                      ? Dp_hold_eff
                      : (is_approach_phase ? Dp_approach_eff
-                                          : (use_contact_surface_gains ? Dp_contact : Dp)));
+                                          : (use_contact_surface_gains ? Dp_contact : Dp))));
       const Mat3& KR_used =
           (phase == ControlPhase::kPostContactAlign)
               ? KR_post_contact

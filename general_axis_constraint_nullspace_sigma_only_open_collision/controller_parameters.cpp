@@ -331,6 +331,8 @@ Parameters readParameters(const std::string& filename) {
               p.post_contact_hold_after_align);
   p.pause_before_align = getBool("pause_before_align", p.pause_before_align);
   p.pause_after_align = getBool("pause_after_align", p.pause_after_align);
+  p.gate_hold_Kp = getDouble("gate_hold_Kp", p.gate_hold_Kp);
+  p.gate_hold_Dp = getDouble("gate_hold_Dp", p.gate_hold_Dp);
   p.post_contact_eval_method2_tcp_wrench =
       getBoolAlias("post_contact_eval_method2_tcp_wrench",
                    "post_contact_use_method2_tcp_wrench",

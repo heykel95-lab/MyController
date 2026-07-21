@@ -108,6 +108,10 @@ struct Parameters {
   //     finishes, before the grind/hold begins.
   bool pause_before_align = false;
   bool pause_after_align = false;
+  // Stiffness/damping used to lock the tool in place while paused at Gate A
+  // (before the alignment press). Stiff so the hold resists being pushed by hand.
+  double gate_hold_Kp = 5000.0;
+  double gate_hold_Dp = 200.0;
   bool post_contact_eval_method2_tcp_wrench = false;
   bool post_contact_apply_method2_tcp_wrench = false;
   // When applying the Method 2 TCP wrench: 1 = use the block-diagonal
