@@ -26,6 +26,15 @@ struct Parameters {
   bool require_gripper_open = true;
   double gripper_open_width = 0.08;
   double gripper_open_speed = 0.05;
+  // 1 = instead of opening, close/grasp onto the tool held in the hand before
+  // the run: drive the fingers to gripper_grasp_width and clamp with
+  // gripper_grasp_force. 0 = legacy open-to-gripper_open_width behavior.
+  bool gripper_grasp_on_tool = false;
+  double gripper_grasp_width = 0.02;
+  double gripper_grasp_speed = 0.05;
+  double gripper_grasp_force = 40.0;
+  double gripper_grasp_epsilon_inner = 0.005;
+  double gripper_grasp_epsilon_outer = 0.010;
 
   bool hold_mode = true;
   double hold_Kp = 300.0;
@@ -151,7 +160,6 @@ struct Parameters {
   bool detect_contact_during_alignment = true;
   double alignment_contact_force_threshold = 5.0;
   Vec3 post_contact_Kp_diag = Vec3(40.0, 40.0, 5500.0);
-  double post_contact_pre_surface_Kp_z = 50.0;
   Vec3 post_contact_Dp_diag = Vec3(10.0, 10.0, 175.0);
   Vec3 post_contact_KR_diag = Vec3(0.0, 0.0, 8.0);     // [tangent1, tangent2, normal]
   Vec3 post_contact_DR_diag = Vec3(0.01, 0.01, 4.0);   // [tangent1, tangent2, normal]

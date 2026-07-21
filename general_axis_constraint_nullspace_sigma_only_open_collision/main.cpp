@@ -80,25 +80,46 @@ NullspaceMode defaultHoldNullspaceMode(NullspaceMode configured_mode) {
 void askStartupRunMode(Parameters& params) {
   const bool default_sequence =
       params.use_phase_sequence && params.use_contact_search && !params.orientation_test_only;
-  printf("\n=== Startup choice ===\n");
-  printf("Select run mode before robot connection:\n");
-  printf("  s = phase sequence (orient/search/post_contact)\n");
-  printf("  h = hold at the start pose\n");
-  printf("Choice [s/h, Enter = %s]: ", default_sequence ? "s" : "h");
-
   std::string line;
-  if (!std::getline(std::cin, line)) {
-    line.clear();
-  }
-  const std::string choice = normalizedChoice(line);
   bool use_sequence = default_sequence;
-  if (choice == "s" || choice == "sequence") {
-    use_sequence = true;
-  } else if (choice == "h" || choice == "hold") {
-    use_sequence = false;
-  } else if (!choice.empty()) {
-    printf("Unknown run-mode choice '%s'; using default %s.\n",
-           choice.c_str(), default_sequence ? "sequence" : "hold");
+  // Loop so the "o" (open gripper) action can run and then return to this same
+  // menu without leaving it: open the hand to release/load the tool, then choose
+  // the run mode.
+  while (true) {
+    printf("\n=== Startup choice ===\n");
+    printf("Select run mode before robot connection:\n");
+    printf("  s = phase sequence (orient/search/post_contact)\n");
+    printf("  h = hold at the start pose\n");
+    printf("  o = open the Franka hand to %.0f mm now (release/load tool), then choose again\n",
+           1000.0 * params.gripper_open_width);
+    printf("Choice [s/h/o, Enter = %s]: ", default_sequence ? "s" : "h");
+
+    if (!std::getline(std::cin, line)) {
+      line.clear();
+    }
+    const std::string choice = normalizedChoice(line);
+    if (choice == "o" || choice == "open") {
+      try {
+        Gripper gripper(params.robot_ip);
+        printf("Opening gripper to %.1f mm...\n", 1000.0 * params.gripper_open_width);
+        const bool opened =
+            gripper.move(params.gripper_open_width, params.gripper_open_speed);
+        printf(opened ? "Gripper opened.\n"
+                      : "Gripper open command returned false.\n");
+      } catch (const franka::Exception& e) {
+        fprintf(stderr, "Gripper open failed: %s\n", e.what());
+      }
+      continue;  // back to the menu
+    }
+    if (choice == "s" || choice == "sequence") {
+      use_sequence = true;
+    } else if (choice == "h" || choice == "hold") {
+      use_sequence = false;
+    } else if (!choice.empty()) {
+      printf("Unknown run-mode choice '%s'; using default %s.\n",
+             choice.c_str(), default_sequence ? "sequence" : "hold");
+    }
+    break;
   }
 
   if (use_sequence) {
@@ -173,9 +194,30 @@ void askStartupRunMode(Parameters& params) {
          nullspaceModeName(params.nullspace_mode));
 }
 
+// Per-joint commanded-torque limits [Nm] the tau_J_range_violation reflex
+// enforces (Panda/FR3): larger for the proximal joints, 12 Nm at the wrist.
+constexpr double kTauJointLimit[7] = {87.0, 87.0, 87.0, 87.0, 12.0, 12.0, 12.0};
+
+void printTauPeakSummary(const std::array<double, 7>& tau_peak_abs,
+                         const std::array<double, 7>& tau_jump_peak) {
+  printf("\n=== Joint-torque peaks (tau_J_range_violation watch) ===\n");
+  printf("tau_cmd is the commanded joint torque [Nm], NOT the Cartesian moment M.\n");
+  for (int i = 0; i < 7; ++i) {
+    printf("  J%d: peak|tau|=%6.2f / %4.0f Nm (%3.0f%%) | max per-cycle jump=%5.2f Nm\n",
+           i + 1, tau_peak_abs[i], kTauJointLimit[i],
+           100.0 * tau_peak_abs[i] / kTauJointLimit[i], tau_jump_peak[i]);
+  }
+}
+
 // Main function
 
 int main() {
+
+  // Joint-torque diagnostics for the tau_J_range_violation reflex. Declared
+  // outside the try so the peaks survive and can be printed if the control loop
+  // throws a reflex mid-run.
+  std::array<double, 7> tau_peak_abs = {0, 0, 0, 0, 0, 0, 0};
+  std::array<double, 7> tau_jump_peak = {0, 0, 0, 0, 0, 0, 0};
 
   try {
     // ================================================================
@@ -233,22 +275,56 @@ int main() {
 
     if (params.open_gripper_before_run) {
       try {
-        printf("Opening gripper after q_init to %.1f mm...\n",
-               1000.0 * params.gripper_open_width);
         Gripper gripper(params.robot_ip);
-        const bool gripper_opened =
-            gripper.move(params.gripper_open_width, params.gripper_open_speed);
-        if (!gripper_opened) {
-          fprintf(stderr, "Gripper open command returned false.\n");
-          if (params.require_gripper_open) {
-            fprintf(stderr, "Stopping because require_gripper_open = 1.\n");
-            return -1;
+        bool gripper_ok = false;
+        if (params.gripper_grasp_on_tool) {
+          // If the fingers are already closed on the tool from a previous run,
+          // keep the grasp instead of re-issuing it. Re-grasping when there is
+          // no gap left to close into reports failure (and re-homing would open
+          // the hand and drop the tool), so we skip when the current width is
+          // already within the grasp tolerance band.
+          const franka::GripperState gs = gripper.readOnce();
+          const bool already_holding =
+              gs.width >= params.gripper_grasp_width - params.gripper_grasp_epsilon_inner &&
+              gs.width <= params.gripper_grasp_width + params.gripper_grasp_epsilon_outer;
+          if (already_holding) {
+            printf("Gripper already holding the tool (width %.1f mm); keeping grasp.\n",
+                   1000.0 * gs.width);
+            gripper_ok = true;
+          } else {
+            // Close the fingers onto the tool: drive to gripper_grasp_width and
+            // clamp with gripper_grasp_force. epsilon_inner/outer set how far the
+            // actual width may fall short of / exceed the target and still count
+            // as a successful grasp.
+            printf("Grasping tool after q_init: width %.1f mm, force %.1f N...\n",
+                   1000.0 * params.gripper_grasp_width, params.gripper_grasp_force);
+            gripper_ok = gripper.grasp(
+                params.gripper_grasp_width, params.gripper_grasp_speed,
+                params.gripper_grasp_force, params.gripper_grasp_epsilon_inner,
+                params.gripper_grasp_epsilon_outer);
+            if (!gripper_ok) {
+              fprintf(stderr, "Gripper grasp command returned false (tool not held within tolerance).\n");
+            } else {
+              printf("Gripper closed and holding the tool.\n");
+            }
           }
         } else {
-          printf("Gripper commanded open and holding width.\n");
+          printf("Opening gripper after q_init to %.1f mm...\n",
+                 1000.0 * params.gripper_open_width);
+          gripper_ok =
+              gripper.move(params.gripper_open_width, params.gripper_open_speed);
+          if (!gripper_ok) {
+            fprintf(stderr, "Gripper open command returned false.\n");
+          } else {
+            printf("Gripper commanded open and holding width.\n");
+          }
+        }
+        if (!gripper_ok && params.require_gripper_open) {
+          fprintf(stderr, "Stopping because require_gripper_open = 1.\n");
+          return -1;
         }
       } catch (const franka::Exception& e) {
-        fprintf(stderr, "Gripper open failed: %s\n", e.what());
+        fprintf(stderr, "Gripper action failed: %s\n", e.what());
         if (params.require_gripper_open) {
           fprintf(stderr, "Stopping because require_gripper_open = 1.\n");
           return -1;
@@ -394,10 +470,9 @@ int main() {
     // post_contact_align gains, also used for the grind hold (align + grind share
     // one set). Tangents (tipping directions) stay soft so contact moment can
     // passively rotate the tool flat.
-    Vec3 post_contact_Kp_diag_eff = params.post_contact_Kp_diag;
-    if (params.contact_search_mode == ContactSearchMode::kPreSurface) {
-      post_contact_Kp_diag_eff(2) = params.post_contact_pre_surface_Kp_z;
-    }
+    // One post_contact normal stiffness for BOTH search methods (force and
+    // pre_surface): post_contact_Kp_z. No separate pre-surface override.
+    const Vec3 post_contact_Kp_diag_eff = params.post_contact_Kp_diag;
     const Mat3 Kp_post_contact = post_contact_Kp_diag_eff.asDiagonal();
     const Mat3 Dp_post_contact = params.post_contact_Dp_diag.asDiagonal();
     const Mat3 KR_post_contact = params.constraint_enabled
@@ -1884,6 +1959,48 @@ int main() {
 
       Vec7 tau_cmd = tau_task + tau_nullspace + coriolis;
 
+      // --- tau_cmd joint-torque watch (tau_J_range_violation diagnostics) ---
+      // tau_cmd is the 7 commanded joint torques [Nm]; the reflex trips when one
+      // exceeds kTauJointLimit or jumps too fast between cycles. This is NOT the
+      // Cartesian moment M shown in the align/grind lines. Track the running
+      // peaks (printed on exit, even on a reflex) and a live per-cycle line.
+      {
+        static Vec7 tau_cmd_prev = Vec7::Zero();
+        static bool tau_prev_valid = false;
+        static double next_tau_debug_time = 0.0;
+        int worst_j = 0;
+        double worst_frac = 0.0;
+        int jump_j = 0;
+        double this_cycle_jump = 0.0;
+        for (int i = 0; i < 7; ++i) {
+          const double a = std::abs(tau_cmd[i]);
+          if (a > tau_peak_abs[i]) tau_peak_abs[i] = a;
+          const double frac = a / kTauJointLimit[i];
+          if (frac > worst_frac) {
+            worst_frac = frac;
+            worst_j = i;
+          }
+          if (tau_prev_valid) {
+            const double d = std::abs(tau_cmd[i] - tau_cmd_prev[i]);
+            if (d > tau_jump_peak[i]) tau_jump_peak[i] = d;
+            if (d > this_cycle_jump) {
+              this_cycle_jump = d;
+              jump_j = i;
+            }
+          }
+        }
+        tau_cmd_prev = tau_cmd;
+        tau_prev_valid = true;
+        if (params.debug_period > 0.0 && time >= next_tau_debug_time) {
+          printf("tau_cmd:    t=%5.1f s | [%+5.1f %+5.1f %+5.1f %+5.1f %+5.1f %+5.1f %+5.1f] Nm"
+                 " | max J%d=%2.0f%% | jump J%d=%.2f\n",
+                 time, tau_cmd[0], tau_cmd[1], tau_cmd[2], tau_cmd[3],
+                 tau_cmd[4], tau_cmd[5], tau_cmd[6],
+                 worst_j + 1, 100.0 * worst_frac, jump_j + 1, this_cycle_jump);
+          next_tau_debug_time = time + params.debug_period;
+        }
+      }
+
       ++control_cycle_count;
       if ((control_cycle_count % static_cast<std::size_t>(log_every_n_cycles)) == 0) {
         if (max_log_rows > 0) {
@@ -2066,9 +2183,12 @@ int main() {
         final_instant_pole_valid,
         params.csv_file_name);
 
+    printTauPeakSummary(tau_peak_abs, tau_jump_peak);
+
   } catch (const franka::Exception& e) {
     fprintf(stderr, "libfranka exception: %s\n", e.what());
     fprintf(stderr, "If the robot is still in an error/reflex state, recover it manually in Franka Desk.\n");
+    printTauPeakSummary(tau_peak_abs, tau_jump_peak);
     return -1;
   } catch (const std::exception& e) {
     fprintf(stderr, "Exception: %s\n", e.what());
