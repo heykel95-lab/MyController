@@ -233,22 +233,56 @@ int main() {
 
     if (params.open_gripper_before_run) {
       try {
-        printf("Opening gripper after q_init to %.1f mm...\n",
-               1000.0 * params.gripper_open_width);
         Gripper gripper(params.robot_ip);
-        const bool gripper_opened =
-            gripper.move(params.gripper_open_width, params.gripper_open_speed);
-        if (!gripper_opened) {
-          fprintf(stderr, "Gripper open command returned false.\n");
-          if (params.require_gripper_open) {
-            fprintf(stderr, "Stopping because require_gripper_open = 1.\n");
-            return -1;
+        bool gripper_ok = false;
+        if (params.gripper_grasp_on_tool) {
+          // If the fingers are already closed on the tool from a previous run,
+          // keep the grasp instead of re-issuing it. Re-grasping when there is
+          // no gap left to close into reports failure (and re-homing would open
+          // the hand and drop the tool), so we skip when the current width is
+          // already within the grasp tolerance band.
+          const franka::GripperState gs = gripper.readOnce();
+          const bool already_holding =
+              gs.width >= params.gripper_grasp_width - params.gripper_grasp_epsilon_inner &&
+              gs.width <= params.gripper_grasp_width + params.gripper_grasp_epsilon_outer;
+          if (already_holding) {
+            printf("Gripper already holding the tool (width %.1f mm); keeping grasp.\n",
+                   1000.0 * gs.width);
+            gripper_ok = true;
+          } else {
+            // Close the fingers onto the tool: drive to gripper_grasp_width and
+            // clamp with gripper_grasp_force. epsilon_inner/outer set how far the
+            // actual width may fall short of / exceed the target and still count
+            // as a successful grasp.
+            printf("Grasping tool after q_init: width %.1f mm, force %.1f N...\n",
+                   1000.0 * params.gripper_grasp_width, params.gripper_grasp_force);
+            gripper_ok = gripper.grasp(
+                params.gripper_grasp_width, params.gripper_grasp_speed,
+                params.gripper_grasp_force, params.gripper_grasp_epsilon_inner,
+                params.gripper_grasp_epsilon_outer);
+            if (!gripper_ok) {
+              fprintf(stderr, "Gripper grasp command returned false (tool not held within tolerance).\n");
+            } else {
+              printf("Gripper closed and holding the tool.\n");
+            }
           }
         } else {
-          printf("Gripper commanded open and holding width.\n");
+          printf("Opening gripper after q_init to %.1f mm...\n",
+                 1000.0 * params.gripper_open_width);
+          gripper_ok =
+              gripper.move(params.gripper_open_width, params.gripper_open_speed);
+          if (!gripper_ok) {
+            fprintf(stderr, "Gripper open command returned false.\n");
+          } else {
+            printf("Gripper commanded open and holding width.\n");
+          }
+        }
+        if (!gripper_ok && params.require_gripper_open) {
+          fprintf(stderr, "Stopping because require_gripper_open = 1.\n");
+          return -1;
         }
       } catch (const franka::Exception& e) {
-        fprintf(stderr, "Gripper open failed: %s\n", e.what());
+        fprintf(stderr, "Gripper action failed: %s\n", e.what());
         if (params.require_gripper_open) {
           fprintf(stderr, "Stopping because require_gripper_open = 1.\n");
           return -1;

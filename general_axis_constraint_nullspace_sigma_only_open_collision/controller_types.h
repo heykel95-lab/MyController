@@ -26,6 +26,15 @@ struct Parameters {
   bool require_gripper_open = true;
   double gripper_open_width = 0.08;
   double gripper_open_speed = 0.05;
+  // 1 = instead of opening, close/grasp onto the tool held in the hand before
+  // the run: drive the fingers to gripper_grasp_width and clamp with
+  // gripper_grasp_force. 0 = legacy open-to-gripper_open_width behavior.
+  bool gripper_grasp_on_tool = false;
+  double gripper_grasp_width = 0.02;
+  double gripper_grasp_speed = 0.05;
+  double gripper_grasp_force = 40.0;
+  double gripper_grasp_epsilon_inner = 0.005;
+  double gripper_grasp_epsilon_outer = 0.010;
 
   bool hold_mode = true;
   double hold_Kp = 300.0;

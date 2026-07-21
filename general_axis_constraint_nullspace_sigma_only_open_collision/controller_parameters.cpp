@@ -176,6 +176,14 @@ Parameters readParameters(const std::string& filename) {
   p.require_gripper_open = getBool("require_gripper_open", p.require_gripper_open);
   p.gripper_open_width = getDouble("gripper_open_width", p.gripper_open_width);
   p.gripper_open_speed = getDouble("gripper_open_speed", p.gripper_open_speed);
+  p.gripper_grasp_on_tool = getBool("gripper_grasp_on_tool", p.gripper_grasp_on_tool);
+  p.gripper_grasp_width = getDouble("gripper_grasp_width", p.gripper_grasp_width);
+  p.gripper_grasp_speed = getDouble("gripper_grasp_speed", p.gripper_grasp_speed);
+  p.gripper_grasp_force = getDouble("gripper_grasp_force", p.gripper_grasp_force);
+  p.gripper_grasp_epsilon_inner =
+      getDouble("gripper_grasp_epsilon_inner", p.gripper_grasp_epsilon_inner);
+  p.gripper_grasp_epsilon_outer =
+      getDouble("gripper_grasp_epsilon_outer", p.gripper_grasp_epsilon_outer);
 
   p.hold_mode = getBool("hold_mode", p.hold_mode);
   p.hold_mode = getBool("use_current_pose", p.hold_mode);

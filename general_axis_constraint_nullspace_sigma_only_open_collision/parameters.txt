@@ -41,10 +41,28 @@ hold_auto_damping_factor = 1.0
 use_manual_guidance_start = 0
 manual_guidance_damping = 0.5
 
-# Open the Franka hand after q_init and before contact search, as late as
-# possible before contact.
+# Perform a Franka hand action after q_init and before contact search, as late
+# as possible before contact. require_gripper_open = 1 stops the run if that
+# action fails.
 open_gripper_before_run = 1
 require_gripper_open = 1
+
+# Which action to perform:
+#   gripper_grasp_on_tool = 0 -> OPEN the hand to gripper_open_width (releases).
+#   gripper_grasp_on_tool = 1 -> CLOSE/grasp onto the tool you are holding:
+#       drive the fingers to gripper_grasp_width and clamp with
+#       gripper_grasp_force. Set gripper_grasp_width to your tool's thickness at
+#       the grip point (measure it); the grasp succeeds if the final width is
+#       within [width - epsilon_inner, width + epsilon_outer]. On a re-run it
+#       detects the tool is already held and keeps the grasp (no drop).
+gripper_grasp_on_tool = 1
+gripper_grasp_width = 0.010
+gripper_grasp_speed = 0.050
+gripper_grasp_force = 40.0
+gripper_grasp_epsilon_inner = 0.005
+gripper_grasp_epsilon_outer = 0.010
+
+# Open action (used only when gripper_grasp_on_tool = 0).
 gripper_open_width = 0.080
 gripper_open_speed = 0.050
 
@@ -266,7 +284,7 @@ post_contact_best_axis_min_omega = 0.12
 # grind sweep. Raising Kp_z or max_push lifts both force and tau_J toward reflex.
 post_contact_normal_push = 0.250
 post_contact_push_speed = 0.050
-post_contact_max_push = 0.280
+post_contact_max_push = 0.250
 
 # Disable the surface-impedance phase. 1 = when post_contact_align ends (moment
 # threshold or post_contact_align_duration), freeze the preload at its current
@@ -465,24 +483,24 @@ print_method3_diagnostics = 0
 # Last best instantaneous axis, base frame, relative to the active tool edge.
 # Used only for best-axis comparison diagnostics. Auto-updated from the best
 # per-cycle post_contact_align axis sample.
-last_best_axis_from_edge_x = -0.8951
-last_best_axis_from_edge_y = -0.0802
-last_best_axis_from_edge_z = 0.2962
-last_best_axis_dir_x = -0.100
-last_best_axis_dir_y = 0.990
-last_best_axis_dir_z = 0.100
-last_best_axis_pitch = -0.0120
+last_best_axis_from_edge_x = -0.0393
+last_best_axis_from_edge_y = 0.0248
+last_best_axis_from_edge_z = 0.2028
+last_best_axis_dir_x = -0.827
+last_best_axis_dir_y = -0.524
+last_best_axis_dir_z = -0.204
+last_best_axis_pitch = 0.0724
 
 # Last finite Chasles axis, base frame, relative to the active tool edge.
 # Used by Method 2 diagnostics and to save the coupled K_TCP/D_TCP matrices.
 # Auto-updated from the full start/end post_contact_align edge motion.
-last_chasles_axis_from_edge_x = -0.0194
-last_chasles_axis_from_edge_y = -0.1904
-last_chasles_axis_from_edge_z = -0.0183
-last_chasles_axis_dir_x = -0.994
-last_chasles_axis_dir_y = 0.104
-last_chasles_axis_dir_z = -0.021
-last_chasles_axis_pitch = 0.0161
+last_chasles_axis_from_edge_x = -0.0028
+last_chasles_axis_from_edge_y = 0.0132
+last_chasles_axis_from_edge_z = -0.0287
+last_chasles_axis_dir_x = -0.996
+last_chasles_axis_dir_y = -0.061
+last_chasles_axis_dir_z = 0.070
+last_chasles_axis_pitch = 0.0173
 
 # Gain print bounds and legacy reference-motion settings.
 # suggested_gain_min/max clamp printed suggested values;
