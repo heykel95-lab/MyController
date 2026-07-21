@@ -329,6 +329,8 @@ Parameters readParameters(const std::string& filename) {
   p.post_contact_hold_after_align =
       getBool("post_contact_hold_after_align",
               p.post_contact_hold_after_align);
+  p.pause_before_align = getBool("pause_before_align", p.pause_before_align);
+  p.pause_after_align = getBool("pause_after_align", p.pause_after_align);
   p.post_contact_eval_method2_tcp_wrench =
       getBoolAlias("post_contact_eval_method2_tcp_wrench",
                    "post_contact_use_method2_tcp_wrench",
@@ -474,8 +476,6 @@ Parameters readParameters(const std::string& filename) {
   p.post_contact_Kp_diag(0) = getDouble("post_contact_Kp_x", p.post_contact_Kp_diag(0));
   p.post_contact_Kp_diag(1) = getDouble("post_contact_Kp_y", p.post_contact_Kp_diag(1));
   p.post_contact_Kp_diag(2) = getDouble("post_contact_Kp_z", p.post_contact_Kp_diag(2));
-  p.post_contact_pre_surface_Kp_z =
-      getDouble("post_contact_pre_surface_Kp_z", p.post_contact_pre_surface_Kp_z);
   p.post_contact_Dp_diag(0) = getDouble("post_contact_Dp_x", p.post_contact_Dp_diag(0));
   p.post_contact_Dp_diag(1) = getDouble("post_contact_Dp_y", p.post_contact_Dp_diag(1));
   p.post_contact_Dp_diag(2) = getDouble("post_contact_Dp_z", p.post_contact_Dp_diag(2));

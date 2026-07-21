@@ -80,25 +80,97 @@ NullspaceMode defaultHoldNullspaceMode(NullspaceMode configured_mode) {
 void askStartupRunMode(Parameters& params) {
   const bool default_sequence =
       params.use_phase_sequence && params.use_contact_search && !params.orientation_test_only;
-  printf("\n=== Startup choice ===\n");
-  printf("Select run mode before robot connection:\n");
-  printf("  s = phase sequence (orient/search/post_contact)\n");
-  printf("  h = hold at the start pose\n");
-  printf("Choice [s/h, Enter = %s]: ", default_sequence ? "s" : "h");
 
   std::string line;
-  if (!std::getline(std::cin, line)) {
-    line.clear();
+
+  // Menu 1: start-pose source (plus an on-demand gripper open). Loops so the
+  // "o" open action runs and then returns here without leaving the menu.
+  while (true) {
+    printf("\n=== Startup choice ===\n");
+    printf("Start pose:\n");
+    printf("  q = go to q_init (from parameters.txt)\n");
+    printf("  g = guiding mode: go to q_init, then hand-guide to your pose,\n");
+    printf("      p+Enter to lock it as the start (e+Enter prints it as q_init)\n");
+    printf("  o = open the Franka hand now (release/load tool), then choose again\n");
+    printf("Choice [q/g/o, Enter = q]: ");
+    if (!std::getline(std::cin, line)) {
+      line.clear();
+    }
+    const std::string start_choice = normalizedChoice(line);
+    if (start_choice == "o" || start_choice == "open") {
+      try {
+        Gripper gripper(params.robot_ip);
+        printf("Opening gripper to %.1f mm...\n", 1000.0 * params.gripper_open_width);
+        const bool opened =
+            gripper.move(params.gripper_open_width, params.gripper_open_speed);
+        printf(opened ? "Gripper opened.\n"
+                      : "Gripper open command returned false.\n");
+      } catch (const franka::Exception& e) {
+        fprintf(stderr, "Gripper open failed: %s\n", e.what());
+      }
+      // Explicit manual open: don't let the automatic q_init grasp close it.
+      params.startup_gripper_manual = true;
+      continue;  // back to Menu 1
+    }
+    if (start_choice == "g" || start_choice == "guide" || start_choice == "guiding") {
+      params.use_manual_guidance_start = true;
+      printf("Selected: guiding mode (hand-place the start pose after q_init).\n");
+    } else {
+      params.use_manual_guidance_start = false;
+      if (!start_choice.empty() && start_choice != "q" && start_choice != "qinit") {
+        printf("Unknown start-pose choice '%s'; using q_init.\n", start_choice.c_str());
+      }
+    }
+    break;
   }
-  const std::string choice = normalizedChoice(line);
+
+  // In guiding mode the run mode (s/h) is chosen at the END of guiding, so skip
+  // Menu 2 here (asking now would be redundant).
+  if (params.use_manual_guidance_start) {
+    printf("Run mode (s/h) will be chosen at the end of guiding.\n");
+    return;
+  }
+
+  // Menu 2: run mode, with an on-demand close/grasp. Loops so "c" grasps the
+  // tool and returns here without leaving the menu.
   bool use_sequence = default_sequence;
-  if (choice == "s" || choice == "sequence") {
-    use_sequence = true;
-  } else if (choice == "h" || choice == "hold") {
-    use_sequence = false;
-  } else if (!choice.empty()) {
-    printf("Unknown run-mode choice '%s'; using default %s.\n",
-           choice.c_str(), default_sequence ? "sequence" : "hold");
+  while (true) {
+    printf("\n=== Run mode ===\n");
+    printf("  s = phase sequence (orient/search/post_contact)\n");
+    printf("  h = hold at the start pose\n");
+    printf("  c = close/grasp the tool now, then choose again\n");
+    printf("Choice [s/h/c, Enter = %s]: ", default_sequence ? "s" : "h");
+    if (!std::getline(std::cin, line)) {
+      line.clear();
+    }
+    const std::string choice = normalizedChoice(line);
+    if (choice == "c" || choice == "close" || choice == "grasp") {
+      try {
+        Gripper gripper(params.robot_ip);
+        printf("Grasping tool: width %.1f mm, force %.1f N...\n",
+               1000.0 * params.gripper_grasp_width, params.gripper_grasp_force);
+        const bool ok = gripper.grasp(
+            params.gripper_grasp_width, params.gripper_grasp_speed,
+            params.gripper_grasp_force, params.gripper_grasp_epsilon_inner,
+            params.gripper_grasp_epsilon_outer);
+        printf(ok ? "Gripper closed on the tool.\n"
+                  : "Gripper grasp returned false (tool not held within tolerance).\n");
+      } catch (const franka::Exception& e) {
+        fprintf(stderr, "Gripper grasp failed: %s\n", e.what());
+      }
+      // Explicit manual grasp: keep the q_init auto-action from interfering.
+      params.startup_gripper_manual = true;
+      continue;  // back to Menu 2
+    }
+    if (choice == "s" || choice == "sequence") {
+      use_sequence = true;
+    } else if (choice == "h" || choice == "hold") {
+      use_sequence = false;
+    } else if (!choice.empty()) {
+      printf("Unknown run-mode choice '%s'; using default %s.\n",
+             choice.c_str(), default_sequence ? "sequence" : "hold");
+    }
+    break;
   }
 
   if (use_sequence) {
@@ -106,29 +178,8 @@ void askStartupRunMode(Parameters& params) {
     params.use_phase_sequence = true;
     params.use_contact_search = true;
 
-    const ContactSearchMode default_search_mode = params.contact_search_mode;
-    printf("\nSelect sequence search mode:\n");
-    printf("  0 = force threshold search (old behavior)\n");
-    printf("  1 = pre-surface search (no force comparison, stop before plane)\n");
-    printf("Choice [0/1, Enter = %s]: ",
-           contactSearchModeName(default_search_mode));
-
-    if (!std::getline(std::cin, line)) {
-      line.clear();
-    }
-    const std::string search_choice = normalizedChoice(line);
-    params.contact_search_mode = default_search_mode;
-    if (search_choice == "0" || search_choice == "force" ||
-        search_choice == "force_threshold" || search_choice == "old") {
-      params.contact_search_mode = ContactSearchMode::kForce;
-    } else if (search_choice == "1" || search_choice == "pre_surface" ||
-               search_choice == "presurface" || search_choice == "geometry" ||
-               search_choice == "geometric") {
-      params.contact_search_mode = ContactSearchMode::kPreSurface;
-    } else if (!search_choice.empty()) {
-      printf("Unknown search-mode choice '%s'; using default %s.\n",
-             search_choice.c_str(), contactSearchModeName(default_search_mode));
-    }
+    // Always pre-surface search for now (force-threshold mode is not prompted).
+    params.contact_search_mode = ContactSearchMode::kPreSurface;
 
     printf("Selected: phase sequence with %s search. Nullspace mode from parameters: %s.\n",
            contactSearchModeName(params.contact_search_mode),
@@ -231,7 +282,11 @@ int main() {
 
     printf("q_init reached.\n");
 
-    if (params.open_gripper_before_run) {
+    // Skip the automatic grasp/open at q_init when the user is handling the
+    // gripper manually: in guiding mode (o/c from the guidance menu), or after
+    // an explicit startup 'o' open. Leave the hand as-is until the user acts.
+    if (params.open_gripper_before_run && !params.use_manual_guidance_start &&
+        !params.startup_gripper_manual) {
       try {
         Gripper gripper(params.robot_ip);
         bool gripper_ok = false;
@@ -298,39 +353,92 @@ int main() {
     std::atomic<bool> stop_requested(false);
     std::atomic<bool> proceed_requested(false);
     std::atomic<bool> guide_requested(false);
-    startKeyboardStopThread(params, stop_requested, proceed_requested, guide_requested);
+    std::atomic<char> guidance_menu_key(0);
+    std::atomic<bool> gate_continue(false);
+    startKeyboardStopThread(params, stop_requested, proceed_requested,
+                            guide_requested, guidance_menu_key, gate_continue);
 
     if (params.use_manual_guidance_start) {
-      printf("\nphase: manual_guidance_start\n");
-      printf("Move the robot by hand, then press p+Enter to capture this pose and continue.\n");
+      // Compliant hand-guidance with an in-guidance menu driven by the keyboard
+      // thread (o/c/s/h/e). Loop so o/c (gripper) and re-guiding stay in the
+      // guidance phase; s/h pick the run mode and proceed; e stops.
+      Gripper guide_gripper(params.robot_ip);
       Vec7 manual_guidance_stop_q = Vec7::Zero();
-      robot.control([&](const RobotState& state, Duration /*period*/) -> Torques {
-        Map<const Vec7> dq(state.dq.data());
-        Array7 coriolis_array = model.coriolis(state);
-        Map<const Vec7> coriolis(coriolis_array.data());
-        Vec7 tau_cmd = coriolis - params.manual_guidance_damping * dq;
-        Array7 tau_array = vec7ToArray(tau_cmd);
-        if (proceed_requested.load()) {
-          printf("\nManual guidance finished with p + Enter. Capturing start pose...\n");
-          return MotionFinished(Torques(tau_array));
-        }
+      bool guidance_done = false;
+      while (!guidance_done) {
+        printf("\nphase: manual_guidance_start\n");
+        printf("Move the robot by hand. Then:\n");
+        printf("  o+Enter = open the gripper\n");
+        printf("  c+Enter = close/grasp the tool\n");
+        printf("  s+Enter = start phase sequence from this pose\n");
+        printf("  h+Enter = start hold from this pose\n");
+        printf("  e+Enter = stop (prints this pose as a q_init_* case)\n");
+        guidance_menu_key.store(0);
+        robot.control([&](const RobotState& state, Duration /*period*/) -> Torques {
+          Map<const Vec7> dq(state.dq.data());
+          Array7 coriolis_array = model.coriolis(state);
+          Map<const Vec7> coriolis(coriolis_array.data());
+          Vec7 tau_cmd = coriolis - params.manual_guidance_damping * dq;
+          Array7 tau_array = vec7ToArray(tau_cmd);
+          if (stop_requested.load()) {
+            manual_guidance_stop_q = Map<const Vec7>(state.q.data());
+            return MotionFinished(Torques(tau_array));
+          }
+          if (guidance_menu_key.load() != 0) {
+            return MotionFinished(Torques(tau_array));
+          }
+          return Torques(tau_array);
+        });
         if (stop_requested.load()) {
-          manual_guidance_stop_q = Map<const Vec7>(state.q.data());
-          printf("\nStop requested during manual guidance. Finishing control loop...\n");
-          return MotionFinished(Torques(tau_array));
+          // Hand-guided joint configuration at the moment of stopping, paste-
+          // ready as a q_init_* case (rad) and in degrees for reading.
+          printf("\n=== Manual guidance stop pose ===\n");
+          printf("q1..q7 [rad] (paste into a q_init_* case):\n");
+          for (int i = 0; i < 7; ++i) {
+            printf("  q_init_%d = %.6f\n", i + 1, manual_guidance_stop_q(i));
+          }
+          printVec7Deg("q1..q7 [deg]", manual_guidance_stop_q);
+          return 0;
         }
-        return Torques(tau_array);
-      });
-      if (stop_requested.load()) {
-        // Show the hand-guided joint configuration at the moment of stopping,
-        // in radians (paste-ready as a q_init_* case) and degrees for reading.
-        printf("\n=== Manual guidance stop pose ===\n");
-        printf("q1..q7 [rad] (paste into a q_init_* case):\n");
-        for (int i = 0; i < 7; ++i) {
-          printf("  q_init_%d = %.6f\n", i + 1, manual_guidance_stop_q(i));
+        const char key = guidance_menu_key.load();
+        guidance_menu_key.store(0);
+        if (key == 'o') {
+          try {
+            printf("Opening gripper to %.1f mm...\n", 1000.0 * params.gripper_open_width);
+            const bool opened =
+                guide_gripper.move(params.gripper_open_width, params.gripper_open_speed);
+            printf(opened ? "Gripper opened.\n" : "Gripper open returned false.\n");
+          } catch (const franka::Exception& e) {
+            fprintf(stderr, "Gripper open failed: %s\n", e.what());
+          }
+        } else if (key == 'c') {
+          try {
+            printf("Grasping tool: width %.1f mm, force %.1f N...\n",
+                   1000.0 * params.gripper_grasp_width, params.gripper_grasp_force);
+            const bool ok = guide_gripper.grasp(
+                params.gripper_grasp_width, params.gripper_grasp_speed,
+                params.gripper_grasp_force, params.gripper_grasp_epsilon_inner,
+                params.gripper_grasp_epsilon_outer);
+            printf(ok ? "Gripper closed on the tool.\n"
+                      : "Gripper grasp returned false (tool not held within tolerance).\n");
+          } catch (const franka::Exception& e) {
+            fprintf(stderr, "Gripper grasp failed: %s\n", e.what());
+          }
+        } else if (key == 's') {
+          params.hold_mode = true;
+          params.use_phase_sequence = true;
+          params.use_contact_search = true;
+          params.contact_search_mode = ContactSearchMode::kPreSurface;
+          printf("Selected: phase sequence from the guided pose.\n");
+          guidance_done = true;
+        } else if (key == 'h') {
+          params.hold_mode = true;
+          params.use_phase_sequence = false;
+          params.use_contact_search = false;
+          params.orientation_test_only = false;
+          printf("Selected: hold at the guided pose.\n");
+          guidance_done = true;
         }
-        printVec7Deg("q1..q7 [deg]", manual_guidance_stop_q);
-        return 0;
       }
     }
 
@@ -428,10 +536,9 @@ int main() {
     // post_contact_align gains, also used for the grind hold (align + grind share
     // one set). Tangents (tipping directions) stay soft so contact moment can
     // passively rotate the tool flat.
-    Vec3 post_contact_Kp_diag_eff = params.post_contact_Kp_diag;
-    if (params.contact_search_mode == ContactSearchMode::kPreSurface) {
-      post_contact_Kp_diag_eff(2) = params.post_contact_pre_surface_Kp_z;
-    }
+    // One post_contact normal stiffness for BOTH search methods (force and
+    // pre_surface): post_contact_Kp_z. No separate pre-surface override.
+    const Vec3 post_contact_Kp_diag_eff = params.post_contact_Kp_diag;
     const Mat3 Kp_post_contact = post_contact_Kp_diag_eff.asDiagonal();
     const Mat3 Dp_post_contact = params.post_contact_Dp_diag.asDiagonal();
     const Mat3 KR_post_contact = params.constraint_enabled
@@ -455,6 +562,13 @@ int main() {
     bool contact_found = !params.use_contact_search;
     bool contact_search_failed = false;
     double contact_time = 0.0;
+    // Phase-sequence Enter-gate state.
+    bool gate_before_align_armed = false;
+    bool gate_before_align_passed = false;
+    Vec3 gate_before_align_hold_pd = Vec3::Zero();
+    double gate_before_align_paused_time = 0.0;  // frozen search clock while gated
+    bool gate_after_align_armed = false;
+    bool gate_after_align_passed = false;
     Mat3 R_contact_start = R_d_alignment_target;
     Mat3 R_after_contact_align = R_d_alignment_target;
     Vec3 first_contact_tcp = p_start;
@@ -1293,7 +1407,11 @@ int main() {
         }
         const bool grind_holding =
             post_contact_hold_active && params.post_contact_grind_mode;
-        if (params.debug_period > 0.0 && time >= next_debug_time && !grind_holding) {
+        // Suppress the per-cycle align line while paused at Gate B.
+        const bool waiting_gate_after_align =
+            gate_after_align_armed && !gate_after_align_passed;
+        if (params.debug_period > 0.0 && time >= next_debug_time && !grind_holding &&
+            !waiting_gate_after_align) {
           // actual_tip_deg: measured rotation away from the orientation held
           // at first contact -- shows whether/how much the tool has
           // passively tipped so far, not just where it is now.
@@ -1324,6 +1442,25 @@ int main() {
             post_align_time >= params.post_contact_align_duration;
 
         if (moment_contact_reached || max_align_time_reached) {
+          // Gate B: hold the aligned/pressed pose until a bare Enter before
+          // starting the grind/hold. post_contact_align keeps pressing meanwhile.
+          bool gate_b_ready = true;
+          if (params.pause_after_align && !gate_after_align_passed) {
+            if (!gate_after_align_armed) {
+              gate_after_align_armed = true;
+              gate_continue.store(false);
+              printf("\n[GATE] Alignment finished (holding the pressed pose). Press "
+                     "Enter to start the grind/hold (e+Enter stops).\n");
+            }
+            if (gate_continue.load()) {
+              gate_after_align_passed = true;
+              gate_continue.store(false);
+              printf("[GATE] Continuing to grind/hold.\n");
+            } else {
+              gate_b_ready = false;
+            }
+          }
+          if (gate_b_ready) {
           if (params.post_contact_hold_after_align) {
             // Surface-impedance phase disabled: instead of handing off, freeze
             // the preload at the value it had when the align phase ended and
@@ -1351,6 +1488,7 @@ int main() {
                 contact_moment_at_edge, external_force, state, J);
             printf("phase: %s\n", phaseName(phase));
           }
+          }  // gate_b_ready
         }
       }
 
@@ -1362,7 +1500,8 @@ int main() {
         desired.pdot_d.setZero();
       } else if (phase == ControlPhase::kSearchFirstContact) {
         const double search_distance =
-            std::min(params.contact_search_speed * (time - phase_start_time),
+            std::min(params.contact_search_speed *
+                         (time - phase_start_time - gate_before_align_paused_time),
                      params.contact_search_max_distance);
         const bool pre_surface_search =
             params.contact_search_mode == ContactSearchMode::kPreSurface;
@@ -1392,6 +1531,32 @@ int main() {
         double contact_search_candidate_time = 0.0;
         const bool pre_surface_reached =
             height_above_surface <= params.contact_search_surface_clearance;
+        // Gate A: pause at the pre-surface point (clearance above the plane)
+        // before the alignment press. Freeze the tool here until a bare Enter.
+        bool gate_a_blocking = false;
+        if (params.pause_before_align && pre_surface_search &&
+            pre_surface_reached && !gate_before_align_passed) {
+          if (!gate_before_align_armed) {
+            gate_before_align_armed = true;
+            gate_before_align_hold_pd = desired.p_d;  // freeze target here
+            gate_continue.store(false);
+            printf("\n[GATE] Reached %.0f mm above the plane. Press Enter to start "
+                   "the alignment press (e+Enter stops).\n",
+                   1000.0 * params.contact_search_surface_clearance);
+          }
+          if (gate_continue.load()) {
+            gate_before_align_passed = true;
+            gate_continue.store(false);
+            printf("[GATE] Continuing to the alignment press.\n");
+          } else {
+            gate_a_blocking = true;
+            desired.p_d = gate_before_align_hold_pd;
+            desired.pdot_d.setZero();
+            // Freeze the search clock so search_distance does not creep to the
+            // max-distance failure while we wait at the gate.
+            gate_before_align_paused_time += period.toSec();
+          }
+        }
         if (!pre_surface_search) {
           // Contact trigger only, not force control. The phase switch happens at
           // the confirmed first-touch candidate, detected from force along the
@@ -1432,8 +1597,9 @@ int main() {
           }
         }
         const bool search_contact_detected =
-            pre_surface_search ? pre_surface_reached : first_touch_candidate_just_saved;
-        if (params.debug_period > 0.0 && time >= next_debug_time) {
+            (pre_surface_search ? pre_surface_reached : first_touch_candidate_just_saved) &&
+            !gate_a_blocking;
+        if (params.debug_period > 0.0 && time >= next_debug_time && !gate_a_blocking) {
           if (pre_surface_search) {
             printf("search:     t=%5.1f s | distance=%6.1f mm | height=%+6.1f mm (target %.1f) | force=%5.1f N | mode=pre_surface\n",
                    time - phase_start_time,

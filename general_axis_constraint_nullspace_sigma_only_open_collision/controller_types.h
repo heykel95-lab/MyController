@@ -35,6 +35,10 @@ struct Parameters {
   double gripper_grasp_force = 40.0;
   double gripper_grasp_epsilon_inner = 0.005;
   double gripper_grasp_epsilon_outer = 0.010;
+  // Runtime-only (not read from file): set when the user opens the hand from the
+  // startup 'o' menu. Suppresses the automatic grasp/open at q_init so an
+  // explicit open is left as-is until the user acts on the gripper again.
+  bool startup_gripper_manual = false;
 
   bool hold_mode = true;
   double hold_Kp = 300.0;
@@ -96,6 +100,14 @@ struct Parameters {
   // table by hand, with rotation still held by post_contact_KR. false = legacy
   // (switch to kSurfaceImpedance).
   bool post_contact_hold_after_align = false;
+  // Phase-sequence Enter gates. When on, the run holds at that point and waits
+  // for a bare Enter before continuing (e+Enter still stops).
+  //   pause_before_align: hold at the pre-surface point (clearance above the
+  //     plane) before starting the alignment press.
+  //   pause_after_align: hold the aligned/pressed pose after post_contact_align
+  //     finishes, before the grind/hold begins.
+  bool pause_before_align = false;
+  bool pause_after_align = false;
   bool post_contact_eval_method2_tcp_wrench = false;
   bool post_contact_apply_method2_tcp_wrench = false;
   // When applying the Method 2 TCP wrench: 1 = use the block-diagonal
@@ -160,7 +172,6 @@ struct Parameters {
   bool detect_contact_during_alignment = true;
   double alignment_contact_force_threshold = 5.0;
   Vec3 post_contact_Kp_diag = Vec3(40.0, 40.0, 5500.0);
-  double post_contact_pre_surface_Kp_z = 50.0;
   Vec3 post_contact_Dp_diag = Vec3(10.0, 10.0, 175.0);
   Vec3 post_contact_KR_diag = Vec3(0.0, 0.0, 8.0);     // [tangent1, tangent2, normal]
   Vec3 post_contact_DR_diag = Vec3(0.01, 0.01, 4.0);   // [tangent1, tangent2, normal]

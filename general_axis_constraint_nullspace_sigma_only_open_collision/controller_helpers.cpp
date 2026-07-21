@@ -590,7 +590,9 @@ void startKeyboardStopThread(
     const Parameters& params,
     std::atomic<bool>& stop_requested,
     std::atomic<bool>& proceed_requested,
-    std::atomic<bool>& guide_requested) {
+    std::atomic<bool>& guide_requested,
+    std::atomic<char>& guidance_menu_key,
+    std::atomic<bool>& gate_continue) {
   printf("Press e+Enter to stop the Control algorithm before the remaining duration expires.\n");
   if (params.use_manual_guidance_start) {
     printf("Press p+Enter to leave manual guidance and start the phase sequence.\n");
@@ -600,16 +602,29 @@ void startKeyboardStopThread(
     printf("experiment_duration <= 0: the Control algorithm is running indefinitely until e + Enter.\n");
   }
 
-  std::thread keyboard_thread([&stop_requested, &proceed_requested, &guide_requested]() {
+  std::thread keyboard_thread([&stop_requested, &proceed_requested,
+                               &guide_requested, &guidance_menu_key,
+                               &gate_continue]() {
     std::string line;
     while (std::getline(std::cin, line)) {
-      if (line == "e" || line == "E") {
+      if (line.empty()) {
+        // Bare Enter = continue past a phase-sequence gate.
+        gate_continue.store(true);
+      } else if (line == "e" || line == "E") {
         stop_requested.store(true);
         break;
       } else if (line == "p" || line == "P") {
         proceed_requested.store(true);
       } else if (line == "g" || line == "G") {
         guide_requested.store(true);
+      } else if (line == "o" || line == "O") {
+        guidance_menu_key.store('o');
+      } else if (line == "c" || line == "C") {
+        guidance_menu_key.store('c');
+      } else if (line == "s" || line == "S") {
+        guidance_menu_key.store('s');
+      } else if (line == "h" || line == "H") {
+        guidance_menu_key.store('h');
       }
     }
   });

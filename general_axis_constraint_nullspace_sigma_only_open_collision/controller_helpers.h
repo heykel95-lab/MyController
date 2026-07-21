@@ -254,7 +254,9 @@ void startKeyboardStopThread(
     const Parameters& params,
     std::atomic<bool>& stop_requested,
     std::atomic<bool>& proceed_requested,
-    std::atomic<bool>& guide_requested);
+    std::atomic<bool>& guide_requested,
+    std::atomic<char>& guidance_menu_key,
+    std::atomic<bool>& gate_continue);
 
 void configureCollisionBehavior(Robot& robot, const Parameters& params);
 
