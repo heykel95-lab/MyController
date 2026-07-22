@@ -99,35 +99,43 @@ ContactSearchMode parseContactSearchMode(const std::string& input, ContactSearch
   return fallback;
 }
 
-Parameters readParameters(const std::string& filename) {
+Parameters readParameters(const std::vector<std::string>& filenames) {
   Parameters p;
-  std::ifstream file(filename);
-
-  if (!file.is_open()) {
-    printf("Could not open %s. Using defaults.\n", filename.c_str());
-    return p;
-  }
-
   std::map<std::string, std::string> values;
-  std::string line;
 
-  while (std::getline(file, line)) {
-    const auto comment_pos = line.find('#');
-    if (comment_pos != std::string::npos) {
-      line = line.substr(0, comment_pos);
-    }
-
-    const auto eq_pos = line.find('=');
-    if (eq_pos == std::string::npos) {
+  int files_opened = 0;
+  for (const std::string& filename : filenames) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+      printf("Could not open %s. Skipping.\n", filename.c_str());
       continue;
     }
+    ++files_opened;
 
-    const std::string key = trim(line.substr(0, eq_pos));
-    const std::string value = trim(line.substr(eq_pos + 1));
+    std::string line;
+    while (std::getline(file, line)) {
+      const auto comment_pos = line.find('#');
+      if (comment_pos != std::string::npos) {
+        line = line.substr(0, comment_pos);
+      }
 
-    if (!key.empty() && !value.empty()) {
-      values[key] = value;
+      const auto eq_pos = line.find('=');
+      if (eq_pos == std::string::npos) {
+        continue;
+      }
+
+      const std::string key = trim(line.substr(0, eq_pos));
+      const std::string value = trim(line.substr(eq_pos + 1));
+
+      if (!key.empty() && !value.empty()) {
+        values[key] = value;  // later files override earlier on duplicate keys
+      }
     }
+  }
+
+  if (files_opened == 0) {
+    printf("No parameter files could be opened. Using defaults.\n");
+    return p;
   }
 
   auto getString = [&](const std::string& key, const std::string& def) {
@@ -189,6 +197,8 @@ Parameters readParameters(const std::string& filename) {
   p.hold_mode = getBool("use_current_pose", p.hold_mode);
   p.hold_Kp = getDouble("hold_Kp", p.hold_Kp);
   p.hold_Dp = getDouble("hold_Dp", p.hold_Dp);
+  p.hold_KR = getDouble("hold_KR", p.hold_KR);
+  p.hold_DR = getDouble("hold_DR", p.hold_DR);
   p.hold_auto_damping = getBool("hold_auto_damping", p.hold_auto_damping);
   p.hold_auto_damping_factor =
       getDouble("hold_auto_damping_factor", p.hold_auto_damping_factor);

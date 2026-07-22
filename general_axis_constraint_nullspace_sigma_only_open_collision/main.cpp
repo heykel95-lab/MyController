@@ -88,7 +88,7 @@ void askStartupRunMode(Parameters& params) {
   while (true) {
     printf("\n=== Startup choice ===\n");
     printf("Start pose:\n");
-    printf("  q = go to q_init (from parameters.txt)\n");
+    printf("  q = go to q_init (from params/common.txt)\n");
     printf("  g = guiding mode: go to q_init, then hand-guide to your pose,\n");
     printf("      p+Enter to lock it as the start (e+Enter prints it as q_init)\n");
     printf("  o = open the Franka hand now (release/load tool), then choose again\n");
@@ -233,7 +233,15 @@ int main() {
     // 1. Setup: parameters, robot connection, recovery, gripper, model
     // ================================================================
     //Read parameters from file, with defaults for missing values.
-    Parameters params = readParameters("parameters.txt");
+    // Parameters are split across concern-specific files under params/, merged
+    // in order. Keys are disjoint; sequence.txt owns all auto-written keys.
+    Parameters params = readParameters({
+        "params/common.txt",
+        "params/safety.txt",
+        "params/sequence.txt",
+        "params/hold.txt",
+        "params/guidance.txt",
+    });
     askStartupRunMode(params);
     // Print the parameters to the console for confirmation before starting the experiment.
     printParameters(params);
@@ -549,6 +557,10 @@ int main() {
         : params.post_contact_DR_diag.asDiagonal();
     const Mat3 Kp_hold = Mat3::Identity() * params.hold_Kp;
     const Mat3 Dp_hold = Mat3::Identity() * params.hold_Dp;
+    // Independent isotropic rotational hold spring (hold mode only), so hold's
+    // orientation stiffness is decoupled from the Phase-4 surface_impedance KR/DR.
+    const Mat3 KR_hold = Mat3::Identity() * params.hold_KR;
+    const Mat3 DR_hold = Mat3::Identity() * params.hold_DR;
     ControlPhase initial_phase = ControlPhase::kSurfaceImpedance;
     if (params.orientation_test_only) {
       initial_phase = ControlPhase::kOrientToSurface;
@@ -936,7 +948,7 @@ int main() {
             const DiagonalGainSet quasi_gains = computeQuasiStaticGains(
                 params, translational_inertia, rotational_inertia);
             printf("=== Gain-suggestion diagnostics only ===\n");
-            printf("Reporting only: suggestions are not applied online. Edit parameters.txt manually to test them.\n");
+            printf("Reporting only: suggestions are not applied online. Edit params/sequence.txt manually to test them.\n");
 
             if (params.print_method1_diagnostics) {
               printf("\n=== Method 1: Quasi-static candidate gains ===\n");
@@ -1284,10 +1296,16 @@ int main() {
         next_debug_time = time + params.debug_period;
       }
       double force_delta_norm = 0.0;
+      // Force-based contact detection during orient belongs to the FORCE search
+      // method only. In pre_surface (geometric) mode the tool is still far above
+      // the plane during orient and stopping is decided geometrically at the 2 cm
+      // gate, so the orient-correction transient must NOT be read as contact
+      // (that would skip search_first_contact + Gate A and align in mid-air).
       const bool alignment_contact_detected =
           orienting_to_surface &&
           params.detect_contact_during_alignment &&
           !params.orientation_test_only &&
+          params.contact_search_mode != ContactSearchMode::kPreSurface &&
           forceContactDetected(external_force,
                                params.alignment_contact_force_threshold,
                                &force_delta_norm);
@@ -1931,11 +1949,15 @@ int main() {
       const Mat3& KR_used =
           (phase == ControlPhase::kPostContactAlign)
               ? KR_post_contact
-              : (is_approach_phase ? KR_approach : KR);
+              : (startup_hold_active
+                     ? KR_hold
+                     : (is_approach_phase ? KR_approach : KR));
       const Mat3& DR_used =
           (phase == ControlPhase::kPostContactAlign)
               ? DR_post_eff
-              : (is_approach_phase ? DR_approach_eff : DR);
+              : (startup_hold_active
+                     ? DR_hold
+                     : (is_approach_phase ? DR_approach_eff : DR));
       Vec6 wrench;
       Vec3 f;
       Vec3 m;
@@ -2164,8 +2186,11 @@ int main() {
     //    comparison, write the CSV log, and print the final summary
     // ================================================================
     if (!pending_parameter_updates.empty()) {
-      updateParameterValues("parameters.txt", pending_parameter_updates);
-      printf("parameters.txt updated after control loop (%zu queued values).\n",
+      // All auto-written keys (method2_K/D_tcp, last_chasles_axis_*,
+      // last_best_axis_*) live in params/sequence.txt, so the write-back targets
+      // that file. updateParameterValues only rewrites keys already present.
+      updateParameterValues("params/sequence.txt", pending_parameter_updates);
+      printf("params/sequence.txt updated after control loop (%zu queued values).\n",
              pending_parameter_updates.size());
     }
 

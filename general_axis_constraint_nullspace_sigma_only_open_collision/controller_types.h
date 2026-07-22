@@ -43,6 +43,11 @@ struct Parameters {
   bool hold_mode = true;
   double hold_Kp = 300.0;
   double hold_Dp = 50.0;
+  // Independent isotropic rotational hold spring [Nm/rad | Nms/rad]. Used only in
+  // hold mode (startup_hold_active); other phases keep their own KR/DR. hold_DR
+  // is applied directly (hold rotation is not auto-damped).
+  double hold_KR = 40.0;
+  double hold_DR = 8.0;
   bool hold_auto_damping = true;
   double hold_auto_damping_factor = 1.0;
   bool use_manual_guidance_start = false;

@@ -1,0 +1,26 @@
+# ====================================================================
+# HOLD mode gains
+# ====================================================================
+# Used when the startup menu selects hold (or hold_mode = 1 with no sequence).
+# The auto-damping toggle/factor for hold live in common.txt.
+#
+# Hold mode holds POSITION with hold_Kp/hold_Dp (isotropic base x/y/z) and
+# ORIENTATION with the independent isotropic hold_KR/hold_DR below -- decoupled
+# from the Phase-4 surface_impedance KR/DR in sequence.txt.
+
+# Hold-mode Cartesian position stiffness [N/m]. When you choose hold at startup,
+# the controller holds the captured start TCP position with this K in base x/y/z.
+hold_Kp = 300.0
+
+# Manual damping FALLBACK [Ns/m], paired with hold_Kp above. Used only when
+# hold_auto_damping is off, OR when it is on but the online task-space inertia
+# estimate is unavailable at hold entry -- i.e. near a kinematic singularity
+# (Jacobian loses rank) or if the inertia comes out non-finite / non-positive.
+# Otherwise D = hold_auto_damping_factor * 2 * sqrt(M * hold_Kp) is used.
+hold_Dp = 50.0
+
+# Isotropic rotational hold spring [Nm/rad | Nms/rad]. Holds the captured start
+# orientation equally about all axes. Independent of the Phase-4 KR/DR now.
+# hold_DR is applied directly (hold rotation is NOT auto-damped).
+hold_KR = 40.0
+hold_DR = 8.0

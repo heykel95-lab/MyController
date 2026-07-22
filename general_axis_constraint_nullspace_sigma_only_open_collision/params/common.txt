@@ -1,0 +1,209 @@
+# ====================================================================
+# COMMON parameters (shared by every run mode)
+# ====================================================================
+# Loaded first. Holds the shared foundation: robot/logging, surface + tool
+# geometry, q_init poses, nullspace, the auto-damping behaviour toggles, and the
+# gripper actions. Mode-specific gains live in sequence.txt / hold.txt.
+
+# --------------------------------------------------------------------
+# General / run settings
+# --------------------------------------------------------------------
+robot_ip = 172.16.0.2
+
+# experiment_duration = 0.0 -> run indefinitely until e + Enter
+# experiment_duration > 0.0 -> automatic stop after this time [s]
+experiment_duration = 0.0
+
+csv_file_name = general_axis_constraint_nullspace_sigma_only_open_collision_log.csv
+log_every_n_cycles = 1
+max_log_rows = 120000
+
+# Terminal debug print period, shared by all phases [s].
+debug_period = 0.20
+
+# 1 = print the per-cycle "impedance:" debug line during kSurfaceImpedance.
+print_impedance_debug = 0
+
+# 1 = static holding/compliance test, 0 = smooth relative trajectory test.
+# (The startup menu also sets this when you pick hold vs sequence.)
+hold_mode = 1
+
+# --------------------------------------------------------------------
+# Auto-damping behaviour (toggles + factors, shared here)
+# --------------------------------------------------------------------
+# Each phase can compute its damping online as D = factor * 2 * sqrt(M * K),
+# with M the libfranka task-space inertia and K that phase's stiffness. These
+# toggles/factors control that behaviour; the per-phase manual Dp/DR FALLBACK
+# values stay next to their K gains in sequence.txt / hold.txt and are only used
+# when the toggle is 0, or when the online inertia estimate is unavailable that
+# cycle (see the fallback note there).
+# factor: 1.0 = critical, <1 lighter, >1 heavier.
+
+# Hold mode: compute D once at hold entry from hold_Kp.
+hold_auto_damping = 1
+hold_auto_damping_factor = 1.0
+
+# orient_to_surface + search_first_contact (the shared "approach" gains).
+# factor 1.9 ~ matches the old flat approach_DR_tangent (~12) on the orient DOF.
+approach_auto_damping = 1
+approach_auto_damping_factor = 1.9
+
+# post_contact_align + grind. Position uses base-frame inertia, rotation uses the
+# alignment-target-frame inertia. factor 0.8 ~ matches the old post_contact_Dp_z.
+post_contact_auto_damping = 1
+post_contact_auto_damping_factor = 0.8
+
+# --------------------------------------------------------------------
+# Gripper actions (used by both sequence and guidance runs)
+# --------------------------------------------------------------------
+# Perform a Franka hand action after q_init and before contact search, as late
+# as possible before contact. require_gripper_open = 1 stops the run if that
+# action fails; = 0 makes it non-blocking so the run proceeds regardless.
+open_gripper_before_run = 1
+require_gripper_open = 0
+
+# Which action to perform:
+#   gripper_grasp_on_tool = 0 -> OPEN the hand to gripper_open_width (releases).
+#   gripper_grasp_on_tool = 1 -> CLOSE/grasp onto the tool you are holding:
+#       drive the fingers to gripper_grasp_width and clamp with
+#       gripper_grasp_force. Set gripper_grasp_width to your tool's thickness at
+#       the grip point (measure it); the grasp succeeds if the final width is
+#       within [width - epsilon_inner, width + epsilon_outer]. On a re-run it
+#       detects the tool is already held and keeps the grasp (no drop).
+gripper_grasp_on_tool = 1
+gripper_grasp_width = 0.07
+gripper_grasp_speed = 0.050
+gripper_grasp_force = 60.0
+gripper_grasp_epsilon_inner = 0.005
+gripper_grasp_epsilon_outer = 0.010
+
+# Open action (used only when gripper_grasp_on_tool = 0).
+gripper_open_width = 0.080
+gripper_open_speed = 0.050
+
+# --------------------------------------------------------------------
+# Surface definition (shared by every phase)
+# --------------------------------------------------------------------
+# The constrained surface is a plane: n^T * (p - p_surface) = 0, with normal n
+# from the alignment-target block below.
+constraint_enabled = 1
+use_start_as_surface_point = 0
+# Plane fixpoint placed right UNDER the tool (x,y ~ the tool's working spot), so
+# surface_point_z is the plane height AT THE TOOL directly -- decoupled from the
+# tilt. Changing the tilt now pivots the plane about this point WITHOUT moving
+# its height at the tool, so you set the angle and the height independently.
+surface_point_x = 0.55
+surface_point_y = -0.06
+surface_point_z = 0.025
+
+# Surface ORIENTATION (the plane normal). Two ways to set it:
+#   use_alignment_target_tilt_angle = 1 -> compute the normal from two tilt
+#     angles: n = R_y(b)*R_x(a)*[0,0,1] = [sin(b)cos(a), -sin(a), cos(b)cos(a)].
+#     a = tilt about base x, b = tilt about base y. a = b = 0 = horizontal.
+#   use_alignment_target_tilt_angle = 0 -> use the manual normal vector below.
+use_alignment_target_tilt_angle = 1
+# 1 = compute the tilt angles FROM the manual normal vector instead.
+derive_tilt_angles_from_plane_normal = 0
+alignment_target_tilt_angle_deg   = 0.0  # a, about base x
+alignment_target_tilt_angle_y_deg = 5.0   # b, about base y
+
+# Manual normal, only used when use_alignment_target_tilt_angle = 0.
+alignment_target_normal_x = 0.0
+alignment_target_normal_y = -0.342
+alignment_target_normal_z = 0.940
+
+# Only tangent1 is entered; the code orthogonalizes it against the normal
+# and computes tangent2 = normal x tangent1.
+alignment_target_tangent1_x = 1.0
+alignment_target_tangent1_y = 0.0
+alignment_target_tangent1_z = 0.0
+
+# Physical tool axis in the EE frame.
+# Alignment enforces: R_desired * tool_axis_ee = tool_axis_target_sign * alignment_target_normal.
+# tool_axis_target_sign = -1 means the tool points opposite the target normal.
+tool_axis_ee_x = 0.0
+tool_axis_ee_y = 0.0
+tool_axis_ee_z = 1.0
+tool_axis_target_sign = -1.0
+
+# Contact point pressed/rotated about during post_contact_align [m], in the
+# EE/TCP frame: p_edge = p_EE + R_EE * tool_contact_point_ee.
+# auto_select_tool_contact_edge = 1 picks +edge or -edge at first contact,
+# whichever is lower along contact_search_direction.
+use_tool_contact_point_control = 1
+auto_select_tool_contact_edge = 1
+tool_contact_point_ee_x = 0.0
+tool_contact_point_ee_y = 0.040
+tool_contact_point_ee_z = 0.0
+
+# --------------------------------------------------------------------
+# Initial joint configuration [rad]
+# --------------------------------------------------------------------
+# horizontal_tool          -> current/default tool orientation
+# tilted_tool               -> same, but q_init_5 is changed
+# tilted_close              -> tilted measured close-to-table start posture
+# horizontal_table_search   -> starts close above the detected horizontal table
+q_init_case = tilted_tool
+
+q_init_horizontal_1 = 0.0
+q_init_horizontal_2 = -pi/4
+q_init_horizontal_3 = 0.0
+q_init_horizontal_4 = -3*pi/4
+q_init_horizontal_5 = 0.0
+q_init_horizontal_6 = pi/2
+q_init_horizontal_7 = pi/4
+
+q_init_tilted_1 = -0.047771
+q_init_tilted_2 = 0.315777
+q_init_tilted_3 = -0.089546
+q_init_tilted_4 = -2.143518
+q_init_tilted_5 = 0.306679
+q_init_tilted_6 = 2.434032
+q_init_tilted_7 = 0.467459
+
+# From measured close tilted start, listed in the run as:
+# [-2.9, 8.5, -3.9, -131.5, 19.2, 140.2, 26.2] deg.
+q_init_tilted_close_1 = -0.050615
+q_init_tilted_close_2 = 0.148353
+q_init_tilted_close_3 = -0.068068
+q_init_tilted_close_4 = -2.295108
+q_init_tilted_close_5 = 0.335103
+q_init_tilted_close_6 = 2.446952
+q_init_tilted_close_7 = 0.457276
+
+# Good horizontal table-search start posture: keeps the tool close to the
+# table while leaving q4 far enough from its lower limit.
+q_init_table_1 = -0.016251
+q_init_table_2 = 0.174096
+q_init_table_3 = -0.018640
+q_init_table_4 = -2.273434
+q_init_table_5 = -0.000397
+q_init_table_6 = 2.533846
+q_init_table_7 = 0.745537
+
+# Optional direct override. Uncomment only if you want to bypass q_init_case.
+# q_init_1 = 0.0
+# q_init_2 = -pi/4
+# q_init_3 = 0.0
+# q_init_4 = -3*pi/4
+# q_init_5 = 0.0
+# q_init_6 = pi/2
+# q_init_7 = pi/4
+
+# --------------------------------------------------------------------
+# Nullspace sigma-min optimization
+# --------------------------------------------------------------------
+# Uses the 1D nullspace direction n of the 6x7 Jacobian: compares
+# J(q + alpha*n) with J(q - alpha*n) and prefers the direction with larger
+# sigma_min(J), while a restoring spring keeps q close to the start posture.
+# nullspace_mode:
+#   0/off     = no nullspace torque
+#   1/posture = tau_nullspace only: N * (k_start*(q_start-q) - d*dq)
+#   2/sigma   = tau_sigma only: singular-value direction
+#   3/both    = old combined behavior
+use_nullspace_optimization = 1
+nullspace_mode = 3
+nullspace_damping = 2.0
+nullspace_k_start = 2.0
+nullspace_k_sigma = 0.1
+nullspace_alpha = 0.01
