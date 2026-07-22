@@ -22,7 +22,8 @@ void printTranslation(const char* name, const std::array<double, 16>& transform)
 
 int main() {
   try {
-    const Parameters params = readParameters("parameters.txt");
+    // Only robot_ip is needed here, and that lives in common.txt.
+    const Parameters params = readParameters({"params/common.txt"});
 
     printf("Read-only tool offset check. No robot motion is commanded.\n");
     printf("Connecting to robot: %s\n", params.robot_ip.c_str());

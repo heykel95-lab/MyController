@@ -1,3 +1,4 @@
 general_axis_constraint_nullspace_sigma_only_open_collision
 check_tool_offset
 *.csv
+*.o

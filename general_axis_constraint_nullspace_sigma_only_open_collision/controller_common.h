@@ -32,16 +32,12 @@ using Array7 = std::array<double, 7>;
 using Vec3 = Eigen::Vector3d;
 using Vec6 = Eigen::Matrix<double, 6, 1>;
 using Vec7 = Eigen::Matrix<double, 7, 1>;
-using Vec12 = Eigen::Matrix<double, 12, 1>;
 using Mat3 = Eigen::Matrix3d;
+using Mat4x4 = Eigen::Matrix<double, 4, 4>;
 using Mat6x6 = Eigen::Matrix<double, 6, 6>;
 using Mat6x7 = Eigen::Matrix<double, 6, 7>;
 using Mat7x6 = Eigen::Matrix<double, 7, 6>;
 using Mat7x7 = Eigen::Matrix<double, 7, 7>;
-using Mat3x12 = Eigen::Matrix<double, 3, 12>;
-using Mat12x3 = Eigen::Matrix<double, 12, 3>;
-using Mat12x12 = Eigen::Matrix<double, 12, 12>;
-using Mat4x4 = Eigen::Matrix<double, 4, 4>;
 
 template <typename MatrixType>
 using Map = Eigen::Map<MatrixType>;

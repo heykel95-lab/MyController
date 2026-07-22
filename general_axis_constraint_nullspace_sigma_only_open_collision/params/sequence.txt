@@ -1,46 +1,47 @@
 # ====================================================================
-# PHASE SEQUENCE parameters (orient / search / post_contact_align / surface_impedance)
+# PHASE SEQUENCE parameters
 # ====================================================================
-# Everything for the phase-sequence run. Surface + tool geometry are in
-# common.txt; the auto-damping toggles/factors are in common.txt. This file
-# OWNS all auto-written keys (method2_K/D_tcp, last_chasles_axis_*,
-# last_best_axis_*) -- the controller writes them back here after a run.
+# Everything for a sequence run:
+#
+#   1. approach  -- orient the tool onto the target plane normal, then descend
+#                   until the active tool contact point is
+#                   descend_surface_clearance above the plane.
+#   2. set up    -- press that contact edge into the plane while the rotational
+#                   spring stays soft on the tipping axes, so real contact
+#                   moment rotates the tool flat by itself.
+#   3. grind     -- hold the press constant and sweep along a surface tangent.
+#
+# Surface and tool geometry live in common.txt, as do the auto-damping toggles.
+# This file OWNS the auto-written coupled_K_tcp / coupled_D_tcp entries -- the
+# controller writes them back here after a run.
 
-# use_phase_sequence = 1 runs the controller in this order:
-#   1. orient_to_surface     -- rotate to match the virtual surface orientation.
-#   2. search_first_contact  -- translate along contact_search_direction until either
-#                                force contact is detected or the pre-surface
-#                                clearance is reached, depending on contact_search_mode.
-#   3. post_contact_align    -- press the contacted edge into the surface
-#                                while holding a soft rotational spring, so
-#                                real contact moment passively tips the tool flat.
-#   4. surface_impedance     -- normal-constrained impedance hold/test.
+# 1 = run the phase sequence. 0 = hold at the start pose (see hold.txt).
+# The startup menu also sets this.
 use_phase_sequence = 1
 
-# 0 = skip orient_to_surface completely. The run starts at search_first_contact
-# and holds the q_init/start orientation during search; after contact it still
-# enters post_contact_align because use_phase_sequence remains 1.
-use_orientation_phase = 1
+# 0 = skip the orient step. The run starts at the descend step and holds the
+# q_init/start orientation on the way down.
+use_approach_orient = 1
+
 
 # ====================================================================
-# Phase 1: orient_to_surface
+# Phase 1: approach
 # ====================================================================
-# (Surface orientation / tilt angles are defined in common.txt.)
+# ----- orient step -----
+# Minimum time in the orient step before it may switch to descend [s].
+approach_orient_min_time = 0.5
 
-# Minimum time before switching to search [s].
-orient_phase_min_time = 0.5
+# Tool-axis error threshold for switching to descend [rad]. Smaller aligns more
+# accurately, but the gains below must be stiff enough that the steady-state
+# error actually drops this low, otherwise the step never ends.
+# 0.035 rad ~ 2 deg.
+approach_orient_error_threshold = 0.035
 
-# Orientation error threshold for switching to search [rad].
-# Smaller = aligns more accurately before switching, but the orient gains below
-# must be stiff enough that the steady-state error actually drops this low,
-# otherwise the phase never switches. 0.035 rad ~ 2 deg.
-orient_phase_error_threshold = 0.035
-
-# ----- Shared "approach" impedance (orient_to_surface + search_first_contact) -----
-# One translation stiffness + one rotation stiffness for BOTH early phases,
-# alignment-target frame [tangent1, tangent2, normal]. Position soft (gentle
-# search contact; orient holds loosely); KR_tangent stiff enough that orient
-# converges below orient_phase_error_threshold.
+# ----- shared approach impedance (orient AND descend) -----
+# One translation stiffness and one rotation stiffness for both steps,
+# alignment-target frame [tangent1, tangent2, normal]. Position stays soft (a
+# gentle arrival at the plane; orient holds loosely); KR_tangent must be stiff
+# enough that orient converges below approach_orient_error_threshold.
 # (Auto-damping toggle/factor: approach_auto_damping[_factor] in common.txt.)
 approach_Kp_normal = 150.0
 approach_Kp_tangent1 = 150.0
@@ -48,12 +49,11 @@ approach_Kp_tangent2 = 150.0
 approach_KR_normal = 8.0
 approach_KR_tangent1 = 90.0
 approach_KR_tangent2 = 90.0
-# Manual damping FALLBACK [Ns/m | Nms/rad], paired with the approach K gains.
-# Used only when approach_auto_damping is off, OR when it is on but the online
+# Manual damping FALLBACK [Ns/m | Nms/rad], paired with the K gains above. Used
+# only when approach_auto_damping is off, OR when it is on but the online
 # task-space inertia estimate is unavailable that cycle -- i.e. near a kinematic
 # singularity (Jacobian loses rank) or if the inertia comes out non-finite /
-# non-positive. Otherwise D = factor*2*sqrt(M*K) is computed live and these are
-# ignored.
+# non-positive. Otherwise D = factor*2*sqrt(M*K) is computed live.
 approach_Dp_normal = 20.0
 approach_Dp_tangent1 = 20.0
 approach_Dp_tangent2 = 20.0
@@ -61,374 +61,229 @@ approach_DR_normal = 12.0
 approach_DR_tangent1 = 12.0
 approach_DR_tangent2 = 12.0
 
-# 1 = test only the rotation part (hold TCP, rotate toward R_d_alignment_target, skip
-# contact search). Set back to 0 once orientation control is verified.
-orientation_test_only = 0
+# ----- descend step -----
+# The TCP moves slowly along the descend direction. The switch to set up is
+# purely geometric: it fires when the active tool contact point is this far
+# above the configured surface plane.
+descend_surface_clearance = 0.020
 
-# Extra test rotation around surface tangent1 [deg], applied to the start
-# orientation. Only used when orientation_test_only = 1.
-orientation_test_extra_tilt_deg = 0.0
+# 1 = descend along -alignment_target_normal. 0 = use the manual direction.
+descend_use_alignment_target_normal = 1
+descend_direction_x = 0.0
+descend_direction_y = 0.0
+descend_direction_z = -1.0
 
-# Force safety trigger during orient. NOTE: only active in FORCE search mode --
-# in pre_surface (geometric) mode it is bypassed, so the orient-correction
-# transient cannot be misread as contact.
-detect_contact_during_alignment = 1
-alignment_contact_force_threshold = 12.0
+# Descend speed [m/s] and maximum travel before the run gives up [m].
+descend_speed = 0.1
+descend_max_distance = 0.640
 
-# ====================================================================
-# Phase 2: search_first_contact
-# ====================================================================
-# TCP moves slowly in contact_search_direction. contact_search_mode selects
-# the switch trigger:
-#   force       = old behavior, switch after confirmed external-force threshold.
-#   pre_surface = no force comparison, switch when the active tool contact point
-#                 is contact_search_surface_clearance before the configured
-#                 surface plane.
-use_contact_search = 1
-contact_search_mode = pre_surface
-contact_search_surface_clearance = 0.020
-
-# 1 = search along -alignment_target_normal. 0 = use the manual direction below.
-contact_search_use_alignment_target_normal = 1
-contact_search_direction_x = 0.0
-contact_search_direction_y = 0.0
-contact_search_direction_z = -1.0
-
-# Search speed [m/s] and maximum travel distance [m].
-contact_search_speed = 0.1
-contact_search_max_distance = 0.640
-
-# Minimum downward travel before first-touch contact detection [m].
-contact_search_min_distance = 0.240
-
-# First-touch reference/gain calculation uses the same gate as the phase switch.
-contact_search_first_touch_min_distance = 0.240
-
-# First-touch and phase switch use dF_bias dot contact_search_direction when enabled.
-contact_search_use_directional_force = 1
-contact_search_confirm_time = 0.0
-contact_force_threshold = 12.0
-
-# Cartesian gains during contact search come from the shared "approach" block
-# in Phase 1 (approach_Kp/KR/Dp/DR) -- the same set orient uses.
-
-# 1 = once contact is found, target a tool orientation parallel to the
-# surface (for the horizontal table, tool z points down along -base z).
-align_orientation_to_surface_after_contact = 1
 
 # ====================================================================
-# Phase 3: post_contact_align
+# Phase 2: set up
 # ====================================================================
-# Minimum time before the moment-threshold early exit can fire [s].
-post_contact_align_min_time = 2.0
+# The phase ends on whichever comes first: the contact moment jumping past
+# setup_moment_threshold (e.g. the second tool edge touching down after the
+# tool tipped flat), or setup_duration running out.
+setup_min_time = 2.0
+setup_duration = 3.0
+setup_moment_threshold = 150.0
 
-# Maximum time spent in this phase after first contact [s].
-post_contact_align_duration = 3.0
+# The press is a position preload ramped into the plane, so the preload force is
+# roughly setup_Kp_z * push. It starts at -descend_surface_clearance (the tool
+# is still that far above the plane) and grows at setup_push_speed until
+# setup_max_push. Grind inherits its final value, so this ramp sets the press
+# for BOTH phase 2 and phase 3.
+#
+# Check the peak preload force (setup_Kp_z * setup_max_push) against
+# collision_force_acc/nom in safety.txt whenever either value changes.
+setup_push_speed = 0.050
+setup_max_push = 0.180
 
-# Moment-change early-exit threshold [Nm] (e.g. the second tool edge
-# touching down after passively tipping flat). Only checked once
-# post_contact_align_min_time has elapsed.
-post_contact_moment_threshold = 150.0
+# Translational spring, base frame [x, y, z]. Firm normal (z) for the press,
+# SOFT tangents (x, y) so the tool is free to rotate about the pressed edge --
+# stiff tangents would pin the TCP and shove the arm up instead of tipping
+# the tool.
+setup_Kp_x = 2000.0
+setup_Kp_y = 2000.0
+setup_Kp_z = 350.0
+# Manual damping FALLBACK [Ns/m], same fallback conditions as the approach Dp.
+setup_Dp_x = 10.0
+setup_Dp_y = 10.0
+setup_Dp_z = 175.0
 
-# Ignore the first transient screw-axis samples when picking the measured
-# "best" axis for comparison/gain suggestion; among stable samples, picks
-# the one closest to the active contact edge. If none pass the gate, the
-# best transient sample is kept and labeled transient_fallback.
-post_contact_best_axis_min_time = 0.60
-post_contact_best_axis_min_omega = 0.12
+# Rotational spring, alignment-target frame [tangent1, tangent2, normal]. The
+# target is the pose held at first contact (no scripted rotation). Normal (yaw
+# about the target axis) stays constrained; tangent1/tangent2 -- the tipping
+# directions -- stay very soft so contact moment can rotate the tool flat.
+setup_KR_normal = 10.0
+setup_KR_tangent1 = 0.05
+setup_KR_tangent2 = 0.05
+# Manual damping FALLBACK [Nms/rad].
+setup_DR_normal = 10.0
+setup_DR_tangent1 = 10.01
+setup_DR_tangent2 = 10.01
 
-# Small position offset into the real surface [m], acting like a spring
-# preload that presses the selected edge down:
-#   preload force approx post_contact_Kp_z * post_contact_normal_push
-# Force-search mode starts the push ramp at post_contact_normal_push; pre-surface
-# mode starts it at -contact_search_surface_clearance. BOTH now use the single
-# post_contact_Kp_z (no separate pre-surface stiffness).
-# Check peak preload force (post_contact_Kp_z * post_contact_max_push) against
-# collision_force_acc/nom (safety.txt) whenever Kp_z or max_push changes.
-# This preload is also the one grind inherits (post_contact_hold_push), so it
-# sets the press for BOTH the align tip and the grind sweep.
-post_contact_normal_push = 0.250
-post_contact_push_speed = 0.050
-post_contact_max_push = 0.180
 
-# Disable the surface-impedance phase. 1 = when post_contact_align ends (moment
-# threshold or post_contact_align_duration), freeze the preload at its current
-# value and keep post_contact_align running as a constant-press, free-slide
-# hold: the tool keeps pressing into the table with that preload (only the
-# normal direction is sprung) but is tangentially free, so it can be moved along
-# the table by hand; rotation stays held by post_contact_KR. 0 = legacy: hand off
-# to surface impedance.
-post_contact_hold_after_align = 1
-
-# Phase-sequence Enter gates (press a bare Enter to continue; e+Enter stops).
-#   pause_before_align = 1 -> hold at the pre-surface point (surface_clearance
-#     above the plane) and wait for Enter before starting the alignment press.
-#   pause_after_align = 1 -> after post_contact_align finishes, hold the pressed
-#     pose and wait for Enter before starting the grind/hold.
-pause_before_align = 1
-pause_after_align = 0
-# Stiff hold while paused at Gate A so the tool locks in place (resists being
-# pushed by hand) instead of holding with the soft search gains. Centered on the
-# tool's actual position at the moment the gate arms. POSITION only -- rotation
-# stays on the approach spring at the gate (a stiff isotropic rotational lock
-# here drove a limit-cycle wiggle, so it was removed).
-gate_hold_Kp = 5000.0
-gate_hold_Dp = 200.0
-
-# Translational spring used only during this phase, base frame [x, y, z].
-# Firm normal (z) for press + SOFT tangents (x,y) so the tool is free to rotate
-# about the edge (stiff tangents would pin the TCP and shove the arm up instead
-# of tipping the tool).
-post_contact_Kp_x = 2000.0
-post_contact_Kp_y = 2000.0
-post_contact_Kp_z = 350.0
-# Manual damping FALLBACK [Ns/m], paired with the post_contact_Kp gains above.
-# Used only when post_contact_auto_damping is off, OR when it is on but the
-# online task-space inertia estimate is unavailable that cycle (kinematic
-# singularity / non-finite / non-positive inertia). Otherwise D =
-# post_contact_auto_damping_factor*2*sqrt(M*K) is computed live.
-post_contact_Dp_x = 10.0
-post_contact_Dp_y = 10.0
-post_contact_Dp_z = 175.0
-
-# Rotational spring used only during this phase, alignment-target frame
-# [tangent1, tangent2, normal]. Target is the pose held at first contact (no
-# scripted rotation). Normal (yaw about the target axis) stays constrained;
-# tangent1/tangent2 (the tipping directions) stay very soft so real contact
-# moment can passively rotate the tool flat.
-post_contact_KR_normal = 10.0
-post_contact_KR_tangent1 = 0.05
-post_contact_KR_tangent2 = 0.05
-# Manual damping FALLBACK [Nms/rad], paired with the post_contact_KR gains above
-# (same fallback conditions as post_contact_Dp).
-post_contact_DR_normal = 10.0
-post_contact_DR_tangent1 = 10.01
-post_contact_DR_tangent2 = 10.01
-
-# --------------------------------------------------------------
-# Surface-grinding (schleifen) hold
-# --------------------------------------------------------------
-# 1 = once post_contact_align ends and the hold begins (needs
-# post_contact_hold_after_align = 1), instead of a free-slide hold, press with
-# the frozen preload and sweep the contact side-to-side along a surface tangent.
-# Grind reuses the post_contact (align) gains -- align and grind share one set.
-post_contact_grind_mode = 1
+# ====================================================================
+# Phase 3: grind
+# ====================================================================
+# Grind reuses the phase-2 gains -- set up and grind share one impedance. Only
+# the target law differs:
+#   grind_sweep_enabled = 1 -> sweep the contact side-to-side along a surface
+#     tangent, tangentially stiff so the tool tracks the sweep path.
+#   grind_sweep_enabled = 0 -> free-slide hold: only the normal direction is
+#     sprung, so the pressed tool can be pushed along the plane by hand.
+grind_sweep_enabled = 1
 print_grind_debug = 0
 
 # Sweep path: a smoothStep ping-pong between -A and +A along the chosen surface
 # tangent. grind_axis: 1 = tangent1, 2 = tangent2. One full back-and-forth cycle
 # takes 1/grind_frequency_hz.
-grind_axis = 1
+#
+# With the current frame (tangent1 hint = base x, tilt b = 5 deg about base y):
+#   tangent1 ~ base x tilted into the plane -> the SLOPE direction, so a sweep
+#     there runs up and down the incline.
+#   tangent2 = base y exactly -> the LEVEL direction, so a sweep there stays at
+#     constant height on the tilted plane and the press stays uniform.
+grind_axis = 2
 grind_amplitude_m = 0.03
 grind_frequency_hz = 0.2
 
-# Method 2 validation modes.
-# eval = 1 computes the saved 6x6 TCP wrench side-by-side but still commands
-# the normal decoupled self-align wrench.
-# apply = 1 actually commands a 6x6 TCP wrench during post_contact_align.
-# When apply = 1, use_in_method2_k_d_diag selects the 6x6 K/D source:
-#   1 = block-diagonal post_align gains (no coupling) -> reproduces the normal
-#       decoupled commanded wrench / same motion (sanity check).
-#   0 = saved coupled method2_K_tcp/method2_D_tcp (finite-axis lever coupling).
-post_contact_eval_method2_tcp_wrench = 1
-post_contact_apply_method2_tcp_wrench = 1
-use_in_method2_k_d_diag = 0
-method2_tcp_wrench_saved = 1
 
-# Manual pole placement for the applied coupled wrench (only with apply=1 and
-# use_in_method2_k_d_diag=0). use_manual_method2_pole=1 computes K_TCP/D_TCP
-# from pole = contact reference + manual_method2_pole_from_edge (base frame,
-# metres), instead of the saved matrices. The pole is the only knob in the
-# adjoint, so sweep it to move the effective rotation center.
-# [0,0,0] puts the pole at the contact edge (r_c = tcp - edge).
-use_manual_method2_pole = 1
-manual_method2_pole_from_edge_x = 0.0
-manual_method2_pole_from_edge_y = 0.08
-manual_method2_pole_from_edge_z = 0.0
+# ====================================================================
+# Enter gates between phases
+# ====================================================================
+# Press a bare Enter to continue; e+Enter still stops.
+#   pause_before_set_up = 1 -> hold at the clearance height and wait before
+#     starting the set-up press.
+#   pause_before_grind  = 1 -> hold the pressed pose after set up finishes and
+#     wait before starting the grind.
+pause_before_set_up = 1
+pause_before_grind = 0
+
+# Stiff hold while paused, so the tool locks in place instead of holding with
+# the soft approach gains. Centered on the tool's actual position at the moment
+# the gate arms. POSITION only -- rotation stays on the phase spring, since a
+# stiff isotropic rotational lock here drove a limit-cycle wiggle.
+pause_hold_Kp = 5000.0
+pause_hold_Dp = 200.0
+
+
+# ====================================================================
+# Coupled (pole-based) stiffness during set up
+# ====================================================================
+# The decoupled law commands two independent 3x3 springs (force from position
+# error, moment from rotation error). The coupled law commands ONE 6x6 spring,
+# built by moving the same diagonal spring from a chosen pole out to the TCP:
+#
+#   K_TCP = Ad(r_c)^T * blockdiag(Kp, KR) * Ad(r_c),   r_c = p_TCP - pole
+#
+# Its off-diagonal quadrants are the lever coupling: rotation then produces
+# force and translation produces moment. The pole is the only knob in the
+# adjoint, so sweeping the pole moves the effective rotation center.
+#
+#   eval_coupled_stiffness = 1 -> compute the coupled wrench side by side but
+#     keep commanding the decoupled one (prints a comparison at the end).
+#   use_coupled_stiffness  = 1 -> actually command the 6x6 spring during set up.
+eval_coupled_stiffness = 1
+use_coupled_stiffness = 1
+
+# Which 6x6 K/D to command, checked in this order:
+#   coupled_use_block_diagonal = 1 -> plain block-diagonal set-up gains, no
+#     coupling. Through the 6x6 path this reproduces the decoupled wrench
+#     exactly, so it is the sanity check that the path itself is correct.
+#   coupled_pole_manual = 1 -> rebuild K_TCP/D_TCP from
+#     pole = contact edge + coupled_pole_from_edge (base frame, metres).
+#     [0,0,0] puts the pole right at the contact edge (r_c = tcp - edge).
+#   neither -> the saved coupled_K_tcp / coupled_D_tcp below.
+coupled_use_block_diagonal = 0
+coupled_pole_manual = 1
+coupled_pole_from_edge_x = 0.0
+coupled_pole_from_edge_y = 0.08
+coupled_pole_from_edge_z = 0.0
+
 # 1 = pin the pole to the first-contact pose, so K_TCP/D_TCP are computed once
-# and stay constant for the whole align phase (predictable; recommended for
-# sweeping). 0 = track the live moving edge, refreshing the matrices each cycle.
-method2_pole_freeze_at_contact = 1
+# and stay constant for the whole phase (predictable; recommended for sweeping).
+# 0 = track the live moving edge, refreshing the matrices every cycle.
+coupled_pole_freeze_at_contact = 1
 
-# Saved full 6x6 Method 2 TCP gains, base frame, rows/cols [fx fy fz mx my mz].
-# AUTO-WRITTEN after a run with a valid finite Chasles axis (this file is the
-# write-back target).
-method2_K_tcp_00 = 3000
-method2_K_tcp_01 = 0
-method2_K_tcp_02 = 0
-method2_K_tcp_03 = 0
-method2_K_tcp_04 = 71.4135088
-method2_K_tcp_05 = 782.118358
-method2_K_tcp_10 = 0
-method2_K_tcp_11 = 3000
-method2_K_tcp_12 = 0
-method2_K_tcp_13 = -71.4135088
-method2_K_tcp_14 = 0
-method2_K_tcp_15 = -374.027261
-method2_K_tcp_20 = 0
-method2_K_tcp_21 = 0
-method2_K_tcp_22 = 500
-method2_K_tcp_23 = -130.35306
-method2_K_tcp_24 = 62.3378768
-method2_K_tcp_25 = 0
-method2_K_tcp_30 = 0
-method2_K_tcp_31 = -71.4135088
-method2_K_tcp_32 = -130.35306
-method2_K_tcp_33 = 45.6838034
-method2_K_tcp_34 = -16.2518659
-method2_K_tcp_35 = 8.90353303
-method2_K_tcp_40 = 71.4135088
-method2_K_tcp_41 = 0
-method2_K_tcp_42 = 62.3378768
-method2_K_tcp_43 = -16.2518659
-method2_K_tcp_44 = 24.4340042
-method2_K_tcp_45 = 19.0520592
-method2_K_tcp_50 = 782.118358
-method2_K_tcp_51 = -374.027261
-method2_K_tcp_52 = 0
-method2_K_tcp_53 = 8.90353303
-method2_K_tcp_54 = 19.0520592
-method2_K_tcp_55 = 260.573153
-method2_D_tcp_00 = 100
-method2_D_tcp_01 = 0
-method2_D_tcp_02 = 0
-method2_D_tcp_03 = 0
-method2_D_tcp_04 = 2.38045029
-method2_D_tcp_05 = 26.0706119
-method2_D_tcp_10 = 0
-method2_D_tcp_11 = 100
-method2_D_tcp_12 = 0
-method2_D_tcp_13 = -2.38045029
-method2_D_tcp_14 = 0
-method2_D_tcp_15 = -12.4675754
-method2_D_tcp_20 = 0
-method2_D_tcp_21 = 0
-method2_D_tcp_22 = 50
-method2_D_tcp_23 = -13.035306
-method2_D_tcp_24 = 6.23378768
-method2_D_tcp_25 = 0
-method2_D_tcp_30 = 0
-method2_D_tcp_31 = -2.38045029
-method2_D_tcp_32 = -13.035306
-method2_D_tcp_33 = 13.4650495
-method2_D_tcp_34 = -1.62518659
-method2_D_tcp_35 = 0.296784434
-method2_D_tcp_40 = 2.38045029
-method2_D_tcp_41 = 0
-method2_D_tcp_42 = 6.23378768
-method2_D_tcp_43 = -1.62518659
-method2_D_tcp_44 = 10.8437917
-method2_D_tcp_45 = 0.621466199
-method2_D_tcp_50 = 26.0706119
-method2_D_tcp_51 = -12.4675754
-method2_D_tcp_52 = 0
-method2_D_tcp_53 = 0.296784434
-method2_D_tcp_54 = 0.621466199
-method2_D_tcp_55 = 18.3512484
+# 1 = print the set-up report's coupled-stiffness section (the measured screw
+# axis, the two poles compared, and both 6x6 matrices with their eigenvalues).
+print_coupled_diagnostics = 1
 
-# Virtual center of rotation during this phase:
-# p_c = p_contact + vcr_offset * alignment_target_normal.
-# 0 = on the detected contact point, >0 = along target normal, <0 = opposite it.
-use_virtual_center_after_contact = 0
-vcr_offset = 0.0
-
-# After this phase, use the real contact/search surface for surface
-# impedance (phase 4). With manual downward search this is a horizontal
-# table plane: x/y can move while z stays constrained to the table.
-use_search_direction_surface_after_alignment = 1
-
-# --------------------------------------------------------------
-# Gain-suggestion diagnostics only (reporting only, post_contact_align)
-# --------------------------------------------------------------
-# Diagnostic only: prints the three thesis gain-suggestion views at the end
-# of post_contact_align. None is applied online.
-print_gain_suggestion_diagnostics = 1
-print_method1_diagnostics = 0
-print_method3_diagnostics = 0
-
-# Last best instantaneous axis, base frame, relative to the active tool edge.
-# AUTO-WRITTEN from the best per-cycle post_contact_align axis sample.
-last_best_axis_from_edge_x = -0.0397
-last_best_axis_from_edge_y = -0.0630
-last_best_axis_from_edge_z = 0.1237
-last_best_axis_dir_x = -0.511
-last_best_axis_dir_y = 0.724
-last_best_axis_dir_z = 0.464
-last_best_axis_pitch = 0.0273
-
-# Last finite Chasles axis, base frame, relative to the active tool edge.
-# AUTO-WRITTEN from the full start/end post_contact_align edge motion.
-last_chasles_axis_from_edge_x = -0.4984
-last_chasles_axis_from_edge_y = -0.1119
-last_chasles_axis_from_edge_z = 0.1201
-last_chasles_axis_dir_x = -0.179
-last_chasles_axis_dir_y = 0.971
-last_chasles_axis_dir_z = 0.160
-last_chasles_axis_pitch = -0.0612
-
-# Gain print bounds and legacy reference-motion settings.
-suggested_gain_omega_ref = 0.20
-suggested_gain_angle_ref = 0.10
-suggested_gain_min = 0.01
-suggested_gain_max = 8000.0
-
-# Method 1: quasi-static initial selection. Names stay semantic
-# (_normal/_tangent1/_tangent2); printed/internal vectors are [tangent1,
-# tangent2, normal]. Kp = Fmax/dxmax, KR = Mmax/dtheta_max.
-quasi_force_limit_normal = 114.0
-quasi_force_limit_tangent1 = 4.0
-quasi_force_limit_tangent2 = 4.0
-quasi_displacement_limit_normal = 0.0175
-quasi_displacement_limit_tangent1 = 0.100
-quasi_displacement_limit_tangent2 = 0.100
-quasi_moment_limit_normal = 2.0
-quasi_moment_limit_tangent1 = 0.005
-quasi_moment_limit_tangent2 = 0.005
-quasi_angle_limit_normal = 0.10
-quasi_angle_limit_tangent1 = 0.50
-quasi_angle_limit_tangent2 = 0.50
-
-# Method 1 effective mass/inertia FALLBACK (diagnostic gain-suggestion only):
-# rough Franka task-space inertia used when the live libfranka Lambda estimate
-# is unavailable for the D = 2*zeta*sqrt(M*K) suggestion.
-quasi_effective_mass_normal = 2.5
-quasi_effective_mass_tangent1 = 2.5
-quasi_effective_mass_tangent2 = 2.5
-quasi_effective_inertia_normal = 0.25
-quasi_effective_inertia_tangent1 = 0.25
-quasi_effective_inertia_tangent2 = 0.25
-quasi_damping_ratio = 1.0
-
-# Method 3: small damped least-squares ridge for the effective moment fit.
-effective_moment_fit_ridge = 1e-8
-
-# ====================================================================
-# Phase 4: surface_impedance
-# ====================================================================
-# Rotational constraint flags, alignment-target frame. 1 = keep rotational
-# stiffness on that component, 0 = no spring (damping still acts if DR_i > 0;
-# for a fully free component set both the flag and damping to 0).
-constrain_rotation_about_alignment_normal = 1
-constrain_rotation_about_alignment_tangent1 = 1
-constrain_rotation_about_alignment_tangent2 = 1
-
-# Alignment-target-frame gains: normal = target-normal direction, tangent1/2 =
-# transverse. These Dp/DR are applied directly (this phase has no auto-damping).
-Kp_normal = 7000.0
-Kp_tangent1 = 100.0
-Kp_tangent2 = 100.0
-Dp_normal = 220.0
-Dp_tangent1 = 20.0
-Dp_tangent2 = 20.0
-KR_normal = 8.0
-KR_tangent1 = 80.0
-KR_tangent2 = 40.0
-DR_normal = 4.0
-DR_tangent1 = 15.0
-DR_tangent2 = 12.0
-
-# Smooth relative trajectory test, only used when hold_mode = 0.
-delta_p_x = 0.005
-delta_p_y = 0.000
-delta_p_z = 0.000
-trajectory_duration = 8.0
+# Saved 6x6 coupled gains, base frame, rows/cols [fx fy fz mx my mz].
+# AUTO-WRITTEN after a set-up phase with a valid finite screw axis, whenever
+# use_coupled_stiffness = 0. This file is the write-back target.
+coupled_gains_saved = 1
+coupled_K_tcp_00 = 3000
+coupled_K_tcp_01 = 0
+coupled_K_tcp_02 = 0
+coupled_K_tcp_03 = 0
+coupled_K_tcp_04 = 71.4135088
+coupled_K_tcp_05 = 782.118358
+coupled_K_tcp_10 = 0
+coupled_K_tcp_11 = 3000
+coupled_K_tcp_12 = 0
+coupled_K_tcp_13 = -71.4135088
+coupled_K_tcp_14 = 0
+coupled_K_tcp_15 = -374.027261
+coupled_K_tcp_20 = 0
+coupled_K_tcp_21 = 0
+coupled_K_tcp_22 = 500
+coupled_K_tcp_23 = -130.35306
+coupled_K_tcp_24 = 62.3378768
+coupled_K_tcp_25 = 0
+coupled_K_tcp_30 = 0
+coupled_K_tcp_31 = -71.4135088
+coupled_K_tcp_32 = -130.35306
+coupled_K_tcp_33 = 45.6838034
+coupled_K_tcp_34 = -16.2518659
+coupled_K_tcp_35 = 8.90353303
+coupled_K_tcp_40 = 71.4135088
+coupled_K_tcp_41 = 0
+coupled_K_tcp_42 = 62.3378768
+coupled_K_tcp_43 = -16.2518659
+coupled_K_tcp_44 = 24.4340042
+coupled_K_tcp_45 = 19.0520592
+coupled_K_tcp_50 = 782.118358
+coupled_K_tcp_51 = -374.027261
+coupled_K_tcp_52 = 0
+coupled_K_tcp_53 = 8.90353303
+coupled_K_tcp_54 = 19.0520592
+coupled_K_tcp_55 = 260.573153
+coupled_D_tcp_00 = 100
+coupled_D_tcp_01 = 0
+coupled_D_tcp_02 = 0
+coupled_D_tcp_03 = 0
+coupled_D_tcp_04 = 2.38045029
+coupled_D_tcp_05 = 26.0706119
+coupled_D_tcp_10 = 0
+coupled_D_tcp_11 = 100
+coupled_D_tcp_12 = 0
+coupled_D_tcp_13 = -2.38045029
+coupled_D_tcp_14 = 0
+coupled_D_tcp_15 = -12.4675754
+coupled_D_tcp_20 = 0
+coupled_D_tcp_21 = 0
+coupled_D_tcp_22 = 50
+coupled_D_tcp_23 = -13.035306
+coupled_D_tcp_24 = 6.23378768
+coupled_D_tcp_25 = 0
+coupled_D_tcp_30 = 0
+coupled_D_tcp_31 = -2.38045029
+coupled_D_tcp_32 = -13.035306
+coupled_D_tcp_33 = 13.4650495
+coupled_D_tcp_34 = -1.62518659
+coupled_D_tcp_35 = 0.296784434
+coupled_D_tcp_40 = 2.38045029
+coupled_D_tcp_41 = 0
+coupled_D_tcp_42 = 6.23378768
+coupled_D_tcp_43 = -1.62518659
+coupled_D_tcp_44 = 10.8437917
+coupled_D_tcp_45 = 0.621466199
+coupled_D_tcp_50 = 26.0706119
+coupled_D_tcp_51 = -12.4675754
+coupled_D_tcp_52 = 0
+coupled_D_tcp_53 = 0.296784434
+coupled_D_tcp_54 = 0.621466199
+coupled_D_tcp_55 = 18.3512484

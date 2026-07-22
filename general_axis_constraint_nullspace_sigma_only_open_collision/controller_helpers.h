@@ -2,12 +2,16 @@
 
 #include "controller_types.h"
 
+// ====================================================================
+// Parameter-file write-back
+// ====================================================================
+
 std::string trimWhitespace(const std::string& input);
 
-// Rewrites specific "key = value" lines of a parameters file in place,
-// preserving every other line (comments, formatting, unrelated keys)
-// exactly as-is. Used to auto-update desired_axis_* with the just-measured
-// best axis when consecutive runs share the same post-contact gains.
+// Rewrites specific "key = value" lines of a parameter file in place, keeping
+// every other line (comments, formatting, unrelated keys) exactly as-is. Only
+// keys already present in the file are rewritten. Used to save the measured
+// coupled K_TCP/D_TCP back into params/sequence.txt after a run.
 void updateParameterValues(
     const std::string& filename,
     const std::vector<std::pair<std::string, std::string>>& updates);
@@ -17,18 +21,34 @@ void appendMat6ParameterUpdates(
     const std::string& prefix,
     const Mat6x6& matrix);
 
+// ====================================================================
+// Small numeric helpers
+// ====================================================================
+
 Array7 vec7ToArray(const Vec7& v);
 
+Array7 filledArray7(double value);
+
+Array6 filledArray6(double value);
+
 double smallestSingularValue(const Mat6x7& J);
+
+Vec3 normalizedOrFallback(const Vec3& v, const Vec3& fallback);
+
+Mat3 skewMatrix(const Vec3& v);
+
+// ====================================================================
+// Trajectory primitives
+// ====================================================================
 
 double smoothStep(double r);
 
 double smoothStepDerivative(double r, double T);
 
-// Side-to-side sweep offset built from the smoothStep trajectory primitive:
-// scalar position s [m] and velocity s_dot [m/s] of a ping-pong between -A and
-// +A, each stroke lasting stroke_duration [s]. Starts at center (s=0) and eases
-// with zero velocity at every reversal. Used by the grind hold.
+// Side-to-side sweep built from smoothStep: scalar position s [m] and velocity
+// s_dot [m/s] of a ping-pong between -A and +A, each stroke lasting
+// stroke_duration [s]. Starts centered (s = 0) and has zero velocity at every
+// reversal. Used by the grind phase.
 void grindSweep(double t, double amplitude, double stroke_duration,
                 double& s, double& s_dot);
 
@@ -36,41 +56,31 @@ void grindSweep(double t, double amplitude, double stroke_duration,
 // from grind_frequency_hz. Returns 0 (no sweep) when the frequency is 0.
 double grindStrokeDuration(const Parameters& params);
 
-double postContactPush(const Parameters& params, double post_align_time);
-double postContactPush(
-    const Parameters& params,
-    double post_align_time,
-    double start_push);
+// Position preload pressed into the plane during set up, ramped from
+// start_push at setup_push_speed and clamped at setup_max_push.
+double setUpPush(const Parameters& params, double phase_time, double start_push);
 
-bool computeInstantaneousPoleFromTcp(
-    const Vec3& v,
-    const Vec3& omega,
-    Vec3* pole_from_tcp);
+// ====================================================================
+// Screw-axis geometry
+// ====================================================================
 
-double instantaneousScrewPitch(const Vec3& v, const Vec3& omega);
-
-double pointDistanceToAxis(
-    const Vec3& point,
-    const Vec3& axis_point,
-    const Vec3& axis_direction);
-
-// The point on the line through axis_point (direction axis_direction)
-// closest to "point": project (point - axis_point) onto the unit axis
-// direction, then step that far along the axis from axis_point.
+// The point on the line through axis_point (direction axis_direction) closest
+// to "point": project (point - axis_point) onto the unit axis direction, then
+// step that far along the axis from axis_point.
 Vec3 nearestPointOnAxis(
     const Vec3& point,
     const Vec3& axis_point,
     const Vec3& axis_direction);
 
 // The single screw axis (Chasles' theorem) that exactly describes a finite
-// rigid-body displacement between two poses of the same body-fixed
-// reference point -- as opposed to an instantaneous pole from one cycle's
-// velocity, which only describes the motion at that instant and is
-// sensitive to per-cycle velocity noise. This depends only on the start and
-// end configuration of the whole motion, so it is the rigorous version of
-// "one axis that describes the whole motion even though it changes":
-// rotating by angle about axis_dir through axis_point, then translating by
-// pitch*angle along axis_dir, taking p_start/R_start exactly to p_end/R_end.
+// rigid-body displacement between two poses of the same body-fixed point:
+// rotating by "angle" about axis_dir through the axis point, then translating
+// by pitch*angle along axis_dir, takes p_start/R_start to p_end/R_end.
+//
+// This depends only on the start and end configuration of the whole motion, so
+// unlike an instantaneous pole taken from one cycle's velocity it is not
+// sensitive to per-cycle velocity noise. It is the pole the set-up report uses
+// to build the coupled stiffness.
 struct FiniteScrewAxis {
   Vec3 axis_point_from_start = Vec3::Zero();
   Vec3 axis_dir = Vec3::Zero();
@@ -85,154 +95,65 @@ FiniteScrewAxis computeFiniteScrewAxis(
     const Vec3& p_end,
     const Mat3& R_end);
 
-double suggestedPositiveGain(
-    double wrench_component,
-    double motion_component,
-    double min_gain,
-    double max_gain);
+// ====================================================================
+// Spatial (6x6) gains
+// ====================================================================
 
-Vec3 suggestedPositiveGains(
-    const Vec3& wrench,
-    const Vec3& motion,
-    double min_gain,
-    double max_gain);
+Mat6x6 blockDiagonal(const Mat3& translational, const Mat3& rotational);
 
-// Running sums for an ordinary-least-squares fit of wrench = K*x + D*v over
-// many samples collected while a phase runs, instead of reading K and D off
-// a single (wrench, x, v) snapshot. A single sample can only ever produce a
-// residual of exactly zero for the gain it was fit from, which is why a
-// one-shot fit cannot identify damping; many samples taken at different
-// points in the transient can.
-struct LinearFitAccumulator {
-  Vec3 Sxx = Vec3::Zero();
-  Vec3 Sxv = Vec3::Zero();
-  Vec3 Svv = Vec3::Zero();
-  Vec3 Sxf = Vec3::Zero();
-  Vec3 Svf = Vec3::Zero();
-  long sample_count = 0;
-
-  void addSample(const Vec3& x, const Vec3& v, const Vec3& f) {
-    Sxx += x.cwiseProduct(x);
-    Sxv += x.cwiseProduct(v);
-    Svv += v.cwiseProduct(v);
-    Sxf += x.cwiseProduct(f);
-    Svf += v.cwiseProduct(f);
-    ++sample_count;
-  }
-};
-
-// Solves the per-axis 2x2 normal equations for K (paired with x) and D
-// (paired with v). x and v must vary independently over the sampled window
-// for K and D to be separable: if x(t) and v(t) are proportional throughout
-// (e.g. a single free decay mode, as in a passively settling rotation with
-// no forced excitation), the system is singular and K/D cannot be told
-// apart from this data at all, no matter how many samples are collected.
-// min_r_squared gates on exactly that: it is 1 - (correlation between x and
-// v)^2, so it is ~0 when x and v are nearly collinear.
-void fitStiffnessDamping(
-    const LinearFitAccumulator& fit,
-    double min_r_squared,
-    Vec3* K,
-    Vec3* D,
-    bool valid[3]);
-
-struct DiagonalGainSet {
-  Vec3 Kp = Vec3::Zero();
-  Vec3 Dp = Vec3::Zero();
-  Vec3 KR = Vec3::Zero();
-  Vec3 DR = Vec3::Zero();
-};
-
-double clampedLimitGain(double numerator,
-                        double denominator,
-                        double min_gain,
-                        double max_gain);
-
-Vec3 stiffnessFromLimits(const Vec3& max_wrench,
-                         const Vec3& max_motion,
-                         double min_gain,
-                         double max_gain);
-
-Vec3 criticalDampingFromStiffness(const Vec3& inertia,
-                                  const Vec3& stiffness,
-                                  double damping_ratio,
-                                  double max_gain);
-
-DiagonalGainSet computeQuasiStaticGains(const Parameters& params,
-                                        const Vec3& translational_inertia,
-                                        const Vec3& rotational_inertia);
-
-DiagonalGainSet computeQuasiStaticGains(const Parameters& params);
-
-Mat3 skewMatrix(const Vec3& v);
-
-Mat6x6 blockDiagonalGain(const Vec3& translational, const Vec3& rotational);
-
+// Ad(r_c) = [[I, skew(r_c)], [0, I]]: maps a twist at the pole to the twist at
+// a point offset by r_c.
 Mat6x6 offsetAdjoint(const Vec3& r_c);
 
+// Moves a spring defined at a pole out to a point offset by r_c:
+// K_offset = Ad(r_c)^T * K_pole * Ad(r_c). The congruence preserves symmetry
+// and positive semi-definiteness, so the result is still a valid spring.
 Mat6x6 adjointTransformedGain(const Mat6x6& pole_gain, const Vec3& r_c);
+
+Mat6x6 blockDiagonalRotation(const Mat3& R);
+
+Mat3 makeSpatialGainMatrix(const Vec3& diagonal_in_task_frame, const Mat3& R_task);
+
+// ====================================================================
+// Task-space inertia and auto-damping
+// ====================================================================
 
 struct CartesianInertiaEstimate {
   Vec3 translational = Vec3::Ones();
   Vec3 rotational = Vec3::Ones();
-  Mat6x6 Lambda_task = Mat6x6::Zero();
   bool valid = false;
 };
 
-Mat6x6 blockDiagonalRotation(const Mat3& R);
-
+// Diagonal of the libfranka task-space inertia Lambda = (J M^-1 J^T)^-1,
+// expressed in the task frame R_task. Invalid near a kinematic singularity or
+// if the result comes out non-finite / non-positive.
 CartesianInertiaEstimate computeCartesianInertiaEstimate(
     const Mat7x7& joint_mass,
     const Mat6x7& J,
     const Mat3& R_task);
 
-struct EffectiveMomentFitAccumulator {
-  Mat12x12 H = Mat12x12::Zero();
-  Mat12x3 B = Mat12x3::Zero();
-  double y_squared_sum = 0.0;
-  long sample_count = 0;
+// D = 2 * damping_ratio * sqrt(M * K) per axis, held within
+// [min_damping_per_axis, max_damping].
+//
+// The floor matters on very soft axes: with a stiffness near zero the formula
+// also returns near zero, which leaves that axis almost undamped. Passing the
+// manual gains as the floor turns them from a pure fallback into a lower bound.
+// Pass Vec3::Zero() for no floor.
+Vec3 criticalDampingFromStiffness(const Vec3& inertia,
+                                  const Vec3& stiffness,
+                                  double damping_ratio,
+                                  const Vec3& min_damping,
+                                  double max_damping);
 
-  void addSample(const Vec3& contact_displacement,
-                 const Vec3& contact_velocity,
-                 const Vec3& rotation_displacement,
-                 const Vec3& angular_velocity,
-                 const Vec3& contact_moment) {
-    Vec12 phi;
-    phi << contact_displacement, contact_velocity, rotation_displacement, angular_velocity;
-    H.noalias() += phi * phi.transpose();
-    B.noalias() += phi * contact_moment.transpose();
-    y_squared_sum += contact_moment.squaredNorm();
-    ++sample_count;
-  }
-};
-
-struct EffectiveMomentFit {
-  Mat3 K_rt = Mat3::Zero();
-  Mat3 D_rt = Mat3::Zero();
-  Mat3 K_R = Mat3::Zero();
-  Mat3 D_R = Mat3::Zero();
-  double rms_error = 0.0;
-  long sample_count = 0;
-  bool valid = false;
-};
-
-EffectiveMomentFit fitEffectiveMomentModel(
-    const EffectiveMomentFitAccumulator& fit,
-    double ridge);
-
-Vec3 desiredAxisLinearMotionFromTcp(
-    const Vec3& axis_from_tcp,
-    const Vec3& axis_dir,
-    double pitch);
+// ====================================================================
+// Task frames and orientation
+// ====================================================================
 
 Vec3 orientationError(const Mat3& R_current, const Mat3& R_desired);
 
-Array7 filledArray7(double value);
-
-Array6 filledArray6(double value);
-
-Vec3 normalizedOrFallback(const Vec3& v, const Vec3& fallback);
-
+// Builds an orthonormal frame with columns [tangent1, tangent2, normal]. Every
+// surface-frame gain diagonal and .col() access in the controller follows that
+// order.
 Mat3 makeSurfaceFrameFromNormalTangent(const Vec3& normal_input, const Vec3& tangent1_input);
 
 Mat3 makeAlignmentTargetFrame(const Parameters& params);
@@ -248,7 +169,13 @@ Mat3 makeToolOrientationForAlignmentTarget(
     const Mat3& R_alignment_target,
     const Mat3& R_start);
 
-Mat3 makeSpatialGainMatrix(const Vec3& diagonal_in_task_frame, const Mat3& R_task);
+// Zeroes the rotational error components whose constrain_rotation_* flag is
+// off, in the alignment-target frame.
+Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_alignment_target);
+
+// ====================================================================
+// Robot interaction
+// ====================================================================
 
 void startKeyboardStopThread(
     const Parameters& params,
@@ -259,16 +186,6 @@ void startKeyboardStopThread(
     std::atomic<bool>& gate_continue);
 
 void configureCollisionBehavior(Robot& robot, const Parameters& params);
-
-DesiredMotion computeDesiredMotion(
-    const Parameters& params,
-    double time,
-    const Vec3& p_start,
-    const Vec3& p_EE,
-    const Mat3& R_position_surface,
-    const Vec3& plane_point);
-
-Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_alignment_target);
 
 Vec7 computeNullspaceTorque(
     const Parameters& params,

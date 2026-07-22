@@ -1,5 +1,9 @@
 #include "controller_helpers.h"
 
+// ====================================================================
+// Parameter-file write-back
+// ====================================================================
+
 std::string trimWhitespace(const std::string& input) {
   const std::string whitespace = " \t\r\n";
   const auto begin = input.find_first_not_of(whitespace);
@@ -10,10 +14,6 @@ std::string trimWhitespace(const std::string& input) {
   return input.substr(begin, end - begin + 1);
 }
 
-// Rewrites specific "key = value" lines of a parameters file in place,
-// preserving every other line (comments, formatting, unrelated keys)
-// exactly as-is. Used to auto-update desired_axis_* with the just-measured
-// best axis when consecutive runs share the same post-contact gains.
 void updateParameterValues(
     const std::string& filename,
     const std::vector<std::pair<std::string, std::string>>& updates) {
@@ -69,6 +69,10 @@ void appendMat6ParameterUpdates(
   }
 }
 
+// ====================================================================
+// Small numeric helpers
+// ====================================================================
+
 Array7 vec7ToArray(const Vec7& v) {
   Array7 array{};
   for (int i = 0; i < 7; ++i) {
@@ -77,10 +81,41 @@ Array7 vec7ToArray(const Vec7& v) {
   return array;
 }
 
+Array7 filledArray7(double value) {
+  Array7 array{};
+  array.fill(value);
+  return array;
+}
+
+Array6 filledArray6(double value) {
+  Array6 array{};
+  array.fill(value);
+  return array;
+}
+
 double smallestSingularValue(const Mat6x7& J) {
   Eigen::JacobiSVD<Mat6x7> svd(J, Eigen::ComputeFullU | Eigen::ComputeFullV);
   return svd.singularValues().minCoeff();
 }
+
+Vec3 normalizedOrFallback(const Vec3& v, const Vec3& fallback) {
+  if (v.norm() > 1e-9) {
+    return v.normalized();
+  }
+  return fallback.normalized();
+}
+
+Mat3 skewMatrix(const Vec3& v) {
+  Mat3 s;
+  s << 0.0, -v(2), v(1),
+       v(2), 0.0, -v(0),
+       -v(1), v(0), 0.0;
+  return s;
+}
+
+// ====================================================================
+// Trajectory primitives
+// ====================================================================
 
 double smoothStep(double r) {
   r = std::max(0.0, std::min(1.0, r));
@@ -107,9 +142,9 @@ void grindSweep(double t, double amplitude, double stroke_duration,
     s_dot = 0.0;
     return;
   }
-  // Reuse the delta_p trajectory's smoothStep shaping per stroke. Endpoints in
-  // units of amplitude: stroke 0 goes center -> +A, then ping-pong +A <-> -A.
-  // smoothStep gives zero velocity at both ends, so reversals are smooth.
+  // Endpoints in units of amplitude: stroke 0 goes center -> +A, then ping-pong
+  // +A <-> -A. smoothStep gives zero velocity at both ends of every stroke, so
+  // the reversals are smooth.
   const double tau = std::max(0.0, t) / stroke_duration;
   const int k = static_cast<int>(std::floor(tau));
   const double r = tau - std::floor(tau);
@@ -127,59 +162,18 @@ double grindStrokeDuration(const Parameters& params) {
   return (params.grind_frequency_hz > 1e-9) ? (0.5 / params.grind_frequency_hz) : 0.0;
 }
 
-double postContactPush(const Parameters& params, double post_align_time) {
-  return postContactPush(params, post_align_time, params.post_contact_normal_push);
-}
-
-double postContactPush(
-    const Parameters& params,
-    double post_align_time,
-    double start_push) {
-  double push = start_push + params.post_contact_push_speed * post_align_time;
-  if (params.post_contact_max_push > 0.0) {
-    push = std::min(params.post_contact_max_push, push);
+double setUpPush(const Parameters& params, double phase_time, double start_push) {
+  double push = start_push + params.setup_push_speed * phase_time;
+  if (params.setup_max_push > 0.0) {
+    push = std::min(params.setup_max_push, push);
   }
   return push;
 }
 
-bool computeInstantaneousPoleFromTcp(
-    const Vec3& v,
-    const Vec3& omega,
-    Vec3* pole_from_tcp) {
-  const double omega_norm_squared = omega.squaredNorm();
-  constexpr double kMinUsefulAngularSpeed = 0.02;
-  if (omega_norm_squared <= kMinUsefulAngularSpeed * kMinUsefulAngularSpeed) {
-    pole_from_tcp->setZero();
-    return false;
-  }
+// ====================================================================
+// Screw-axis geometry
+// ====================================================================
 
-  *pole_from_tcp = omega.cross(v) / omega_norm_squared;
-  return true;
-}
-
-double instantaneousScrewPitch(const Vec3& v, const Vec3& omega) {
-  const double omega_norm_squared = omega.squaredNorm();
-  if (omega_norm_squared <= 1e-8) {
-    return 0.0;
-  }
-  return omega.dot(v) / omega_norm_squared;
-}
-
-double pointDistanceToAxis(
-    const Vec3& point,
-    const Vec3& axis_point,
-    const Vec3& axis_direction) {
-  const double axis_norm = axis_direction.norm();
-  if (axis_norm <= 1e-8) {
-    return 0.0;
-  }
-
-  return (point - axis_point).cross(axis_direction / axis_norm).norm();
-}
-
-// The point on the line through axis_point (direction axis_direction)
-// closest to "point": project (point - axis_point) onto the unit axis
-// direction, then step that far along the axis from axis_point.
 Vec3 nearestPointOnAxis(
     const Vec3& point,
     const Vec3& axis_point,
@@ -205,9 +199,9 @@ FiniteScrewAxis computeFiniteScrewAxis(
   const Eigen::AngleAxisd angle_axis(R_rel);
   const double theta = angle_axis.angle();
   result.angle = theta;
-  // Below this angle the net rotation is too small to fix an axis location;
-  // the displacement is dominated by translation, not rotation, and the
-  // formula below divides by sin(theta/2).
+  // Below this angle the net rotation is too small to fix an axis location: the
+  // displacement is dominated by translation, and the formula below divides by
+  // sin(theta/2).
   constexpr double kMinUsefulAngle = 1e-3;
   if (theta < kMinUsefulAngle) {
     return result;
@@ -227,138 +221,14 @@ FiniteScrewAxis computeFiniteScrewAxis(
   return result;
 }
 
-double suggestedPositiveGain(
-    double wrench_component,
-    double motion_component,
-    double min_gain,
-    double max_gain) {
-  const double min_motion = 1e-6;
-  double gain = max_gain;
-  if (std::abs(motion_component) > min_motion) {
-    gain = std::abs(wrench_component / motion_component);
-  }
-  return std::max(min_gain, std::min(max_gain, gain));
-}
+// ====================================================================
+// Spatial (6x6) gains
+// ====================================================================
 
-Vec3 suggestedPositiveGains(
-    const Vec3& wrench,
-    const Vec3& motion,
-    double min_gain,
-    double max_gain) {
-  return Vec3(
-      suggestedPositiveGain(wrench(0), motion(0), min_gain, max_gain),
-      suggestedPositiveGain(wrench(1), motion(1), min_gain, max_gain),
-      suggestedPositiveGain(wrench(2), motion(2), min_gain, max_gain));
-}
-
-// Solves the per-axis 2x2 normal equations for K (paired with x) and D
-// (paired with v). x and v must vary independently over the sampled window
-// for K and D to be separable: if x(t) and v(t) are proportional throughout
-// (e.g. a single free decay mode, as in a passively settling rotation with
-// no forced excitation), the system is singular and K/D cannot be told
-// apart from this data at all, no matter how many samples are collected.
-// min_r_squared gates on exactly that: it is 1 - (correlation between x and
-// v)^2, so it is ~0 when x and v are nearly collinear.
-void fitStiffnessDamping(
-    const LinearFitAccumulator& fit,
-    double min_r_squared,
-    Vec3* K,
-    Vec3* D,
-    bool valid[3]) {
-  for (int i = 0; i < 3; ++i) {
-    const double Sxx = fit.Sxx(i);
-    const double Sxv = fit.Sxv(i);
-    const double Svv = fit.Svv(i);
-    const double scale = Sxx * Svv;
-    const double det = scale - Sxv * Sxv;
-    if (scale <= 1e-18 || det / scale < min_r_squared) {
-      (*K)(i) = 0.0;
-      (*D)(i) = 0.0;
-      valid[i] = false;
-      continue;
-    }
-    (*K)(i) = (fit.Sxf(i) * Svv - fit.Svf(i) * Sxv) / det;
-    (*D)(i) = (Sxx * fit.Svf(i) - Sxv * fit.Sxf(i)) / det;
-    valid[i] = true;
-  }
-}
-
-double clampedLimitGain(double numerator,
-                        double denominator,
-                        double min_gain,
-                        double max_gain) {
-  if (std::abs(denominator) <= 1e-12) {
-    return max_gain;
-  }
-  const double gain = std::abs(numerator) / std::abs(denominator);
-  return std::max(min_gain, std::min(max_gain, gain));
-}
-
-Vec3 stiffnessFromLimits(const Vec3& max_wrench,
-                         const Vec3& max_motion,
-                         double min_gain,
-                         double max_gain) {
-  Vec3 stiffness = Vec3::Zero();
-  for (int i = 0; i < 3; ++i) {
-    stiffness(i) = clampedLimitGain(max_wrench(i), max_motion(i), min_gain, max_gain);
-  }
-  return stiffness;
-}
-
-Vec3 criticalDampingFromStiffness(const Vec3& inertia,
-                                  const Vec3& stiffness,
-                                  double damping_ratio,
-                                  double max_gain) {
-  Vec3 damping = Vec3::Zero();
-  const double zeta = std::max(0.0, damping_ratio);
-  for (int i = 0; i < 3; ++i) {
-    const double m = std::max(0.0, inertia(i));
-    const double k = std::max(0.0, stiffness(i));
-    damping(i) = std::min(max_gain, 2.0 * zeta * std::sqrt(m * k));
-  }
-  return damping;
-}
-
-DiagonalGainSet computeQuasiStaticGains(const Parameters& params,
-                                        const Vec3& translational_inertia,
-                                        const Vec3& rotational_inertia) {
-  DiagonalGainSet gains;
-  gains.Kp = stiffnessFromLimits(params.quasi_force_limit,
-                                 params.quasi_displacement_limit,
-                                 params.suggested_gain_min,
-                                 params.suggested_gain_max);
-  gains.KR = stiffnessFromLimits(params.quasi_moment_limit,
-                                 params.quasi_angle_limit,
-                                 params.suggested_gain_min,
-                                 params.suggested_gain_max);
-  gains.Dp = criticalDampingFromStiffness(translational_inertia,
-                                         gains.Kp,
-                                         params.quasi_damping_ratio,
-                                         params.suggested_gain_max);
-  gains.DR = criticalDampingFromStiffness(rotational_inertia,
-                                         gains.KR,
-                                         params.quasi_damping_ratio,
-                                         params.suggested_gain_max);
-  return gains;
-}
-
-DiagonalGainSet computeQuasiStaticGains(const Parameters& params) {
-  return computeQuasiStaticGains(
-      params, params.quasi_effective_mass, params.quasi_effective_inertia);
-}
-
-Mat3 skewMatrix(const Vec3& v) {
-  Mat3 s;
-  s << 0.0, -v(2), v(1),
-       v(2), 0.0, -v(0),
-       -v(1), v(0), 0.0;
-  return s;
-}
-
-Mat6x6 blockDiagonalGain(const Vec3& translational, const Vec3& rotational) {
+Mat6x6 blockDiagonal(const Mat3& translational, const Mat3& rotational) {
   Mat6x6 gain = Mat6x6::Zero();
-  gain.block<3, 3>(0, 0) = translational.asDiagonal();
-  gain.block<3, 3>(3, 3) = rotational.asDiagonal();
+  gain.block<3, 3>(0, 0) = translational;
+  gain.block<3, 3>(3, 3) = rotational;
   return gain;
 }
 
@@ -381,6 +251,14 @@ Mat6x6 blockDiagonalRotation(const Mat3& R) {
   T.block<3, 3>(3, 3) = R;
   return T;
 }
+
+Mat3 makeSpatialGainMatrix(const Vec3& diagonal_in_task_frame, const Mat3& R_task) {
+  return R_task * diagonal_in_task_frame.asDiagonal() * R_task.transpose();
+}
+
+// ====================================================================
+// Task-space inertia and auto-damping
+// ====================================================================
 
 CartesianInertiaEstimate computeCartesianInertiaEstimate(
     const Mat7x7& joint_mass,
@@ -418,15 +296,15 @@ CartesianInertiaEstimate computeCartesianInertiaEstimate(
   Lambda_base = 0.5 * (Lambda_base + Lambda_base.transpose());
 
   const Mat6x6 T_task = blockDiagonalRotation(R_task);
-  result.Lambda_task = T_task.transpose() * Lambda_base * T_task;
-  result.Lambda_task = 0.5 * (result.Lambda_task + result.Lambda_task.transpose());
-  if (!result.Lambda_task.allFinite()) {
+  Mat6x6 Lambda_task = T_task.transpose() * Lambda_base * T_task;
+  Lambda_task = 0.5 * (Lambda_task + Lambda_task.transpose());
+  if (!Lambda_task.allFinite()) {
     return result;
   }
 
   for (int i = 0; i < 3; ++i) {
-    const double m = result.Lambda_task(i, i);
-    const double I = result.Lambda_task(i + 3, i + 3);
+    const double m = Lambda_task(i, i);
+    const double I = Lambda_task(i + 3, i + 3);
     if (m <= 0.0 || I <= 0.0) {
       return result;
     }
@@ -437,49 +315,25 @@ CartesianInertiaEstimate computeCartesianInertiaEstimate(
   return result;
 }
 
-EffectiveMomentFit fitEffectiveMomentModel(
-    const EffectiveMomentFitAccumulator& fit,
-    double ridge) {
-  EffectiveMomentFit result;
-  result.sample_count = fit.sample_count;
-  if (fit.sample_count < 12) {
-    return result;
+Vec3 criticalDampingFromStiffness(const Vec3& inertia,
+                                  const Vec3& stiffness,
+                                  double damping_ratio,
+                                  const Vec3& min_damping,
+                                  double max_damping) {
+  Vec3 damping = Vec3::Zero();
+  const double zeta = std::max(0.0, damping_ratio);
+  for (int i = 0; i < 3; ++i) {
+    const double m = std::max(0.0, inertia(i));
+    const double k = std::max(0.0, stiffness(i));
+    const double critical = 2.0 * zeta * std::sqrt(m * k);
+    damping(i) = std::min(max_damping, std::max(std::max(0.0, min_damping(i)), critical));
   }
-
-  Mat12x12 H_damped = fit.H;
-  H_damped.diagonal().array() += std::max(0.0, ridge);
-  Eigen::LDLT<Mat12x12> ldlt(H_damped);
-  if (ldlt.info() != Eigen::Success) {
-    return result;
-  }
-
-  const Mat12x3 x = ldlt.solve(fit.B);
-  if (ldlt.info() != Eigen::Success || !x.allFinite()) {
-    return result;
-  }
-
-  const Mat3x12 A = x.transpose();
-  result.K_rt = A.block<3, 3>(0, 0);
-  result.D_rt = A.block<3, 3>(0, 3);
-  result.K_R = A.block<3, 3>(0, 6);
-  result.D_R = A.block<3, 3>(0, 9);
-
-  const double cross_term = (x.transpose() * fit.B).trace();
-  const double model_term = (x.transpose() * fit.H * x).trace();
-  const double sse = std::max(0.0, fit.y_squared_sum - 2.0 * cross_term + model_term);
-  result.rms_error = std::sqrt(sse / static_cast<double>(fit.sample_count));
-  result.valid = true;
-  return result;
+  return damping;
 }
 
-Vec3 desiredAxisLinearMotionFromTcp(
-    const Vec3& axis_from_tcp,
-    const Vec3& axis_dir,
-    double pitch) {
-  const Vec3 axis_unit =
-      (axis_dir.norm() > 1e-9) ? axis_dir.normalized() : Vec3(1.0, 0.0, 0.0);
-  return -axis_unit.cross(axis_from_tcp) + pitch * axis_unit;
-}
+// ====================================================================
+// Task frames and orientation
+// ====================================================================
 
 Vec3 orientationError(const Mat3& R_current, const Mat3& R_desired) {
   Mat3 R_error = R_current.transpose() * R_desired;
@@ -489,25 +343,6 @@ Vec3 orientationError(const Mat3& R_current, const Mat3& R_desired) {
     return Vec3::Zero();
   }
   return R_current * angle_axis.axis() * angle_axis.angle();
-}
-
-Array7 filledArray7(double value) {
-  Array7 array{};
-  array.fill(value);
-  return array;
-}
-
-Array6 filledArray6(double value) {
-  Array6 array{};
-  array.fill(value);
-  return array;
-}
-
-Vec3 normalizedOrFallback(const Vec3& v, const Vec3& fallback) {
-  if (v.norm() > 1e-9) {
-    return v.normalized();
-  }
-  return fallback.normalized();
 }
 
 Mat3 makeSurfaceFrameFromNormalTangent(const Vec3& normal_input, const Vec3& tangent1_input) {
@@ -526,8 +361,6 @@ Mat3 makeSurfaceFrameFromNormalTangent(const Vec3& normal_input, const Vec3& tan
   Vec3 tangent2 = normal.cross(tangent1);
   tangent2.normalize();
 
-  // Column order is [tangent1, tangent2, normal] (normal is the 3rd/z axis).
-  // All surface-frame gain diagonals and .col() accesses follow this order.
   Mat3 R_alignment_target;
   R_alignment_target.col(0) = tangent1;
   R_alignment_target.col(1) = tangent2;
@@ -536,7 +369,8 @@ Mat3 makeSurfaceFrameFromNormalTangent(const Vec3& normal_input, const Vec3& tan
 }
 
 Mat3 makeAlignmentTargetFrame(const Parameters& params) {
-  return makeSurfaceFrameFromNormalTangent(params.alignment_target_normal, params.alignment_target_tangent1);
+  return makeSurfaceFrameFromNormalTangent(params.alignment_target_normal,
+                                           params.alignment_target_tangent1);
 }
 
 Mat3 rotationBetweenUnitVectors(const Vec3& from_unit, const Vec3& to_unit) {
@@ -577,14 +411,31 @@ Mat3 makeToolOrientationForAlignmentTarget(
   const Vec3 tool_axis_target =
       desiredToolAxisInBase(params, R_alignment_target).normalized();
 
-  // Rotate the current physical tool axis onto +-alignment_target_normal while keeping
-  // the remaining orientation twist as close as possible to the start pose.
+  // Rotate the current physical tool axis onto +-alignment_target_normal while
+  // keeping the remaining orientation twist as close as possible to the start.
   return rotationBetweenUnitVectors(tool_axis_start, tool_axis_target) * R_start;
 }
 
-Mat3 makeSpatialGainMatrix(const Vec3& diagonal_in_task_frame, const Mat3& R_task) {
-  return R_task * diagonal_in_task_frame.asDiagonal() * R_task.transpose();
+Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_alignment_target) {
+  if (!params.constraint_enabled) {
+    return e_R;
+  }
+
+  // e_R_task components follow R's column order [tangent1, tangent2, normal].
+  Vec3 e_R_task = R_alignment_target.transpose() * e_R;
+  e_R_task(0) =
+      params.constrain_rotation_about_alignment_tangent1 ? e_R_task(0) : 0.0;
+  e_R_task(1) =
+      params.constrain_rotation_about_alignment_tangent2 ? e_R_task(1) : 0.0;
+  e_R_task(2) =
+      params.constrain_rotation_about_alignment_normal ? e_R_task(2) : 0.0;
+
+  return R_alignment_target * e_R_task;
 }
+
+// ====================================================================
+// Robot interaction
+// ====================================================================
 
 void startKeyboardStopThread(
     const Parameters& params,
@@ -593,13 +444,13 @@ void startKeyboardStopThread(
     std::atomic<bool>& guide_requested,
     std::atomic<char>& guidance_menu_key,
     std::atomic<bool>& gate_continue) {
-  printf("Press e+Enter to stop the Control algorithm before the remaining duration expires.\n");
+  printf("Press e+Enter to stop the controller before the duration expires.\n");
   if (params.use_manual_guidance_start) {
     printf("Press p+Enter to leave manual guidance and start the phase sequence.\n");
   }
-  printf("During surface_impedance: press g+Enter to hand-guide the tool, then p+Enter to restart the sequence.\n");
+  printf("During hold: press g+Enter to hand-guide the tool, then p+Enter to restart the sequence.\n");
   if (params.experiment_duration <= 0.0) {
-    printf("experiment_duration <= 0: the Control algorithm is running indefinitely until e + Enter.\n");
+    printf("experiment_duration <= 0: running indefinitely until e + Enter.\n");
   }
 
   std::thread keyboard_thread([&stop_requested, &proceed_requested,
@@ -608,7 +459,7 @@ void startKeyboardStopThread(
     std::string line;
     while (std::getline(std::cin, line)) {
       if (line.empty()) {
-        // Bare Enter = continue past a phase-sequence gate.
+        // Bare Enter = continue past a phase gate.
         gate_continue.store(true);
       } else if (line == "e" || line == "E") {
         stop_requested.store(true);
@@ -657,63 +508,6 @@ void configureCollisionBehavior(Robot& robot, const Parameters& params) {
       collision_force_nom);
 }
 
-DesiredMotion computeDesiredMotion(
-    const Parameters& params,
-    double time,
-    const Vec3& p_start,
-    const Vec3& p_EE,
-    const Mat3& R_position_surface,
-    const Vec3& plane_point) {
-  DesiredMotion desired{p_start, Vec3::Zero()};
-
-  if (!params.hold_mode) {
-    const double r = time / params.trajectory_duration;
-    const double s = smoothStep(r);
-    const double s_dot = smoothStepDerivative(r, params.trajectory_duration);
-    desired.p_d = p_start + s * params.delta_p;
-    desired.pdot_d = s_dot * params.delta_p;
-  }
-
-  const bool startup_hold =
-      params.hold_mode && !params.use_phase_sequence && !params.use_contact_search;
-  if (startup_hold) {
-    return desired;
-  }
-
-  if (params.constraint_enabled) {
-    const Vec3 normal = R_position_surface.col(2);  // normal = 3rd column
-
-    // Plane constraint for any surface orientation:
-    //
-    //   signed_distance [m] = n^T * (p_plane - p_EE)
-    //   p_d [m]            = p_EE + signed_distance * n
-    //
-    // The same surface-frame mode covers axis-aligned and inclined planes.
-    const double signed_distance = normal.dot(plane_point - p_EE);
-    desired.p_d = p_EE + signed_distance * normal;
-    desired.pdot_d.setZero();
-  }
-
-  return desired;
-}
-
-Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_alignment_target) {
-  if (!params.constraint_enabled) {
-    return e_R;
-  }
-
-  // e_R_task components follow R's column order [tangent1, tangent2, normal].
-  Vec3 e_R_task = R_alignment_target.transpose() * e_R;
-  e_R_task(0) =
-      params.constrain_rotation_about_alignment_tangent1 ? e_R_task(0) : 0.0;
-  e_R_task(1) =
-      params.constrain_rotation_about_alignment_tangent2 ? e_R_task(1) : 0.0;
-  e_R_task(2) =
-      params.constrain_rotation_about_alignment_normal ? e_R_task(2) : 0.0;
-
-  return R_alignment_target * e_R_task;
-}
-
 Vec7 computeNullspaceTorque(
     const Parameters& params,
     const Model& model,
@@ -723,42 +517,27 @@ Vec7 computeNullspaceTorque(
     const Vec7& q_start) {
   Vec7 tau_nullspace = Vec7::Zero();
 
-  // If nullspace optimization is disabled, return zero nullspace torque.
   if (!params.use_nullspace_optimization ||
       params.nullspace_mode == NullspaceMode::kOff) {
     return tau_nullspace;
   }
-  // else, compute the nullspace torque to optimize the smallest singular value of the Jacobian.
-  // Map the current joint positions to a 7 elements vector.
+
   Map<const Vec7> q_current(state.q.data());
 
-  // Identity matrices for the pseudo-inverse calculation:
   const Mat7x7 I7 = Mat7x7::Identity();
   const Mat6x6 I6 = Mat6x6::Identity();
-  // Damping factor for the pseudo-inverse to improve numerical stability near singularities.
+  // Damping factor for the pseudo-inverse, for stability near singularities.
   const double lambda = 0.05;
-  // Damped pseudo-inverse of the Jacobian: JJt_damped = J*J^T + lambda^2 I in units of [m^2/s^2] or [rad^2/s^2], depending on the row of J.
   const Mat6x6 JJt_damped = J * J.transpose() + lambda * lambda * I6;
 
-  // Joint nullspace projector:
-  //
-  //   N = I - J^T * (JJt_damped)^(-1) * J
-  //
-  // Units:
-  //   J              maps dq [rad/s] to xdot [m/s, rad/s]
-  //   tau_posture    is joint torque [Nm]
-  //   nullspace term keeps motion from changing the end-effector task.
-  // JJt_damped.ldlt().solve(J) computes (JJt_damped)^(-1) * J in a numerically stable way.
-  // It solves the linear system JJt_damped * X = J for X, which is equivalent to X = (JJt_damped)^(-1) * J,
-  // but more efficient and stable than explicitly computing the inverse of JJt_damped.
+  // Joint nullspace projector N = I - J^T * (J J^T + lambda^2 I)^-1 * J.
+  // Solving the system is more stable than forming the inverse explicitly.
   const Mat7x7 N = I7 - J.transpose() * JJt_damped.ldlt().solve(J);
 
   // Restoring spring in the nullspace:
-  //
   //   tau_return [Nm] = N * (k_start * (q_start - q) - d * dq)
-  //
-  // This prevents the robot from slowly rotating/drifting in the nullspace
-  // when the TCP is moved back and forth at the same Cartesian place.
+  // This keeps the arm from slowly drifting in the nullspace while the TCP is
+  // held at the same Cartesian place.
   if (params.nullspace_mode == NullspaceMode::kPostureOnly ||
       params.nullspace_mode == NullspaceMode::kPostureAndSigma) {
     tau_nullspace =
@@ -769,6 +548,8 @@ Vec7 computeNullspaceTorque(
     return tau_nullspace;
   }
 
+  // Sigma-min term: step along the 1D nullspace direction n of the 6x7
+  // Jacobian in whichever sign increases the smallest singular value.
   Eigen::JacobiSVD<Mat6x7> svd_current(J, Eigen::ComputeFullU | Eigen::ComputeFullV);
   Vec7 n = svd_current.matrixV().col(6);
 
@@ -778,32 +559,19 @@ Vec7 computeNullspaceTorque(
 
   n.normalize();
 
-  const Vec7 q_plus = q_current + params.nullspace_alpha * n;
-  const Vec7 q_minus = q_current - params.nullspace_alpha * n;
-
-  const Array7 q_plus_array = vec7ToArray(q_plus);
-  const Array7 q_minus_array = vec7ToArray(q_minus);
+  const Array7 q_plus_array = vec7ToArray(Vec7(q_current + params.nullspace_alpha * n));
+  const Array7 q_minus_array = vec7ToArray(Vec7(q_current - params.nullspace_alpha * n));
 
   const std::array<double, 42> J_plus_array =
-      model.zeroJacobian(
-          Frame::kEndEffector,
-          q_plus_array,
-          state.F_T_EE,
-          state.EE_T_K);
-
+      model.zeroJacobian(Frame::kEndEffector, q_plus_array, state.F_T_EE, state.EE_T_K);
   const std::array<double, 42> J_minus_array =
-      model.zeroJacobian(
-          Frame::kEndEffector,
-          q_minus_array,
-          state.F_T_EE,
-          state.EE_T_K);
+      model.zeroJacobian(Frame::kEndEffector, q_minus_array, state.F_T_EE, state.EE_T_K);
 
   Map<const Mat6x7> J_plus(J_plus_array.data());
   Map<const Mat6x7> J_minus(J_minus_array.data());
 
-  const double sigma_min_plus = smallestSingularValue(J_plus);
-  const double sigma_min_minus = smallestSingularValue(J_minus);
-  const double sigma_direction = (sigma_min_plus > sigma_min_minus) ? 1.0 : -1.0;
+  const double sigma_direction =
+      (smallestSingularValue(J_plus) > smallestSingularValue(J_minus)) ? 1.0 : -1.0;
 
   const Vec7 tau_sigma =
       N * (params.nullspace_k_sigma * sigma_direction * params.nullspace_alpha * n);

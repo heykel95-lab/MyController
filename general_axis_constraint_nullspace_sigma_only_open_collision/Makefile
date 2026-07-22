@@ -1,4 +1,4 @@
-# Makefile for simplified impedance/compliance test with 6-axis threshold compensation
+# Makefile for the approach / set-up / grind controller.
 # This uses the local working libfranka build:
 # /home/hm-panda/libfranka/build/libfranka.so.0.7
 
@@ -14,14 +14,18 @@ TOOL_OFFSET_SRC := check_tool_offset.cpp
 CONTROLLER_SRCS := controller_helpers.cpp \
                    controller_parameters.cpp \
                    controller_logging.cpp \
-                   controller_printing.cpp
+                   controller_printing.cpp \
+                   controller_report.cpp \
+                   controller_startup.cpp
 
 HEADERS := controller_common.h \
            controller_types.h \
            controller_helpers.h \
            controller_parameters.h \
            controller_logging.h \
-           controller_printing.h
+           controller_printing.h \
+           controller_report.h \
+           controller_startup.h
 
 FRANKA_DIR := /home/hm-panda/libfranka
 EIGEN_INC := /usr/include/eigen3

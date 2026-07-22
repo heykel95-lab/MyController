@@ -1,12 +1,12 @@
 # ====================================================================
 # GUIDANCE (manual hand-guidance start)
 # ====================================================================
-# 1 = after q_init/gripper setup, enter a compliant manual-guidance phase.
-# Move the robot by hand, then press p + Enter (or pick s/h in the guidance
-# menu); the current pose becomes the start pose for the sequence / hold.
-# (The startup menu 'g' choice also turns this on for that run.)
+# 1 = after q_init, enter a compliant hand-guidance phase. Move the robot by
+# hand, then pick s (sequence) or h (hold) from the guidance menu; the current
+# pose becomes the start pose. e+Enter instead stops and prints that pose as a
+# paste-ready q_init case. (The startup menu 'g' choice turns this on too.)
 use_manual_guidance_start = 0
 
-# Joint-space damping [Ns/rad-ish] applied during hand-guidance. Higher = the
-# arm feels heavier/more damped as you move it by hand.
+# Joint-space damping applied during hand-guidance. Higher = the arm feels
+# heavier and more damped as you move it.
 manual_guidance_damping = 0.5
