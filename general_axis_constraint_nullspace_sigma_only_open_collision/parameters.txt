@@ -101,7 +101,7 @@ use_start_as_surface_point = 0
 # tool starts ~z=0.15, i.e. ~50 mm above it, so the down-search reaches it.
 surface_point_x = 0.55
 surface_point_y = -0.06
-surface_point_z = 0.025
+surface_point_z = 0.005
 
 # Surface ORIENTATION (the plane normal). Two ways to set it:
 #   use_alignment_target_tilt_angle = 1 -> compute the normal from two tilt
@@ -142,6 +142,23 @@ auto_select_tool_contact_edge = 1
 tool_contact_point_ee_x = 0.0
 tool_contact_point_ee_y = 0.040
 tool_contact_point_ee_z = 0.0
+
+# --- With-tool contact edge (used ONLY when the gripper is CLOSED on a tool) ---
+# Tool presence is read from the finger width at run start: width <=
+# tool_present_width_threshold -> tool present (use these); open hand -> keep the
+# three tool_contact_point_ee_* above. This tool: length 12 cm along EE x, width
+# 4 cm along EE y, thickness 2 cm along EE z. The 5 deg tilt is about base-y, so
+# the bar tips on a SHORT END edge -> x = half-length = 0.060. z is the depth DOWN
+# the tool axis (+z_ee points into the table) from the taught TCP to the bottom
+# contact face; set it to that distance (~thickness if the TCP sits at the top
+# face, 0 if the TCP is already taught at the bottom face). auto_select picks the
+# +x or -x edge; the z depth is shared by both, only x/y mirror.
+tool_present_contact_point_ee_x = 0.060
+tool_present_contact_point_ee_y = 0.0
+tool_present_contact_point_ee_z = 0.020
+# Finger width [m] below which the hand counts as closed on a tool. Between the
+# grasp width (~0.005) and the open width (~0.080).
+tool_present_width_threshold = 0.040
 
 # ====================================================================
 # Phase sequence overview
@@ -292,7 +309,9 @@ post_contact_best_axis_min_omega = 0.12
 # max_push lifts both force and tau_J toward reflex.
 post_contact_normal_push = 0.250
 post_contact_push_speed = 0.050
-post_contact_max_push = 0.250
+# STAGE 2 bounded press: 0.100 (~35 N max if the table sits at the plane, well
+# under the 240 N limit). Was 0.030 for Stage 1. RESTORE to 0.250 for real work.
+post_contact_max_push = 0.100
 
 # Disable the surface-impedance phase. 1 = when post_contact_align ends (moment
 # threshold or post_contact_align_duration), freeze the preload at its current
@@ -363,6 +382,10 @@ post_contact_auto_damping_factor = 0.8
 post_contact_grind_mode = 1
 print_grind_debug = 0
 
+# 1 = at run start, dump the tool-present decision and the active contact-edge
+# offset / Method-2 pole actually in use. Turn on for a verification run, then 0.
+print_tool_offset_debug = 1
+
 # Sweep path: a smoothStep ping-pong between -A and +A along the chosen surface
 # tangent (same trajectory primitive as the delta_p move). Each stroke eases
 # with zero velocity at the reversals, so no abrupt starts. grind_axis: 1 =
@@ -399,6 +422,14 @@ use_manual_method2_pole = 1
 manual_method2_pole_from_edge_x = 0.0
 manual_method2_pole_from_edge_y = 0.08
 manual_method2_pole_from_edge_z = 0.0
+# With-tool Method-2 pole offset (used ONLY when the gripper is closed on a tool;
+# open hand keeps manual_method2_pole_from_edge_* above). The tool now tips on an
+# x-edge (length along EE x), so the lever/pole live on x -- this mirrors the
+# open-hand y pole onto x. VERIFY the sign against the auto-selected edge (+x vs
+# -x) and sweep the magnitude the same way as the manual pole above.
+tool_present_pole_from_edge_x = 0.08
+tool_present_pole_from_edge_y = 0.0
+tool_present_pole_from_edge_z = 0.0
 # 1 = pin the pole to the first-contact pose, so K_TCP/D_TCP are computed once
 # and stay constant for the whole align phase (predictable; recommended for
 # sweeping). 0 = track the live moving edge, refreshing the matrices each cycle.
@@ -505,24 +536,24 @@ print_method3_diagnostics = 0
 # Last best instantaneous axis, base frame, relative to the active tool edge.
 # Used only for best-axis comparison diagnostics. Auto-updated from the best
 # per-cycle post_contact_align axis sample.
-last_best_axis_from_edge_x = -0.0059
-last_best_axis_from_edge_y = 0.0208
-last_best_axis_from_edge_z = -0.0004
-last_best_axis_dir_x = -0.398
-last_best_axis_dir_y = 0.112
-last_best_axis_dir_z = 0.910
-last_best_axis_pitch = 0.0014
+last_best_axis_from_edge_x = 0.0034
+last_best_axis_from_edge_y = -0.0117
+last_best_axis_from_edge_z = 0.0001
+last_best_axis_dir_x = -0.807
+last_best_axis_dir_y = 0.005
+last_best_axis_dir_z = 0.591
+last_best_axis_pitch = 0.0005
 
 # Last finite Chasles axis, base frame, relative to the active tool edge.
 # Used by Method 2 diagnostics and to save the coupled K_TCP/D_TCP matrices.
 # Auto-updated from the full start/end post_contact_align edge motion.
-last_chasles_axis_from_edge_x = -0.0058
-last_chasles_axis_from_edge_y = -0.0683
-last_chasles_axis_from_edge_z = 0.0594
-last_chasles_axis_dir_x = -0.297
-last_chasles_axis_dir_y = 0.641
-last_chasles_axis_dir_z = 0.708
-last_chasles_axis_pitch = 0.0515
+last_chasles_axis_from_edge_x = -0.2757
+last_chasles_axis_from_edge_y = -0.0176
+last_chasles_axis_from_edge_z = 0.0918
+last_chasles_axis_dir_x = -0.044
+last_chasles_axis_dir_y = 0.997
+last_chasles_axis_dir_z = 0.060
+last_chasles_axis_pitch = -0.0223
 
 # Gain print bounds and legacy reference-motion settings.
 # suggested_gain_min/max clamp printed suggested values;

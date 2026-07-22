@@ -279,6 +279,14 @@ Parameters readParameters(const std::string& filename) {
       getDouble("tool_contact_point_ee_y", p.tool_contact_point_ee(1));
   p.tool_contact_point_ee(2) =
       getDouble("tool_contact_point_ee_z", p.tool_contact_point_ee(2));
+  p.tool_present_contact_point_ee(0) =
+      getDouble("tool_present_contact_point_ee_x", p.tool_present_contact_point_ee(0));
+  p.tool_present_contact_point_ee(1) =
+      getDouble("tool_present_contact_point_ee_y", p.tool_present_contact_point_ee(1));
+  p.tool_present_contact_point_ee(2) =
+      getDouble("tool_present_contact_point_ee_z", p.tool_present_contact_point_ee(2));
+  p.tool_present_width_threshold =
+      getDouble("tool_present_width_threshold", p.tool_present_width_threshold);
   p.align_orientation_to_surface_after_contact =
       getBool("align_orientation_to_surface_after_contact",
               p.align_orientation_to_surface_after_contact);
@@ -350,6 +358,12 @@ Parameters readParameters(const std::string& filename) {
       getDouble("manual_method2_pole_from_edge_y", p.manual_method2_pole_from_edge(1));
   p.manual_method2_pole_from_edge(2) =
       getDouble("manual_method2_pole_from_edge_z", p.manual_method2_pole_from_edge(2));
+  p.tool_present_pole_from_edge(0) =
+      getDouble("tool_present_pole_from_edge_x", p.tool_present_pole_from_edge(0));
+  p.tool_present_pole_from_edge(1) =
+      getDouble("tool_present_pole_from_edge_y", p.tool_present_pole_from_edge(1));
+  p.tool_present_pole_from_edge(2) =
+      getDouble("tool_present_pole_from_edge_z", p.tool_present_pole_from_edge(2));
   p.method2_pole_freeze_at_contact =
       getBool("method2_pole_freeze_at_contact", p.method2_pole_freeze_at_contact);
   p.method2_tcp_wrench_saved =
@@ -495,6 +509,8 @@ Parameters readParameters(const std::string& filename) {
 
   p.post_contact_grind_mode = getBool("post_contact_grind_mode", p.post_contact_grind_mode);
   p.print_grind_debug = getBool("print_grind_debug", p.print_grind_debug);
+  p.print_tool_offset_debug =
+      getBool("print_tool_offset_debug", p.print_tool_offset_debug);
   p.grind_axis = static_cast<int>(getDouble("grind_axis", p.grind_axis));
   p.grind_amplitude_m = getDouble("grind_amplitude_m", p.grind_amplitude_m);
   p.grind_frequency_hz = getDouble("grind_frequency_hz", p.grind_frequency_hz);

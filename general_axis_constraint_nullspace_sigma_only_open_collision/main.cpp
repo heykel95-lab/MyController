@@ -576,7 +576,43 @@ int main() {
     Vec3 first_contact_point = p_start;
     Vec3 first_touch_candidate_force = external_force_start;
     Vec3 first_touch_candidate_moment = initial_external_wrench.tail<3>();
-    Vec3 active_tool_contact_offset_ee = params.tool_contact_point_ee;
+
+    // Decide whether a tool is grasped from the measured finger width at run
+    // start (after q_init grasp and any hand-guidance open/close have settled):
+    // a closed hand (width <= threshold) is holding a tool and uses the tool-
+    // specific contact-edge offset and Method-2 pole; an open hand keeps the
+    // defaults (tool_contact_point_ee / manual_method2_pole_from_edge).
+    bool tool_present = false;
+    try {
+      Gripper tool_probe(params.robot_ip);
+      const franka::GripperState gs = tool_probe.readOnce();
+      tool_present = gs.width <= params.tool_present_width_threshold;
+      printf("Gripper width %.1f mm -> %s.\n", 1000.0 * gs.width,
+             tool_present ? "tool present (closed): using tool contact offset/pole"
+                          : "no tool (open): using default contact offset/pole");
+    } catch (const franka::Exception& e) {
+      fprintf(stderr,
+              "Gripper width read failed (%s); assuming no tool (open).\n",
+              e.what());
+    }
+    const Vec3 active_contact_point_ee =
+        tool_present ? params.tool_present_contact_point_ee
+                     : params.tool_contact_point_ee;
+    const Vec3 active_pole_from_edge =
+        tool_present ? params.tool_present_pole_from_edge
+                     : params.manual_method2_pole_from_edge;
+    if (params.print_tool_offset_debug) {
+      printf("\n[tool-offset debug] tool_present=%d (width threshold %.1f mm)\n",
+             tool_present ? 1 : 0, 1000.0 * params.tool_present_width_threshold);
+      printVec3Mm("  active_contact_point_ee        ", active_contact_point_ee);
+      printVec3Mm("    open-hand default            ", params.tool_contact_point_ee);
+      printVec3Mm("    with-tool offset             ", params.tool_present_contact_point_ee);
+      printVec3Mm("  active_pole_from_edge          ", active_pole_from_edge);
+      printf("  auto_select_tool_contact_edge=%d -> the +/- edge sign is chosen at "
+             "first contact; check offset_ee / edge_offset_base printed there.\n",
+             params.auto_select_tool_contact_edge ? 1 : 0);
+    }
+    Vec3 active_tool_contact_offset_ee = active_contact_point_ee;
     double first_contact_search_distance = 0.0;
     double first_contact_force_delta = 0.0;
     // Hold mode (post_contact_hold_after_align): once the align phase ends the
@@ -1022,7 +1058,7 @@ int main() {
                                          ? first_contact_tcp
                                          : p_EE;
             const Vec3 pole_cmd =
-                edge_ref_cmd + params.manual_method2_pole_from_edge;
+                edge_ref_cmd + active_pole_from_edge;
             const Vec3 r_c_cmd = tcp_ref_cmd - pole_cmd;
             const Mat6x6 K_tcp_cmd = adjointTransformedGain(K_pole, r_c_cmd);
             const Mat6x6 D_tcp_cmd = adjointTransformedGain(D_pole, r_c_cmd);
@@ -1193,7 +1229,7 @@ int main() {
           first_touch_candidate_moment = external_moment;
           R_contact_start = R_d_alignment_target;
           R_after_contact_align = R_d_alignment_target;
-          active_tool_contact_offset_ee = params.tool_contact_point_ee;
+          active_tool_contact_offset_ee = active_contact_point_ee;
           // Reset phase machine and per-run accumulators (time keeps running;
           // phase-relative timers are re-zeroed to the current time).
           phase = initial_phase;
@@ -1252,15 +1288,23 @@ int main() {
         if (contact_found || phase == ControlPhase::kPostContactAlign) {
           tool_contact_offset_ee = active_tool_contact_offset_ee;
         } else if (params.auto_select_tool_contact_edge) {
-          const Vec3 positive_edge = R_EE * params.tool_contact_point_ee;
-          const Vec3 negative_edge = R_EE * (-params.tool_contact_point_ee);
+          // Two candidate edges: the lateral offset and its mirror. The mirror
+          // flips only the in-face (x,y) components; the tool-axis (z) depth to
+          // the bottom contact face is the same for both edges, so it is kept.
+          // (For the open-hand default z = 0, this reduces to the old full
+          // negation.)
+          const Vec3 lateral_mirror(-active_contact_point_ee(0),
+                                    -active_contact_point_ee(1),
+                                    active_contact_point_ee(2));
+          const Vec3 positive_edge = R_EE * active_contact_point_ee;
+          const Vec3 negative_edge = R_EE * lateral_mirror;
           tool_contact_offset_ee =
               (positive_edge.dot(contact_search_direction) >=
                negative_edge.dot(contact_search_direction))
-                  ? params.tool_contact_point_ee
-                  : -params.tool_contact_point_ee;
+                  ? active_contact_point_ee
+                  : lateral_mirror;
         } else {
-          tool_contact_offset_ee = params.tool_contact_point_ee;
+          tool_contact_offset_ee = active_contact_point_ee;
         }
       }
       const Vec3 tool_contact_point = p_EE + R_EE * tool_contact_offset_ee;
@@ -1977,7 +2021,7 @@ int main() {
           const Vec3 tcp_ref = params.method2_pole_freeze_at_contact
                                    ? first_contact_tcp
                                    : p_EE;
-          const Vec3 manual_pole = edge_ref + params.manual_method2_pole_from_edge;
+          const Vec3 manual_pole = edge_ref + active_pole_from_edge;
           const Vec3 r_c_manual = tcp_ref - manual_pole;
           K_tcp_base = adjointTransformedGain(K_pole, r_c_manual);
           D_tcp_base = adjointTransformedGain(D_pole, r_c_manual);

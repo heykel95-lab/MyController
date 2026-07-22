@@ -65,6 +65,13 @@ struct Parameters {
   bool use_tool_contact_point_control = true;
   bool auto_select_tool_contact_edge = true;
   Vec3 tool_contact_point_ee = Vec3(0.0, 0.0, 0.0);
+  // Contact-edge offset used ONLY when a tool is grasped (gripper closed at run
+  // start, finger width <= tool_present_width_threshold). Open hand keeps
+  // tool_contact_point_ee above. The tool-axis (z) component is the depth from
+  // the taught TCP down to the bottom contact face and is shared by both auto-
+  // selected edges; only the in-face (x,y) components mirror.
+  Vec3 tool_present_contact_point_ee = Vec3(0.0, 0.0, 0.0);
+  double tool_present_width_threshold = 0.040;
   bool align_orientation_to_surface_after_contact = false;
   bool orientation_test_only = false;
   double orientation_test_extra_tilt_deg = 0.0;
@@ -127,6 +134,9 @@ struct Parameters {
   // gives the desired rotation/alignment.
   bool use_manual_method2_pole = false;
   Vec3 manual_method2_pole_from_edge = Vec3::Zero();
+  // Method-2 pole offset used when a tool is grasped (see
+  // tool_present_contact_point_ee). Open hand keeps manual_method2_pole_from_edge.
+  Vec3 tool_present_pole_from_edge = Vec3::Zero();
   // 1 = pin the manual pole to the FIRST contact pose (first_contact_point /
   // first_contact_tcp), so K_TCP/D_TCP are computed once at contact and stay
   // constant for the whole align phase. 0 = track the live moving edge, so the
@@ -190,6 +200,9 @@ struct Parameters {
   // sweep trajectory below and the decoupled law (Method 2 bypass) are special.
   bool post_contact_grind_mode = false;
   bool print_grind_debug = true;
+  // 1 = at run start, dump the tool-present decision and the active contact-edge
+  // offset / Method-2 pole actually in use (verification of the tool branch).
+  bool print_tool_offset_debug = false;
   int grind_axis = 1;               // 1 = tangent1, 2 = tangent2
   double grind_amplitude_m = 0.03;  // sweep half-amplitude A [m]
   double grind_frequency_hz = 0.2;  // full back-and-forth cycle frequency f [Hz]
