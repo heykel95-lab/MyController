@@ -1,9 +1,7 @@
 # ====================================================================
 # COMMON parameters (shared by every run mode)
 # ====================================================================
-# Loaded first. Holds the shared foundation: robot/logging, the surface plane
-# and tool geometry, q_init poses, nullspace, the auto-damping toggles and the
-# gripper actions. Mode-specific gains live in sequence.txt / hold.txt.
+# Loaded first. Mode-specific gains live in sequence.txt / hold.txt.
 
 # --------------------------------------------------------------------
 # General / run settings
@@ -25,69 +23,39 @@ debug_period = 0.20
 print_hold_debug = 0
 
 # --------------------------------------------------------------------
-# Auto-damping behaviour (toggles + factors, shared here)
+# Auto-damping
 # --------------------------------------------------------------------
-# Each phase group can compute its damping online as D = factor*2*sqrt(M*K),
-# with M the libfranka task-space inertia and K that group's stiffness. The
-# per-group manual Dp/DR FALLBACK values stay next to their K gains in
-# sequence.txt / hold.txt, and are used only when the toggle here is 0, or when
-# it is 1 but the online inertia estimate is unavailable (see the note there).
+# Online damping: D = factor*2*sqrt(M*K). Manual Dp/DR entries are fallbacks.
 # factor: 1.0 = critical, <1 lighter, >1 heavier.
 
 # Hold mode: computed once at hold entry from hold_Kp.
 hold_auto_damping = 1
 hold_auto_damping_factor = 1.0
 
-# Phase 1, both approach steps (they share one gain set).
-# factor 1.9 ~ matches the old flat approach_DR_tangent (~12) on the orient DOF.
+# Phase 1: approach orient + descend.
 approach_auto_damping = 1
 approach_auto_damping_factor = 1.9
 
-# Phases 2 and 3 (set up + grind, they share one gain set). Position uses
-# base-frame inertia, rotation uses the alignment-target-frame inertia.
-# factor 0.8 ~ matches the old setup_Dp_z.
+# Phases 2 and 3: set up + grind.
 setup_auto_damping = 1
 setup_auto_damping_factor = 0.8
 
-# Upper clamp on any auto-damping value computed from the formula above.
 auto_damping_max = 8000.0
 
-# How the manual Dp/DR entries relate to the computed value:
-#   0 = pure FALLBACK. The computed value is used as-is; the manual entry only
-#       steps in when the inertia estimate is unavailable that cycle.
-#   1 = the manual entry is also a per-axis FLOOR: D_i = max(computed_i,
-#       manual_i).
-#
-# This matters on very soft axes. D = factor*2*sqrt(M*K) goes to zero as K does,
-# so an axis with almost no stiffness ends up with almost no damping -- most
-# visibly on the set-up tipping axes, where setup_KR_tangent1/2 = 0.05 puts the
-# computed DR far below the setup_DR_tangent1/2 entry.
-#
-# Turning this on makes the tool tip noticeably slower during set up, which is
-# the core motion of the experiment -- so switch it on deliberately, re-run, and
-# compare. Leave the print below on to see both numbers first.
+# 0 = manual D only as fallback. 1 = manual D is also a per-axis floor.
 auto_damping_min_from_manual = 0
 
-# 1 = print the computed damping next to the manual entry whenever a phase
-# group's auto-damping is (re)computed.
+# Print computed damping next to manual fallback values.
 print_auto_damping = 1
 
 # --------------------------------------------------------------------
 # Gripper action (performed once after q_init)
 # --------------------------------------------------------------------
-# Done as late as possible before the run starts. require_gripper_open = 1 stops
-# the run if the action fails; = 0 makes it non-blocking.
+# require_gripper_open = 1 stops the run if the gripper action fails.
 open_gripper_before_run = 1
 require_gripper_open = 0
 
-# Which action to perform:
-#   gripper_grasp_on_tool = 0 -> OPEN the hand to gripper_open_width (releases).
-#   gripper_grasp_on_tool = 1 -> CLOSE onto the tool you are holding: drive the
-#       fingers to gripper_grasp_width and clamp with gripper_grasp_force. Set
-#       gripper_grasp_width to your tool's measured thickness at the grip point;
-#       the grasp succeeds if the final width lands within
-#       [width - epsilon_inner, width + epsilon_outer]. On a re-run it detects
-#       the tool is already held and keeps the grasp instead of dropping it.
+# 0 = open to gripper_open_width. 1 = grasp at gripper_grasp_width.
 gripper_grasp_on_tool = 1
 gripper_grasp_width = 0.07
 gripper_grasp_speed = 0.050
@@ -95,53 +63,38 @@ gripper_grasp_force = 60.0
 gripper_grasp_epsilon_inner = 0.005
 gripper_grasp_epsilon_outer = 0.010
 
-# Open action (used only when gripper_grasp_on_tool = 0).
 gripper_open_width = 0.080
 gripper_open_speed = 0.050
 
 # --------------------------------------------------------------------
 # Surface plane (shared by every phase)
 # --------------------------------------------------------------------
-# The constrained surface is a plane n^T * (p - p_surface) = 0, with n the
-# alignment-target normal defined below.
+# Surface: n^T * (p - surface_point) = 0.
 constraint_enabled = 1
 use_start_as_surface_point = 0
-# Plane fixpoint placed right UNDER the tool (x,y ~ the tool's working spot), so
-# surface_point_z is the plane height AT THE TOOL directly, decoupled from the
-# tilt. Changing the tilt then pivots the plane about this point WITHOUT moving
-# its height at the tool, so angle and height are set independently.
+# Place surface_point near the working spot so tilt changes do not move the
+# height at the tool.
 surface_point_x = 0.55
 surface_point_y = -0.06
 surface_point_z = 0.025
 
-# Plane ORIENTATION. The normal and the two tilt angles are two views of the
-# same thing, n = R_y(b)*R_x(a)*[0,0,1] = [sin(b)cos(a), -sin(a), cos(b)cos(a)],
-# with a = tilt about base x and b = tilt about base y (a = b = 0 = horizontal):
-#   use_alignment_target_tilt_angle = 1 -> compute the normal from the angles.
-#   use_alignment_target_tilt_angle = 0 -> use the manual normal vector below.
-#   derive_tilt_angles_from_plane_normal = 1 -> the reverse: compute the angles
-#     from the manual normal vector (overrides the angle entries).
+# Plane orientation: use tilt angles, or use the manual normal below.
 use_alignment_target_tilt_angle = 1
 derive_tilt_angles_from_plane_normal = 0
 alignment_target_tilt_angle_deg   = 0.0   # a, about base x
 alignment_target_tilt_angle_y_deg = 5.0   # b, about base y
 
-# Manual normal, used only when use_alignment_target_tilt_angle = 0.
+# Manual normal, used when use_alignment_target_tilt_angle = 0.
 alignment_target_normal_x = 0.0
 alignment_target_normal_y = -0.342
 alignment_target_normal_z = 0.940
 
-# Only tangent1 is entered; it is orthogonalized against the normal, and
-# tangent2 = normal x tangent1. Frame column order is
-# [tangent1, tangent2, normal], which every "_tangent1/_tangent2/_normal" gain
-# triple in the other files follows.
+# Surface frame columns: [tangent1, tangent2, normal]. tangent2 is computed.
 alignment_target_tangent1_x = 1.0
 alignment_target_tangent1_y = 0.0
 alignment_target_tangent1_z = 0.0
 
-# Per-axis rotational spring mask, alignment-target frame. 1 = keep rotational
-# stiffness on that component, 0 = no spring (damping still acts if DR > 0; for
-# a fully free component set both the flag and that damping to 0).
+# Rotational spring mask in the surface frame. 0 removes stiffness on that axis.
 constrain_rotation_about_alignment_normal = 1
 constrain_rotation_about_alignment_tangent1 = 1
 constrain_rotation_about_alignment_tangent2 = 1
@@ -149,18 +102,13 @@ constrain_rotation_about_alignment_tangent2 = 1
 # --------------------------------------------------------------------
 # Tool geometry
 # --------------------------------------------------------------------
-# Physical tool axis in the EE frame. Alignment enforces
-#   R_desired * tool_axis_ee = tool_axis_target_sign * alignment_target_normal,
-# so tool_axis_target_sign = -1 means the tool points opposite the normal.
+# Physical tool axis in EE frame; sign picks along/opposite the surface normal.
 tool_axis_ee_x = 0.0
 tool_axis_ee_y = 0.0
 tool_axis_ee_z = 1.0
 tool_axis_target_sign = -1.0
 
-# The contact point pressed and rotated about during set up [m], in the EE/TCP
-# frame: p_edge = p_EE + R_EE * tool_contact_point_ee.
-# auto_select_tool_contact_edge = 1 picks +edge or -edge on the way down,
-# whichever leads along the descend direction, and locks it in at contact.
+# Contact edge offset in EE/TCP frame. Auto-select locks the leading edge.
 use_tool_contact_point_control = 1
 auto_select_tool_contact_edge = 1
 tool_contact_point_ee_x = 0.0
@@ -224,14 +172,10 @@ q_init_table_7 = 0.745537
 # --------------------------------------------------------------------
 # Nullspace sigma-min optimization
 # --------------------------------------------------------------------
-# Uses the 1D nullspace direction n of the 6x7 Jacobian: compares J(q + alpha*n)
-# with J(q - alpha*n) and prefers the direction with the larger sigma_min(J),
-# while a restoring spring keeps q close to the start posture. Always off during
-# the approach, where the only job is to move the TCP toward the plane.
 # nullspace_mode:
 #   0/off     = no nullspace torque
-#   1/posture = tau_nullspace only: N * (k_start*(q_start-q) - d*dq)
-#   2/sigma   = tau_sigma only: the singular-value direction
+#   1/posture = posture spring + damping
+#   2/sigma   = singular-value direction
 #   3/both    = combined
 use_nullspace_optimization = 1
 nullspace_mode = 3

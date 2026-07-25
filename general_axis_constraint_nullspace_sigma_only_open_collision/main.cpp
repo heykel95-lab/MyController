@@ -1,15 +1,6 @@
 // Self-alignment / grinding controller for the Franka arm.
 //
-// A run walks three phases (see ControlPhase in controller_types.h):
-//   1. approach  -- orient the tool onto the target plane normal, then descend
-//                   to descend_surface_clearance above the plane.
-//   2. set up    -- press the selected tool edge into the plane. The rotational
-//                   spring stays soft on the tipping axes, so real contact
-//                   moment rotates the tool flat by itself.
-//   3. grind     -- hold that press constant and sweep along a surface tangent.
-//
-// The startup menu can instead pick a plain hold at the start pose, and any
-// hold can be handed over to manual guidance and restarted from a new pose.
+// Runs the approach -> set up -> grind sequence, or a startup-selected hold.
 #include "controller_helpers.h"
 #include "controller_logging.h"
 #include "controller_parameters.h"
@@ -22,9 +13,7 @@ int main() {
     // ================================================================
     // 1. Parameters, robot connection, start pose
     // ================================================================
-    // Parameters are split across concern-specific files under params/ and
-    // merged in order. Keys are disjoint; sequence.txt owns the auto-written
-    // coupled_K_tcp / coupled_D_tcp entries.
+    // Later parameter files override earlier ones on duplicate keys.
     Parameters params = readParameters({
         "params/common.txt",
         "params/safety.txt",
@@ -35,9 +24,7 @@ int main() {
     askStartupRunMode(params);
     printParameters(params);
 
-    // The saved coupled matrices are only needed when they are the actual
-    // source: the block-diagonal and manual-pole modes rebuild K_TCP/D_TCP from
-    // the set-up gains instead, so they can run without a previous save.
+    // Saved coupled matrices are needed only when they are the selected source.
     const bool needs_saved_coupled_gains =
         params.use_phase_sequence &&
         (params.eval_coupled_stiffness ||
@@ -105,10 +92,7 @@ int main() {
     Vec3 contact_force_bias = initial_external_wrench.head<3>();
     Vec3 contact_moment_bias = initial_external_wrench.tail<3>();
 
-    // Alignment-target frame, columns [tangent1, tangent2, normal]. Diagonal
-    // gains are written in this frame and transformed to the base frame as
-    // K_base = R * K_task * R^T -- pick simple values per task axis, then let
-    // the transform place them in the world.
+    // Surface frame columns: [tangent1, tangent2, normal].
     const Mat3 R_alignment_target = makeAlignmentTargetFrame(params);
     // Mutable: recomputed from the re-captured pose when the sequence is
     // restarted through manual re-guidance.
@@ -121,8 +105,7 @@ int main() {
         params.descend_use_alignment_target_normal
             ? Vec3(-R_alignment_target.col(2))
             : normalizedOrFallback(params.descend_direction, -R_alignment_target.col(2));
-    // The set-up press starts where the descend step stopped: one clearance
-    // above the plane, i.e. a negative preload that ramps into contact.
+    // The set-up preload starts at the clearance height and ramps into contact.
     const double push_start = -params.descend_surface_clearance;
 
     // ---- gain sets, one per phase group ----
@@ -136,9 +119,7 @@ int main() {
     const Mat3 Dp_approach = taskGain(params.approach_Dp_diag);
     const Mat3 KR_approach = taskGain(params.approach_KR_diag);
     const Mat3 DR_approach = taskGain(params.approach_DR_diag);
-    // Set up + grind share one impedance. Position is base-frame (firm normal
-    // for the press, soft tangents so the tool can rotate about the edge);
-    // rotation is in the alignment-target frame.
+    // Set up + grind share one impedance.
     const Mat3 Kp_setup = params.setup_Kp_diag.asDiagonal();
     const Mat3 Dp_setup = params.setup_Dp_diag.asDiagonal();
     const Mat3 KR_setup = taskGain(params.setup_KR_diag);
@@ -180,9 +161,7 @@ int main() {
     // The preload frozen when the set-up phase ends; grind presses with it.
     double grind_push = 0.0;
 
-    // Auto-damping is computed once per phase group and cached, not every
-    // cycle. Each group recomputes when it is re-entered (e.g. after a
-    // re-guidance restart).
+    // Auto-damping is cached per phase group.
     bool approach_damp_computed = false;
     Mat3 Dp_approach_cached = Dp_approach;
     Mat3 DR_approach_cached = DR_approach;
@@ -229,8 +208,7 @@ int main() {
       Map<const Vec7> dq(state.dq.data());
       Map<const Vec7> q_current(state.q.data());
 
-      // EE Jacobian (kEndEffector frame, so a configured F_T_EE tool offset is
-      // included): xdot = J * dq, split into linear and angular parts.
+      // kEndEffector Jacobian includes any configured F_T_EE tool offset.
       std::array<double, 42> jacobian_array = model.zeroJacobian(Frame::kEndEffector, state);
       Map<const Mat6x7> J(jacobian_array.data());
       const Vec6 xdot = J * dq;
@@ -246,9 +224,7 @@ int main() {
       const Vec3 external_moment = external_wrench.tail<3>();
 
       // ---------------------------------------------------------------
-      // Manual re-guidance. Pressing g during hold relaxes the tool into
-      // gravity compensation so it can be moved by hand; p then re-captures
-      // the pose and restarts the whole sequence from there.
+      // Manual re-guidance from hold.
       // ---------------------------------------------------------------
       if (phase == ControlPhase::kHold && guide_requested.load()) {
         guide_requested.store(false);
@@ -268,9 +244,7 @@ int main() {
         }
         if (proceed_requested.load()) {
           proceed_requested.store(false);
-          // Re-capture the hand-moved pose as the new start pose and reset the
-          // phase machine. The gains depend only on the params-defined
-          // alignment frame, so they do not need recomputing.
+          // Re-capture the hand-moved pose as the new sequence start.
           p_start = p_EE;
           R_d = R_EE;
           q_start = q_current;
@@ -308,16 +282,12 @@ int main() {
         return Torques(tau_array);
       }
 
-      // Phase as it stands BEFORE this cycle's transitions. Only the edge
-      // selection uses it: on the cycle contact is detected, the edge is still
-      // being chosen, and the side picked that cycle is the one locked in.
+      // Use the pre-transition phase so the selected edge locks on contact.
       const bool edge_locked =
           (phase == ControlPhase::kSetUp || phase == ControlPhase::kGrind);
 
       // ---------------------------------------------------------------
-      // Active tool contact point. Before contact the edge may still flip to
-      // whichever side leads along the descend direction; once contact is made
-      // the chosen side is locked for the rest of the run.
+      // Active tool contact point.
       // ---------------------------------------------------------------
       Vec3 tool_contact_offset_ee = Vec3::Zero();
       if (params.use_tool_contact_point_control) {
@@ -339,13 +309,12 @@ int main() {
       DesiredMotion desired{p_start, Vec3::Zero()};
       Vec3 edge_target_log = first_contact_point;
       double push_log = 0.0;
-      // Set true only while a gate is actively blocking, to swap in the stiff
-      // position lock for that cycle.
+      // Enables the stiff position lock only while a gate blocks.
       bool pause_hold_active = false;
 
       switch (phase) {
         // -------------------------------------------------------------
-        // Phase 1a: rotate the tool in place onto the target plane normal.
+        // Phase 1a: orient the tool.
         // -------------------------------------------------------------
         case ControlPhase::kApproachOrient: {
           const Vec3 tool_axis_current = currentToolAxisInBase(params, R_EE).normalized();
@@ -379,9 +348,7 @@ int main() {
         }
 
         // -------------------------------------------------------------
-        // Phase 1b: translate along the descend direction until the active
-        // tool contact point is one clearance above the plane. The switch is
-        // geometric -- no force comparison is involved.
+        // Phase 1b: descend to the configured surface clearance.
         // -------------------------------------------------------------
         case ControlPhase::kApproachDescend: {
           const double phase_time = time - phase_start_time;
@@ -406,9 +373,7 @@ int main() {
           if (params.pause_before_set_up && clearance_reached && !gate_set_up_passed) {
             if (!gate_set_up_armed) {
               gate_set_up_armed = true;
-              // Freeze on the tool's ACTUAL position, not the leading commanded
-              // target, so the stiff hold is centered where the tool is. A hold
-              // centered on the target would let it be pushed down but not up.
+              // Hold the actual pose reached at the gate.
               gate_set_up_hold_pd = p_EE;
               gate_continue.store(false);
               printf("\n[GATE] Reached %.0f mm above the plane. Press Enter to start "
@@ -467,16 +432,8 @@ int main() {
         }
 
         // -------------------------------------------------------------
-        // Phase 2: press the contact edge into the plane while holding the
-        // orientation captured at contact as a soft rotational target, so the
-        // contact moment tips the tool flat by itself.
-        //
-        // The controlled Cartesian point is still the TCP, so the desired edge
-        // position is converted back to a TCP target:
-        //   p_edge_d = p_contact + push * descend_direction
-        //   p_TCP_d  = p_edge_d - R_contact_start * r_edge_EE
-        // Without that conversion the edge would lift away simply because the
-        // TCP rotates about a different point.
+        // Phase 2: press the contact edge while holding the contact orientation
+        // as a soft rotational target.
         // -------------------------------------------------------------
         case ControlPhase::kSetUp: {
           const double phase_time = time - phase_start_time;
@@ -497,8 +454,7 @@ int main() {
 
           const bool waiting_at_gate = gate_grind_armed && !gate_grind_passed;
           if (params.debug_period > 0.0 && time >= next_debug_time && !waiting_at_gate) {
-            // tip = how far the tool has rotated away from the orientation it
-            // held at contact, i.e. how much it has passively tipped so far.
+            // tip = passive rotation away from the contact orientation.
             printSetUpDebug(phase_time,
                             (180.0 / M_PI) * orientationError(R_EE, R_contact_start).norm(),
                             force_delta_norm,
@@ -508,9 +464,7 @@ int main() {
             next_debug_time = time + params.debug_period;
           }
 
-          // The phase ends either when the contact moment jumps (e.g. the
-          // second tool edge touching down after the tool tipped flat) or when
-          // the time limit runs out.
+          // End on contact moment jump or time limit.
           const bool stopped_on_moment =
               phase_time >= params.setup_min_time &&
               moment_delta_norm >= params.setup_moment_threshold;
@@ -553,8 +507,7 @@ int main() {
           report.DR = params.setup_auto_damping ? DR_setup_cached : DR_setup;
           reportSetUpResult(params, R_alignment_target, report, &pending_parameter_updates);
 
-          // Freeze the preload at the value it reached, so grind presses with a
-          // constant force instead of continuing to ramp.
+          // Grind keeps the final set-up preload.
           grind_push = push;
           phase = ControlPhase::kGrind;
           phase_start_time = time;
@@ -564,21 +517,7 @@ int main() {
         }
 
         // -------------------------------------------------------------
-        // Phase 3: keep the frozen preload pressed into the plane. Two target
-        // laws, selected by grind_sweep_enabled:
-        //
-        //   sweep on  -- p_edge_d = p_contact + push*n + s(t)*t_axis, with s
-        //     the smoothStep ping-pong. The tangential error is NOT zeroed, so
-        //     the stiff tangential gains make the tool track the sweep path.
-        //   sweep off -- project the edge onto the contact plane so only the
-        //     normal error survives:
-        //       pen      = n^T * (p_edge - p_contact)
-        //       p_edge_d = p_edge + (push - pen) * n
-        //     The tangential error is then zero, so the pressed tool slides
-        //     freely along the plane by hand while the press stays constant.
-        //
-        // Rotation is held by the set-up KR either way (normal stiff, tangents
-        // soft), so the tool stays flat.
+        // Phase 3: keep the frozen preload, with optional tangential sweep.
         // -------------------------------------------------------------
         case ControlPhase::kGrind: {
           const Vec3 n = descend_direction;  // unit, into the surface
@@ -610,9 +549,7 @@ int main() {
           break;  // hold the captured start position
       }
 
-      // Phase AFTER this cycle's transitions. Everything below -- errors,
-      // damping, gains, the control law -- runs on the phase the machine has
-      // just moved into, so a transition takes effect on the same cycle.
+      // Below this point, use the post-transition phase.
       const bool after_contact =
           (phase == ControlPhase::kSetUp || phase == ControlPhase::kGrind);
 
@@ -636,10 +573,7 @@ int main() {
       }
 
       // ---------------------------------------------------------------
-      // Auto-damping: optionally replace the manual Dp/DR with critically
-      // damped values D = factor * 2*sqrt(M*K), from the libfranka task-space
-      // inertia and the active stiffness. Computed once per phase group and
-      // held, so the 1 kHz path does not carry a mass/inertia solve.
+      // Auto-damping: compute once per phase group and cache.
       // ---------------------------------------------------------------
       const bool in_approach = (phase == ControlPhase::kApproachOrient ||
                                 phase == ControlPhase::kApproachDescend);
@@ -661,15 +595,11 @@ int main() {
         std::array<double, 49> mass_array = model.mass(state);
         Map<const Mat7x7> joint_mass(mass_array.data());
 
-        // Each group's manual gains act as a per-axis floor under the computed
-        // value when auto_damping_min_from_manual is set, and as a pure
-        // fallback otherwise.
+        // Manual damping can be either fallback-only or a per-axis floor.
         auto dampingFloor = [&](const Vec3& manual) {
           return params.auto_damping_min_from_manual ? manual : Vec3::Zero();
         };
-        // Prints the computed value next to the manual entry, so the two can be
-        // compared on the real robot. On a very soft axis the computed value
-        // lands far below the manual one -- that gap is what the floor closes.
+        // Print auto/manual damping for tuning.
         auto reportDamping = [&](const char* label, const char* unit,
                                  const Vec3& computed, const Vec3& manual) {
           if (!params.print_auto_damping) {
@@ -700,8 +630,7 @@ int main() {
             approach_damp_computed = true;
           }
         } else if (after_contact) {
-          // Position uses base-frame inertia (setup_Kp is base x/y/z), rotation
-          // uses the alignment-target-frame inertia (setup_KR is in that frame).
+          // Position is base frame; rotation is surface frame.
           const CartesianInertiaEstimate inertia_base =
               computeCartesianInertiaEstimate(joint_mass, J, Mat3::Identity());
           const CartesianInertiaEstimate inertia_task =
@@ -751,8 +680,7 @@ int main() {
       const Mat3& Dp_hold_eff = params.hold_auto_damping ? Dp_hold_cached : Dp_hold;
 
       // ---------------------------------------------------------------
-      // Gains for this cycle: one set per phase group, with the stiff gate
-      // lock overriding the position gains while a gate blocks.
+      // Select gains for this phase; gate hold overrides position gains.
       // ---------------------------------------------------------------
       const Mat3* Kp_phase = &Kp_hold;
       const Mat3* Dp_phase = &Dp_hold_eff;
@@ -783,9 +711,7 @@ int main() {
       const Mat3& DR_used = *DR_phase;
 
       // ---------------------------------------------------------------
-      // Control law: either the decoupled pair of 3x3 springs, or the single
-      // coupled 6x6 spring during set up (see Parameters for how its K/D are
-      // chosen).
+      // Control law: decoupled 3x3 springs or coupled 6x6 spring.
       // ---------------------------------------------------------------
       Vec6 dx;
       dx.head<3>() = e_p;
@@ -802,9 +728,7 @@ int main() {
           K_tcp = blockDiagonal(Kp_used, KR_used);
           D_tcp = blockDiagonal(Dp_used, DR_used);
         } else if (params.coupled_pole_manual) {
-          // Frozen: reference the contact-time pose, so K_TCP/D_TCP are a
-          // single fixed spring for the whole phase. Live: reference the moving
-          // edge, so they refresh every cycle.
+          // Frozen = first-contact reference; live = current edge reference.
           const Vec3 edge_ref = params.coupled_pole_freeze_at_contact ? first_contact_point
                                                                      : tool_contact_point;
           const Vec3 tcp_ref = params.coupled_pole_freeze_at_contact ? first_contact_tcp
@@ -821,8 +745,7 @@ int main() {
         wrench.head<3>() = Kp_used * e_p + Dp_used * dv.head<3>();
         wrench.tail<3>() = KR_used * e_R - DR_used * omega;
         if (after_contact && params.eval_coupled_stiffness) {
-          // Evaluation only: compute the saved coupled wrench from the same TCP
-          // errors for comparison, but keep commanding the decoupled one.
+          // Evaluation only: compare without commanding the coupled wrench.
           coupled_eval.addSample(params, dx, dv, Vec3(wrench.head<3>()), Vec3(wrench.tail<3>()));
         }
       }
@@ -832,8 +755,7 @@ int main() {
       if (phase == ControlPhase::kGrind && params.grind_sweep_enabled &&
           params.print_grind_debug && params.debug_period > 0.0 &&
           time >= next_debug_time) {
-        // sweep = commanded tangential offset, track_err = tangential position
-        // error along the sweep axis, press = commanded force into the surface.
+        // sweep = target offset, track_err = position error, press = force.
         const Vec3 grind_tangent = (params.grind_axis == 2)
                                        ? Vec3(R_alignment_target.col(1))
                                        : Vec3(R_alignment_target.col(0));
@@ -848,9 +770,7 @@ int main() {
         next_debug_time = time + params.debug_period;
       }
 
-      // Task-space wrench mapped to joint torques through the Jacobian
-      // transpose. The nullspace term stays off during the approach, where the
-      // only job is to move the TCP toward the plane.
+      // Nullspace term stays off during approach.
       Vec7 tau_nullspace = Vec7::Zero();
       if (!in_approach) {
         tau_nullspace = computeNullspaceTorque(params, model, state, J, dq, q_start);

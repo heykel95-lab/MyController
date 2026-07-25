@@ -2,15 +2,7 @@
 
 #include "controller_common.h"
 
-// A sequence run walks these phases in order. The three numbered phases are the
-// experiment itself; kHold and kManualGuide are the two standalone modes the
-// startup menu can pick instead.
-//
-//   1. approach  -- orient the tool, then descend to the clearance height.
-//   2. set up    -- press the contact edge into the plane until the tool seats
-//                   flat on it (the rotational spring stays soft so real
-//                   contact moment does the tipping).
-//   3. grind     -- keep that press constant and sweep along a surface tangent.
+// Sequence phases plus the two standalone startup modes.
 enum class ControlPhase {
   kApproachOrient,
   kApproachDescend,
@@ -28,9 +20,7 @@ enum class NullspaceMode {
 };
 
 struct Parameters {
-  // ================================================================
-  // Robot connection, logging and terminal debug
-  // ================================================================
+  // Robot connection, logging and terminal debug.
   std::string robot_ip = "172.16.0.2";
   double experiment_duration = 0.0;  // <= 0 runs until e + Enter
   std::string csv_file_name = "general_axis_constraint_nullspace_sigma_only_open_collision_log.csv";
@@ -41,9 +31,7 @@ struct Parameters {
   bool print_grind_debug = true;
   bool print_coupled_diagnostics = true;
 
-  // ================================================================
-  // Gripper action performed once after q_init
-  // ================================================================
+  // Gripper action performed once after q_init.
   bool open_gripper_before_run = true;
   bool require_gripper_open = true;
   // 1 = close onto the tool held in the hand, 0 = open to gripper_open_width.
@@ -55,25 +43,18 @@ struct Parameters {
   double gripper_grasp_force = 40.0;
   double gripper_grasp_epsilon_inner = 0.005;
   double gripper_grasp_epsilon_outer = 0.010;
-  // Runtime-only (never read from file): set when the user works the gripper
-  // from the startup menu, which suppresses the automatic action at q_init so
-  // an explicit open/grasp is left exactly as the user left it.
+  // Runtime-only: set when the startup menu already handled the gripper.
   bool startup_gripper_manual = false;
 
-  // ================================================================
-  // Run mode
-  // ================================================================
-  // 1 = run the phase sequence (approach -> set up -> grind).
-  // 0 = hold at the start pose.
+  // Run mode.
+  // 1 = sequence, 0 = hold.
   bool use_phase_sequence = true;
   // 0 = skip the orient step and start the sequence at the descend step.
   bool use_approach_orient = true;
   bool use_manual_guidance_start = false;
   double manual_guidance_damping = 0.5;
 
-  // ================================================================
-  // Hold mode gains (isotropic, base frame)
-  // ================================================================
+  // Hold mode gains (isotropic, base frame).
   double hold_Kp = 300.0;
   double hold_Dp = 50.0;
   double hold_KR = 40.0;
@@ -81,16 +62,13 @@ struct Parameters {
   bool hold_auto_damping = true;
   double hold_auto_damping_factor = 1.0;
 
-  // ================================================================
-  // Surface plane and tool geometry
-  // ================================================================
+  // Surface plane and tool geometry.
   bool constraint_enabled = true;
   bool use_start_as_surface_point = true;
   Vec3 surface_point = Vec3(0.0, 0.0, 0.0);
   Vec3 alignment_target_normal = Vec3(1.0, 0.0, 0.0);
   bool use_alignment_target_tilt_angle = false;
-  // 1 = derive the two tilt angles FROM the normal vector instead of reading
-  // them: a = -asin(n_y), b = atan2(n_x, n_z).
+  // 1 = derive tilt angles from the normal vector during parameter loading.
   bool derive_tilt_angles_from_plane_normal = false;
   double alignment_target_tilt_angle_deg = 0.0;    // a, about base x
   double alignment_target_tilt_angle_y_deg = 0.0;  // b, about base y
@@ -100,20 +78,15 @@ struct Parameters {
   bool use_tool_contact_point_control = true;
   bool auto_select_tool_contact_edge = true;
   Vec3 tool_contact_point_ee = Vec3(0.0, 0.0, 0.0);
-  // Per-axis rotational spring mask in the alignment-target frame. 0 = no
-  // spring on that component (damping still acts unless its DR is 0 too).
+  // Rotational spring mask in the alignment-target frame.
   bool constrain_rotation_about_alignment_normal = true;
   bool constrain_rotation_about_alignment_tangent1 = true;
   bool constrain_rotation_about_alignment_tangent2 = true;
 
-  // ================================================================
-  // Phase 1: approach (orient, then descend)
-  // ================================================================
+  // Phase 1: approach (orient, then descend).
   double approach_orient_min_time = 0.5;
   double approach_orient_error_threshold = 0.03;
-  // One impedance for BOTH approach steps, alignment-target frame
-  // [tangent1, tangent2, normal]. Position stays soft; KR_tangent must be stiff
-  // enough that orient converges below approach_orient_error_threshold.
+  // One impedance for both approach steps, in [tangent1, tangent2, normal].
   Vec3 approach_Kp_diag = Vec3(150.0, 150.0, 150.0);
   Vec3 approach_KR_diag = Vec3(90.0, 90.0, 8.0);
   Vec3 approach_Dp_diag = Vec3(20.0, 20.0, 20.0);
@@ -125,95 +98,54 @@ struct Parameters {
   Vec3 descend_direction = Vec3(0.0, 0.0, -1.0);
   double descend_speed = 0.005;
   double descend_max_distance = 0.02;
-  // The descend step ends when the active tool contact point is this far above
-  // the plane; the set-up press takes over from there.
+  // Clearance above the surface before set up takes over.
   double descend_surface_clearance = 0.020;
 
-  // ================================================================
-  // Phase 2: set up (press the edge down until the tool sits flat)
-  // ================================================================
+  // Phase 2: set up.
   double setup_min_time = 0.3;       // before the moment early-exit can fire
   double setup_duration = 15.0;      // hard time limit for the phase
   double setup_moment_threshold = 60.0;
-  // The press is a position preload ramped into the plane. It starts at
-  // -descend_surface_clearance (the tool is still that far above the plane) and
-  // grows at setup_push_speed until setup_max_push. Grind inherits its final
-  // value, so this ramp sets the press for BOTH phase 2 and phase 3.
+  // Position preload ramped into the surface; grind inherits the final value.
   double setup_push_speed = 0.0;
   double setup_max_push = 0.0;
-  // Translational spring, base frame [x, y, z]. Firm normal for the press,
-  // soft tangents so the tool is free to rotate about the pressed edge.
+  // Translational spring, base frame [x, y, z].
   Vec3 setup_Kp_diag = Vec3(40.0, 40.0, 5500.0);
   Vec3 setup_Dp_diag = Vec3(10.0, 10.0, 175.0);
   // Rotational spring, alignment-target frame [tangent1, tangent2, normal].
-  // Normal (yaw) stays constrained; the tangents stay very soft so contact
-  // moment can tip the tool flat.
   Vec3 setup_KR_diag = Vec3(0.0, 0.0, 8.0);
   Vec3 setup_DR_diag = Vec3(0.01, 0.01, 4.0);
   bool setup_auto_damping = false;
   double setup_auto_damping_factor = 1.0;
 
-  // ================================================================
-  // Phase 3: grind (constant press, shared gains with phase 2)
-  // ================================================================
-  // 1 = sweep the contact side-to-side along a surface tangent (tangentially
-  //     stiff, so the tool tracks the sweep path).
-  // 0 = free-slide hold: only the normal direction is sprung, so the pressed
-  //     tool can be pushed along the plane by hand.
+  // Phase 3: grind (constant press, shared gains with phase 2).
+  // 1 = commanded sweep, 0 = free-slide press hold.
   bool grind_sweep_enabled = false;
   int grind_axis = 1;               // 1 = tangent1, 2 = tangent2
   double grind_amplitude_m = 0.03;  // sweep half-amplitude A [m]
   double grind_frequency_hz = 0.2;  // one full back-and-forth cycle [Hz]
 
-  // ================================================================
-  // Enter gates between phases (bare Enter continues, e + Enter stops)
-  // ================================================================
+  // Enter gates between phases.
   bool pause_before_set_up = false;  // hold at the clearance height
   bool pause_before_grind = false;   // hold the seated/pressed pose
-  // Stiff isotropic position hold used only while paused, so the tool locks in
-  // place instead of holding with the soft approach gains. Position only --
-  // a stiff rotational lock here drove a limit-cycle wiggle.
+  // Position-only stiff hold while paused.
   double pause_hold_Kp = 5000.0;
   double pause_hold_Dp = 200.0;
 
-  // ================================================================
-  // Coupled (pole-based) stiffness for the set-up phase
-  // ================================================================
-  // The decoupled law commands f = Kp*e_p + Dp*(pdot_d - pdot) and
-  // m = KR*e_R - DR*omega, i.e. two independent 3x3 springs.
-  //
-  // The coupled law instead commands ONE 6x6 spring built by moving the same
-  // diagonal spring from a chosen pole out to the TCP through the adjoint:
-  //
-  //   K_TCP = Ad(r_c)^T * blockdiag(Kp, KR) * Ad(r_c),   r_c = p_TCP - pole
-  //
-  // The off-diagonal quadrants of K_TCP are the lever-arm coupling: rotation
-  // then produces force and translation produces moment. The pole is the only
-  // knob in the adjoint, so sweeping it moves the effective rotation center.
+  // Coupled (pole-based) stiffness for the set-up phase.
   bool use_coupled_stiffness = false;   // command the 6x6 spring
   bool eval_coupled_stiffness = false;  // only compute it side-by-side
-  // Source of the 6x6 K/D when use_coupled_stiffness = 1, in priority order:
-  //   coupled_use_block_diagonal = 1 -> the plain block-diagonal set-up gains
-  //     (no coupling). Fed through the 6x6 path this reproduces the decoupled
-  //     wrench exactly, so it is the sanity check that the path is correct.
-  //   coupled_pole_manual = 1 -> rebuild K_TCP/D_TCP from
-  //     pole = contact edge + coupled_pole_from_edge.
-  //   otherwise -> the saved matrices below.
+  // K/D source: block diagonal, manual pole, or saved matrices.
   bool coupled_use_block_diagonal = false;
   bool coupled_pole_manual = false;
   Vec3 coupled_pole_from_edge = Vec3::Zero();
-  // 1 = pin the pole to the FIRST contact pose, so K_TCP/D_TCP are computed
-  // once and stay constant for the whole phase (predictable when sweeping).
-  // 0 = track the live moving edge, refreshing the matrices every cycle.
+  // 1 = freeze pole at first contact, 0 = track the live moving edge.
   bool coupled_pole_freeze_at_contact = true;
   // Auto-written after a set-up phase with a valid finite screw axis.
   bool coupled_gains_saved = false;
   Mat6x6 coupled_K_tcp = Mat6x6::Zero();
   Mat6x6 coupled_D_tcp = Mat6x6::Zero();
 
-  // ================================================================
-  // Nullspace optimization
-  // ================================================================
+  // Nullspace optimization.
   bool use_nullspace_optimization = true;
   NullspaceMode nullspace_mode = NullspaceMode::kPostureAndSigma;
   double nullspace_k_start = 1.0;
@@ -221,24 +153,13 @@ struct Parameters {
   double nullspace_k_sigma = 0.5;
   double nullspace_alpha = 0.01;
 
-  // Upper clamp on any auto-damping value computed as D = factor*2*sqrt(M*K).
+  // Auto-damping options.
   double auto_damping_max = 8000.0;
-  // 1 = treat each group's manual Dp/DR as a per-axis FLOOR under the computed
-  // value, instead of a pure fallback: D_i = max(computed_i, manual_i). This
-  // matters on very soft axes, where the formula returns near zero and leaves
-  // that axis almost undamped -- for example the soft set-up tipping axes,
-  // where the computed damping lands far below the manual entry. 0 = use the
-  // computed value as-is, and fall back to the manual one only when the online
-  // inertia estimate is unavailable.
+  // 1 = manual Dp/DR values are per-axis floors, not only fallbacks.
   bool auto_damping_min_from_manual = false;
-  // 1 = print the computed damping next to the manual entry each time a phase
-  // group's auto-damping is (re)computed, so the two can be compared on the
-  // real robot before deciding whether the floor is needed.
   bool print_auto_damping = true;
 
-  // ================================================================
-  // Start pose and collision thresholds
-  // ================================================================
+  // Start pose and collision thresholds.
   Array7 q_init = {{
       0.0,
       -M_PI_4,

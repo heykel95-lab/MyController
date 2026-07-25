@@ -214,10 +214,7 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
       getDouble("alignment_target_tilt_angle_y_deg", p.alignment_target_tilt_angle_y_deg);
   p.derive_tilt_angles_from_plane_normal =
       getBool("derive_tilt_angles_from_plane_normal", p.derive_tilt_angles_from_plane_normal);
-  // The plane normal and the two tilt angles are two views of the same thing:
-  //   n = R_y(b) * R_x(a) * [0,0,1] = [sin(b)cos(a), -sin(a), cos(b)cos(a)]
-  // with a = tilt about base x and b = tilt about base y. Whichever view is
-  // configured, the other is derived here so everything downstream agrees.
+  // Resolve the plane orientation to one normal vector and matching tilt values.
   if (p.derive_tilt_angles_from_plane_normal) {
     Vec3 n = p.alignment_target_normal;
     n = (n.norm() > 1e-9) ? n.normalized() : Vec3(0.0, 0.0, 1.0);
