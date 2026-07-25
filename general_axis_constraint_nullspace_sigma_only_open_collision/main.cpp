@@ -770,11 +770,9 @@ int main() {
         next_debug_time = time + params.debug_period;
       }
 
-      // Nullspace term stays off during approach.
-      Vec7 tau_nullspace = Vec7::Zero();
-      if (!in_approach) {
-        tau_nullspace = computeNullspaceTorque(params, model, state, J, dq, q_start);
-      }
+      // nullspace_mode controls whether this is active for the whole sequence.
+      const Vec7 tau_nullspace =
+          computeNullspaceTorque(params, model, state, J, dq, q_start);
 
       Array7 coriolis_array = model.coriolis(state);
       Map<const Vec7> coriolis(coriolis_array.data());
