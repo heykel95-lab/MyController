@@ -417,10 +417,6 @@ Mat3 makeToolOrientationForAlignmentTarget(
 }
 
 Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_alignment_target) {
-  if (!params.constraint_enabled) {
-    return e_R;
-  }
-
   // e_R_task components follow R's column order [tangent1, tangent2, normal].
   Vec3 e_R_task = R_alignment_target.transpose() * e_R;
   e_R_task(0) =

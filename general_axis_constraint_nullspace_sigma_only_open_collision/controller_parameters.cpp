@@ -200,7 +200,6 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
       getDouble("hold_auto_damping_factor", p.hold_auto_damping_factor);
 
   // ---- surface plane and tool geometry ----
-  p.constraint_enabled = getBool("constraint_enabled", p.constraint_enabled);
   p.use_start_as_surface_point =
       getBool("use_start_as_surface_point", p.use_start_as_surface_point);
   p.surface_point = getVec3Xyz("surface_point", p.surface_point);

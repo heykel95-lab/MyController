@@ -107,9 +107,7 @@ int main() {
 
     // ---- gain sets, one per phase group ----
     auto taskGain = [&](const Vec3& diagonal) -> Mat3 {
-      return params.constraint_enabled
-          ? makeSpatialGainMatrix(diagonal, R_alignment_target)
-          : Mat3(diagonal.asDiagonal());
+      return makeSpatialGainMatrix(diagonal, R_alignment_target);
     };
     // Approach (orient + descend) share one impedance.
     const Mat3 Kp_approach = taskGain(params.approach_Kp_diag);

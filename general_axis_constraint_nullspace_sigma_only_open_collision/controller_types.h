@@ -63,7 +63,6 @@ struct Parameters {
   double hold_auto_damping_factor = 1.0;
 
   // Surface plane and tool geometry.
-  bool constraint_enabled = true;
   bool use_start_as_surface_point = true;
   Vec3 surface_point = Vec3(0.0, 0.0, 0.0);
   Vec3 alignment_target_normal = Vec3(0.0, 0.0, 1.0);

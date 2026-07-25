@@ -70,7 +70,6 @@ gripper_open_speed = 0.050
 # Surface plane (shared by every phase)
 # --------------------------------------------------------------------
 # Surface: n^T * (p - surface_point) = 0.
-constraint_enabled = 1
 use_start_as_surface_point = 0
 # Place surface_point near the working spot so tilt changes do not move the
 # height at the tool.
