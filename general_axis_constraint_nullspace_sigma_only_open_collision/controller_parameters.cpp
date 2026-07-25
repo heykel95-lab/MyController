@@ -244,9 +244,6 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
   p.approach_auto_damping = getBool("approach_auto_damping", p.approach_auto_damping);
   p.approach_auto_damping_factor =
       getDouble("approach_auto_damping_factor", p.approach_auto_damping_factor);
-  p.descend_use_alignment_target_normal =
-      getBool("descend_use_alignment_target_normal", p.descend_use_alignment_target_normal);
-  p.descend_direction = getVec3Xyz("descend_direction", p.descend_direction);
   p.descend_speed = getDouble("descend_speed", p.descend_speed);
   p.descend_max_distance = getDouble("descend_max_distance", p.descend_max_distance);
   p.descend_surface_clearance =

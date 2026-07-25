@@ -42,13 +42,8 @@ approach_DR_tangent2 = 12.0
 # Switches to set up when the active contact point reaches this clearance.
 descend_surface_clearance = 0.020
 
-# 1 = descend along -alignment_target_normal. 0 = use the manual direction.
-descend_use_alignment_target_normal = 1
-descend_direction_x = 0.0
-descend_direction_y = 0.0
-descend_direction_z = -1.0
-
-# Descend speed [m/s] and maximum travel before the run gives up [m].
+# Descend moves into the surface along -normal.
+# Speed [m/s] and maximum travel before the run gives up [m].
 descend_speed = 0.1
 descend_max_distance = 0.640
 

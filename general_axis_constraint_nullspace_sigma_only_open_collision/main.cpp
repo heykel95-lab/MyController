@@ -101,10 +101,7 @@ int main() {
     Vec3 surface_point_runtime =
         params.use_start_as_surface_point ? p_start : params.surface_point;
 
-    const Vec3 descend_direction =
-        params.descend_use_alignment_target_normal
-            ? Vec3(-R_alignment_target.col(2))
-            : normalizedOrFallback(params.descend_direction, -R_alignment_target.col(2));
+    const Vec3 descend_direction = -R_alignment_target.col(2);
     // The set-up preload starts at the clearance height and ramps into contact.
     const double push_start = -params.descend_surface_clearance;
 

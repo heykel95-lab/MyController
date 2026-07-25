@@ -90,9 +90,6 @@ struct Parameters {
   Vec3 approach_DR_diag = Vec3(12.0, 12.0, 12.0);
   bool approach_auto_damping = false;
   double approach_auto_damping_factor = 1.0;
-  // 1 = descend along -alignment_target_normal, 0 = along descend_direction.
-  bool descend_use_alignment_target_normal = true;
-  Vec3 descend_direction = Vec3(0.0, 0.0, -1.0);
   double descend_speed = 0.005;
   double descend_max_distance = 0.02;
   // Clearance above the surface before set up takes over.
