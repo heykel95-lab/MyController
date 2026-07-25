@@ -129,9 +129,8 @@ void printParameters(const Parameters& params) {
          params.grind_axis == 2 ? 2 : 1,
          1000.0 * params.grind_amplitude_m,
          params.grind_frequency_hz);
-  printf("coupled stiffness: apply=%s | eval=%s | saved=%s | pole=%s\n",
+  printf("coupled stiffness: apply=%s | saved=%s | pole=%s\n",
          params.use_coupled_stiffness ? "on" : "off",
-         params.eval_coupled_stiffness ? "on" : "off",
          params.coupled_gains_saved ? "yes" : "no",
          params.coupled_use_block_diagonal
              ? "block-diagonal (no coupling)"

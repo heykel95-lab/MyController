@@ -27,9 +27,8 @@ int main() {
     // Saved coupled matrices are needed only when they are the selected source.
     const bool needs_saved_coupled_gains =
         params.use_phase_sequence &&
-        (params.eval_coupled_stiffness ||
-         (params.use_coupled_stiffness && !params.coupled_use_block_diagonal &&
-          !params.coupled_pole_manual));
+        params.use_coupled_stiffness && !params.coupled_use_block_diagonal &&
+        !params.coupled_pole_manual;
     if (needs_saved_coupled_gains && !params.coupled_gains_saved) {
       fprintf(stderr, "Coupled stiffness needs saved K_TCP/D_TCP, but none was found.\n");
       fprintf(stderr, "Run once with use_coupled_stiffness = 0 so the set-up report can save them.\n");
@@ -166,7 +165,6 @@ int main() {
     bool hold_damp_computed = false;
     Mat3 Dp_hold_cached = Dp_hold;
 
-    CoupledEvalStats coupled_eval;
     std::vector<std::pair<std::string, std::string>> pending_parameter_updates;
     pending_parameter_updates.reserve(96);
 
@@ -265,10 +263,6 @@ int main() {
           grind_push = 0.0;
           hold_damp_computed = false;
           Dp_hold_cached = Dp_hold;
-          // Reset the eval stats so the final comparison reflects only the
-          // most recent run, not a blend across restarts.
-          coupled_eval = CoupledEvalStats();
-
           printf("\n=== Restarting sequence from re-guided pose ===\n");
           printVec7Deg("q_start", q_start);
           printVec3Mm("p_start", p_start);
@@ -739,10 +733,6 @@ int main() {
       } else {
         wrench.head<3>() = Kp_used * e_p + Dp_used * dv.head<3>();
         wrench.tail<3>() = KR_used * e_R - DR_used * omega;
-        if (after_contact && params.eval_coupled_stiffness) {
-          // Evaluation only: compare without commanding the coupled wrench.
-          coupled_eval.addSample(params, dx, dv, Vec3(wrench.head<3>()), Vec3(wrench.tail<3>()));
-        }
       }
       const Vec3 f = wrench.head<3>();
       const Vec3 m = wrench.tail<3>();
@@ -838,8 +828,6 @@ int main() {
       printf("params/sequence.txt updated after control loop (%zu queued values).\n",
              pending_parameter_updates.size());
     }
-
-    printCoupledEvalSummary(coupled_eval);
 
     if (descend_failed) {
       printf("\nDescend stopped: maximum distance reached before the clearance height.\n");

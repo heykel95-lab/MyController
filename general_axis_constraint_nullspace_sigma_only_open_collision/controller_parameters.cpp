@@ -276,7 +276,6 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
 
   // ---- coupled stiffness ----
   p.use_coupled_stiffness = getBool("use_coupled_stiffness", p.use_coupled_stiffness);
-  p.eval_coupled_stiffness = getBool("eval_coupled_stiffness", p.eval_coupled_stiffness);
   p.coupled_use_block_diagonal =
       getBool("coupled_use_block_diagonal", p.coupled_use_block_diagonal);
   p.coupled_pole_manual = getBool("coupled_pole_manual", p.coupled_pole_manual);

@@ -43,32 +43,3 @@ void reportSetUpResult(const Parameters& params,
                        const Mat3& R_alignment_target,
                        const SetUpReport& report,
                        std::vector<std::pair<std::string, std::string>>* parameter_updates);
-
-// Running comparison between the wrench actually commanded and the coupled 6x6
-// wrench, accumulated every cycle while eval_coupled_stiffness is on.
-struct CoupledEvalStats {
-  std::size_t samples = 0;
-  double commanded_force_sum = 0.0;
-  double commanded_moment_sum = 0.0;
-  double coupled_force_sum = 0.0;
-  double coupled_moment_sum = 0.0;
-  double force_error_sq_sum = 0.0;
-  double moment_error_sq_sum = 0.0;
-  double force_error_max = 0.0;
-  double moment_error_max = 0.0;
-  // Split of the coupled wrench into the part driven by translation error and
-  // the part driven by rotation error -- the second one is the lever coupling
-  // the decoupled law does not have at all.
-  double force_from_translation_sum = 0.0;
-  double force_from_rotation_sum = 0.0;
-  double moment_from_translation_sum = 0.0;
-  double moment_from_rotation_sum = 0.0;
-
-  void addSample(const Parameters& params,
-                 const Vec6& dx,
-                 const Vec6& dv,
-                 const Vec3& commanded_force,
-                 const Vec3& commanded_moment);
-};
-
-void printCoupledEvalSummary(const CoupledEvalStats& stats);

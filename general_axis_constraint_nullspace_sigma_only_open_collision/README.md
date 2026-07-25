@@ -87,9 +87,6 @@ Three sources for the 6×6 gains, in priority order:
    coupled_pole_from_edge`.
 3. otherwise — the saved `coupled_K_tcp` / `coupled_D_tcp` matrices.
 
-`eval_coupled_stiffness = 1` computes the coupled wrench alongside the commanded
-decoupled one without commanding it, and prints a comparison at the end.
-
 After a set-up phase with a valid finite screw axis, the controller measures the
 axis the whole tipping motion actually followed (Chasles' theorem, computed from
 the start and end pose, so it is not sensitive to per-cycle velocity noise) and

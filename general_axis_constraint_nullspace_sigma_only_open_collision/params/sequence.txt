@@ -108,8 +108,7 @@ pause_hold_Dp = 200.0
 # ====================================================================
 # Coupled (pole-based) stiffness during set up
 # ====================================================================
-# eval = compare only. use = command the 6x6 spring during set up.
-eval_coupled_stiffness = 1
+# Command the 6x6 spring during set up.
 use_coupled_stiffness = 1
 
 # K/D source: block diagonal, manual pole, or saved matrices below.

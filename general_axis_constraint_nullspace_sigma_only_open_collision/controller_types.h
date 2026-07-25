@@ -125,8 +125,7 @@ struct Parameters {
   double pause_hold_Dp = 200.0;
 
   // Coupled (pole-based) stiffness for the set-up phase.
-  bool use_coupled_stiffness = false;   // command the 6x6 spring
-  bool eval_coupled_stiffness = false;  // only compute it side-by-side
+  bool use_coupled_stiffness = false;
   // K/D source: block diagonal, manual pole, or saved matrices.
   bool coupled_use_block_diagonal = false;
   bool coupled_pole_manual = false;
