@@ -204,34 +204,15 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
   p.use_start_as_surface_point =
       getBool("use_start_as_surface_point", p.use_start_as_surface_point);
   p.surface_point = getVec3Xyz("surface_point", p.surface_point);
-  p.alignment_target_normal =
-      getVec3Xyz("alignment_target_normal", p.alignment_target_normal);
-  p.use_alignment_target_tilt_angle =
-      getBool("use_alignment_target_tilt_angle", p.use_alignment_target_tilt_angle);
   p.alignment_target_tilt_angle_deg =
       getDouble("alignment_target_tilt_angle_deg", p.alignment_target_tilt_angle_deg);
   p.alignment_target_tilt_angle_y_deg =
       getDouble("alignment_target_tilt_angle_y_deg", p.alignment_target_tilt_angle_y_deg);
-  p.derive_tilt_angles_from_plane_normal =
-      getBool("derive_tilt_angles_from_plane_normal", p.derive_tilt_angles_from_plane_normal);
-  // Resolve the plane orientation to one normal vector and matching tilt values.
-  if (p.derive_tilt_angles_from_plane_normal) {
-    Vec3 n = p.alignment_target_normal;
-    n = (n.norm() > 1e-9) ? n.normalized() : Vec3(0.0, 0.0, 1.0);
-    const double ax = std::asin(-std::max(-1.0, std::min(1.0, n(1))));
-    const double ay = std::atan2(n(0), n(2));
-    p.alignment_target_tilt_angle_deg = ax * 180.0 / M_PI;
-    p.alignment_target_tilt_angle_y_deg = ay * 180.0 / M_PI;
-    p.alignment_target_normal =
-        Vec3(std::sin(ay) * std::cos(ax), -std::sin(ax), std::cos(ay) * std::cos(ax));
-    p.alignment_target_normal.normalize();
-  } else if (p.use_alignment_target_tilt_angle) {
-    const double ax = p.alignment_target_tilt_angle_deg * M_PI / 180.0;
-    const double ay = p.alignment_target_tilt_angle_y_deg * M_PI / 180.0;
-    p.alignment_target_normal =
-        Vec3(std::sin(ay) * std::cos(ax), -std::sin(ax), std::cos(ay) * std::cos(ax));
-    p.alignment_target_normal.normalize();
-  }
+  const double ax = p.alignment_target_tilt_angle_deg * M_PI / 180.0;
+  const double ay = p.alignment_target_tilt_angle_y_deg * M_PI / 180.0;
+  p.alignment_target_normal =
+      Vec3(std::sin(ay) * std::cos(ax), -std::sin(ax), std::cos(ay) * std::cos(ax));
+  p.alignment_target_normal.normalize();
   p.alignment_target_tangent1 =
       getVec3Xyz("alignment_target_tangent1", p.alignment_target_tangent1);
   p.tool_axis_ee = getVec3Xyz("tool_axis_ee", p.tool_axis_ee);

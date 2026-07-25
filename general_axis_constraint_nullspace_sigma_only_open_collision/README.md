@@ -33,8 +33,7 @@ The constrained surface is a plane in the robot base frame:
 n^T * (p - p_surface) = 0
 ```
 
-The plane orientation is set either from two tilt angles or from `n` directly
-(`use_alignment_target_tilt_angle` / `derive_tilt_angles_from_plane_normal`):
+The plane orientation is set from two tilt angles:
 
 ```text
 n = R_y(b) * R_x(a) * [0,0,1] = [sin(b)cos(a), -sin(a), cos(b)cos(a)]

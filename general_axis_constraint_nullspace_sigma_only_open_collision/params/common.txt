@@ -78,16 +78,10 @@ surface_point_x = 0.55
 surface_point_y = -0.06
 surface_point_z = 0.025
 
-# Plane orientation: use tilt angles, or use the manual normal below.
-use_alignment_target_tilt_angle = 1
-derive_tilt_angles_from_plane_normal = 0
+# Plane orientation from two tilt angles:
+# n = R_y(b) * R_x(a) * [0,0,1].
 alignment_target_tilt_angle_deg   = 0.0   # a, about base x
 alignment_target_tilt_angle_y_deg = 5.0   # b, about base y
-
-# Manual normal, used when use_alignment_target_tilt_angle = 0.
-alignment_target_normal_x = 0.0
-alignment_target_normal_y = -0.342
-alignment_target_normal_z = 0.940
 
 # Surface frame columns: [tangent1, tangent2, normal]. tangent2 is computed.
 alignment_target_tangent1_x = 1.0

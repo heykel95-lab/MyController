@@ -140,16 +140,12 @@ void printParameters(const Parameters& params) {
          params.pause_before_set_up ? "on" : "off",
          params.pause_before_grind ? "on" : "off",
          params.debug_period);
-  printf("alignment-target normal=[%+.3f, %+.3f, %+.3f] | tilt a(x)=%.1f deg, b(y)=%.1f deg%s\n",
+  printf("alignment-target normal=[%+.3f, %+.3f, %+.3f] | tilt a(x)=%.1f deg, b(y)=%.1f deg (from angles)\n",
          params.alignment_target_normal(0),
          params.alignment_target_normal(1),
          params.alignment_target_normal(2),
          params.alignment_target_tilt_angle_deg,
-         params.alignment_target_tilt_angle_y_deg,
-         params.derive_tilt_angles_from_plane_normal
-             ? " (derived from plane normal)"
-             : (params.use_alignment_target_tilt_angle ? " (from angles)"
-                                                       : " (manual normal)"));
+         params.alignment_target_tilt_angle_y_deg);
 }
 
 void printContactEdgeDebug(const Vec3& offset_ee,

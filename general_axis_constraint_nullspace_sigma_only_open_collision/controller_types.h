@@ -66,10 +66,7 @@ struct Parameters {
   bool constraint_enabled = true;
   bool use_start_as_surface_point = true;
   Vec3 surface_point = Vec3(0.0, 0.0, 0.0);
-  Vec3 alignment_target_normal = Vec3(1.0, 0.0, 0.0);
-  bool use_alignment_target_tilt_angle = false;
-  // 1 = derive tilt angles from the normal vector during parameter loading.
-  bool derive_tilt_angles_from_plane_normal = false;
+  Vec3 alignment_target_normal = Vec3(0.0, 0.0, 1.0);
   double alignment_target_tilt_angle_deg = 0.0;    // a, about base x
   double alignment_target_tilt_angle_y_deg = 0.0;  // b, about base y
   Vec3 alignment_target_tangent1 = Vec3(0.0, 1.0, 0.0);
