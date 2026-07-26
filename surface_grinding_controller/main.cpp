@@ -1,12 +1,7 @@
 // Self-alignment / grinding controller for the Franka arm.
 //
 // Runs the approach -> set up -> grind sequence, or a startup-selected hold.
-#include "controller_helpers.h"
-#include "controller_logging.h"
-#include "controller_parameters.h"
-#include "controller_printing.h"
-#include "controller_report.h"
-#include "controller_startup.h"
+#include "controller.h"
 
 int main() {
   try {

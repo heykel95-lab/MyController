@@ -12,7 +12,7 @@ robot_ip = 172.16.0.2
 # experiment_duration > 0.0 -> automatic stop after this time [s]
 experiment_duration = 0.0
 
-csv_file_name = general_axis_constraint_nullspace_sigma_only_open_collision_log.csv
+csv_file_name = surface_grinding_controller_log.csv
 log_every_n_cycles = 1
 max_log_rows = 120000
 

@@ -127,23 +127,23 @@ non-finite / non-positive result).
 | File | Contents |
 |------|----------|
 | `main.cpp` | Setup, the phase machine, the control law |
-| `controller_types.h` | `ControlPhase`, `Parameters`, `LogData` |
-| `controller_helpers.*` | Math, task frames, screw axis, spatial gains, nullspace |
-| `controller_parameters.*` | Parameter-file parsing |
-| `controller_startup.*` | Startup menus, gripper actions, manual guidance |
-| `controller_report.*` | The one-shot set-up report and coupled-wrench comparison |
-| `controller_printing.*` | Phase debug lines and all value formatting |
-| `controller_logging.*` | CSV output |
+| `controller.h` | Shared types plus all module declarations |
+| `config.cpp` | Parameters, parsing, and parameter-file write-back |
+| `control_math.cpp` | Math, task frames, screw axis, spatial gains, nullspace |
+| `runtime_io.cpp` | Startup menus, gripper actions, debug printing, CSV output |
+| `setup_report.cpp` | The one-shot set-up report and coupled-gain write-back |
+| `tools/check_tool_offset.cpp` | Read-only TCP/stiffness-frame inspection tool |
 
 ## Build and run
 
 ```bash
 make
-./general_axis_constraint_nullspace_sigma_only_open_collision
+./surface_grinding_controller
 ```
 
-`make check_tool_offset` builds a read-only helper that prints the configured
-`F_T_EE` / `EE_T_K` transforms without commanding any motion.
+`make check_tool_offset` builds `tools/check_tool_offset`, a read-only helper
+that prints the configured `F_T_EE` / `EE_T_K` transforms without commanding
+any motion.
 
 Stop the controller at any time with `e + Enter`. A bare `Enter` continues past
 a phase gate.

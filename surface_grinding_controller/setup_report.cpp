@@ -1,7 +1,4 @@
-#include "controller_report.h"
-
-#include "controller_helpers.h"
-#include "controller_printing.h"
+#include "controller.h"
 
 namespace {
 

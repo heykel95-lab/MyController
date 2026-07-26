@@ -1,4 +1,4 @@
-#include "controller_parameters.h"
+#include "controller.h"
 
 std::string trim(const std::string& input) {
   const std::string whitespace = " \t\r\n";
@@ -55,6 +55,61 @@ double parseDoubleValue(const std::string& input) {
   }
 
   return sign * numerator * M_PI / denominator;
+}
+
+void updateParameterValues(
+    const std::string& filename,
+    const std::vector<std::pair<std::string, std::string>>& updates) {
+  std::ifstream in(filename);
+  if (!in.is_open()) {
+    return;
+  }
+  std::vector<std::string> lines;
+  std::string line;
+  while (std::getline(in, line)) {
+    lines.push_back(line);
+  }
+  in.close();
+
+  for (auto& l : lines) {
+    const auto comment_pos = l.find('#');
+    const std::string code_part =
+        (comment_pos != std::string::npos) ? l.substr(0, comment_pos) : l;
+    const auto eq_pos = code_part.find('=');
+    if (eq_pos == std::string::npos) {
+      continue;
+    }
+    const std::string key = trim(code_part.substr(0, eq_pos));
+    for (const auto& update : updates) {
+      if (key == update.first) {
+        const std::string comment_part =
+            (comment_pos != std::string::npos) ? l.substr(comment_pos) : "";
+        l = code_part.substr(0, eq_pos) + "= " + update.second +
+            (comment_part.empty() ? "" : ("  " + comment_part));
+        break;
+      }
+    }
+  }
+
+  std::ofstream out(filename, std::ios::trunc);
+  for (const auto& out_line : lines) {
+    out << out_line << "\n";
+  }
+}
+
+void appendMat6ParameterUpdates(
+    std::vector<std::pair<std::string, std::string>>& updates,
+    const std::string& prefix,
+    const Mat6x6& matrix) {
+  char key[64];
+  char value[32];
+  for (int r = 0; r < 6; ++r) {
+    for (int c = 0; c < 6; ++c) {
+      snprintf(key, sizeof(key), "%s_%d%d", prefix.c_str(), r, c);
+      snprintf(value, sizeof(value), "%.9g", matrix(r, c));
+      updates.emplace_back(key, value);
+    }
+  }
 }
 
 NullspaceMode parseNullspaceMode(const std::string& input, NullspaceMode fallback) {

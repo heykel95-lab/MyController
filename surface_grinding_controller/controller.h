@@ -1,0 +1,481 @@
+#pragma once
+
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <cmath>
+#include <cctype>
+#include <stdio.h>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
+
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
+
+#include <franka/duration.h>
+#include <franka/exception.h>
+#include <franka/gripper.h>
+#include <franka/model.h>
+#include <franka/robot.h>
+#include <franka/robot_state.h>
+
+#include "examples_common.h"
+
+using Array6 = std::array<double, 6>;
+using Array7 = std::array<double, 7>;
+using Vec3 = Eigen::Vector3d;
+using Vec6 = Eigen::Matrix<double, 6, 1>;
+using Vec7 = Eigen::Matrix<double, 7, 1>;
+using Mat3 = Eigen::Matrix3d;
+using Mat4x4 = Eigen::Matrix<double, 4, 4>;
+using Mat6x6 = Eigen::Matrix<double, 6, 6>;
+using Mat6x7 = Eigen::Matrix<double, 6, 7>;
+using Mat7x6 = Eigen::Matrix<double, 7, 6>;
+using Mat7x7 = Eigen::Matrix<double, 7, 7>;
+
+template <typename MatrixType>
+using Map = Eigen::Map<MatrixType>;
+
+using Robot = franka::Robot;
+using Gripper = franka::Gripper;
+using RobotState = franka::RobotState;
+using Model = franka::Model;
+using Torques = franka::Torques;
+using Duration = franka::Duration;
+using Frame = franka::Frame;
+using franka::MotionFinished;
+
+// Sequence phases plus the two standalone startup modes.
+enum class ControlPhase {
+  kApproachOrient,
+  kApproachDescend,
+  kSetUp,
+  kGrind,
+  kHold,
+  kManualGuide
+};
+
+enum class NullspaceMode {
+  kOff = 0,
+  kPostureOnly = 1,
+  kSigmaOnly = 2,
+  kPostureAndSigma = 3
+};
+
+struct Parameters {
+  // Robot connection, logging and terminal debug.
+  std::string robot_ip = "172.16.0.2";
+  double experiment_duration = 0.0;  // <= 0 runs until e + Enter
+  std::string csv_file_name = "surface_grinding_controller_log.csv";
+  int log_every_n_cycles = 5;
+  int max_log_rows = 120000;
+  double debug_period = 0.20;
+  bool print_hold_debug = true;
+  bool print_grind_debug = true;
+  bool print_coupled_diagnostics = true;
+
+  // Gripper action performed once after q_init.
+  bool open_gripper_before_run = true;
+  bool require_gripper_open = true;
+  // 1 = close onto the tool held in the hand, 0 = open to gripper_open_width.
+  bool gripper_grasp_on_tool = false;
+  double gripper_open_width = 0.08;
+  double gripper_open_speed = 0.05;
+  double gripper_grasp_width = 0.02;
+  double gripper_grasp_speed = 0.05;
+  double gripper_grasp_force = 40.0;
+  double gripper_grasp_epsilon_inner = 0.005;
+  double gripper_grasp_epsilon_outer = 0.010;
+  // Runtime-only: set when the startup menu already handled the gripper.
+  bool startup_gripper_manual = false;
+
+  // Run mode.
+  // 1 = sequence, 0 = hold.
+  bool use_phase_sequence = true;
+  // 0 = skip the orient step and start the sequence at the descend step.
+  bool use_approach_orient = true;
+  bool use_manual_guidance_start = false;
+  double manual_guidance_damping = 0.5;
+
+  // Hold mode gains (isotropic, base frame).
+  double hold_Kp = 300.0;
+  double hold_Dp = 50.0;
+  double hold_KR = 40.0;
+  double hold_DR = 8.0;  // applied directly; hold rotation is not auto-damped
+  bool hold_auto_damping = true;
+  double hold_auto_damping_factor = 1.0;
+
+  // Surface plane and tool geometry.
+  bool use_start_as_surface_point = true;
+  Vec3 surface_point = Vec3(0.0, 0.0, 0.0);
+  Vec3 alignment_target_normal = Vec3(0.0, 0.0, 1.0);
+  double alignment_target_tilt_angle_deg = 0.0;    // a, about base x
+  double alignment_target_tilt_angle_y_deg = 0.0;  // b, about base y
+  Vec3 alignment_target_tangent1 = Vec3(0.0, 1.0, 0.0);
+  Vec3 tool_axis_ee = Vec3(0.0, 0.0, 1.0);
+  double tool_axis_target_sign = -1.0;
+  bool use_tool_contact_point_control = true;
+  bool auto_select_tool_contact_edge = true;
+  Vec3 tool_contact_point_ee = Vec3(0.0, 0.0, 0.0);
+  // Rotational spring mask in the alignment-target frame.
+  bool constrain_rotation_about_alignment_normal = true;
+  bool constrain_rotation_about_alignment_tangent1 = true;
+  bool constrain_rotation_about_alignment_tangent2 = true;
+
+  // Phase 1: approach (orient, then descend).
+  double approach_orient_min_time = 0.5;
+  double approach_orient_error_threshold = 0.03;
+  // One impedance for both approach steps, in [tangent1, tangent2, normal].
+  Vec3 approach_Kp_diag = Vec3(150.0, 150.0, 150.0);
+  Vec3 approach_KR_diag = Vec3(90.0, 90.0, 8.0);
+  Vec3 approach_Dp_diag = Vec3(20.0, 20.0, 20.0);
+  Vec3 approach_DR_diag = Vec3(12.0, 12.0, 12.0);
+  bool approach_auto_damping = false;
+  double approach_auto_damping_factor = 1.0;
+  double descend_speed = 0.005;
+  double descend_max_distance = 0.02;
+  // Clearance above the surface before set up takes over.
+  double descend_surface_clearance = 0.020;
+
+  // Phase 2: set up.
+  double setup_min_time = 0.3;       // before the moment early-exit can fire
+  double setup_duration = 15.0;      // hard time limit for the phase
+  double setup_moment_threshold = 60.0;
+  // Position preload ramped into the surface; grind inherits the final value.
+  double setup_push_speed = 0.0;
+  double setup_max_push = 0.0;
+  // Translational spring, base frame [x, y, z].
+  Vec3 setup_Kp_diag = Vec3(40.0, 40.0, 5500.0);
+  Vec3 setup_Dp_diag = Vec3(10.0, 10.0, 175.0);
+  // Rotational spring, alignment-target frame [tangent1, tangent2, normal].
+  Vec3 setup_KR_diag = Vec3(0.0, 0.0, 8.0);
+  Vec3 setup_DR_diag = Vec3(0.01, 0.01, 4.0);
+  bool setup_auto_damping = false;
+  double setup_auto_damping_factor = 1.0;
+
+  // Phase 3: grind (constant press, shared gains with phase 2).
+  // 1 = commanded sweep, 0 = free-slide press hold.
+  bool grind_sweep_enabled = false;
+  int grind_axis = 1;               // 1 = tangent1, 2 = tangent2
+  double grind_amplitude_m = 0.03;  // sweep half-amplitude A [m]
+  double grind_frequency_hz = 0.2;  // one full back-and-forth cycle [Hz]
+
+  // Enter gates between phases.
+  bool pause_before_set_up = false;  // hold at the clearance height
+  bool pause_before_grind = false;   // hold the seated/pressed pose
+  // Position-only stiff hold while paused.
+  double pause_hold_Kp = 5000.0;
+  double pause_hold_Dp = 200.0;
+
+  // Coupled (pole-based) stiffness for the set-up phase.
+  bool use_coupled_stiffness = false;
+  // K/D source: block diagonal, manual pole, or saved matrices.
+  bool coupled_use_block_diagonal = false;
+  bool coupled_pole_manual = false;
+  Vec3 coupled_pole_from_edge = Vec3::Zero();
+  // 1 = freeze pole at first contact, 0 = track the live moving edge.
+  bool coupled_pole_freeze_at_contact = true;
+  // Auto-written after a set-up phase with a valid finite screw axis.
+  bool coupled_gains_saved = false;
+  Mat6x6 coupled_K_tcp = Mat6x6::Zero();
+  Mat6x6 coupled_D_tcp = Mat6x6::Zero();
+
+  // Nullspace optimization.
+  bool use_nullspace_optimization = true;
+  NullspaceMode nullspace_mode = NullspaceMode::kPostureAndSigma;
+  double nullspace_k_start = 1.0;
+  double nullspace_damping = 1.0;
+  double nullspace_k_sigma = 0.5;
+  double nullspace_alpha = 0.01;
+
+  // Auto-damping options.
+  double auto_damping_max = 8000.0;
+  // 1 = manual Dp/DR values are per-axis floors, not only fallbacks.
+  bool auto_damping_min_from_manual = false;
+  bool print_auto_damping = true;
+
+  // Start pose and collision thresholds.
+  Array7 q_init = {{
+      0.0,
+      -M_PI_4,
+      0.0,
+      -3.0 * M_PI_4,
+      0.0,
+      M_PI_2,
+      0.0
+  }};
+  std::string q_init_case = "horizontal_tool";
+
+  bool use_custom_collision_behavior = false;
+  double collision_torque_acc = 80.0;
+  double collision_torque_nom = 80.0;
+  double collision_force_acc = 80.0;
+  double collision_force_nom = 80.0;
+};
+
+struct LogData {
+  double time;
+  int phase;
+
+  Vec3 p_EE;
+  Vec3 p_d;
+  Vec3 tool_contact_point;
+  Vec3 first_contact_tcp;
+  Vec3 first_contact_point;
+  Vec3 edge_target;
+  Vec3 tool_contact_offset_ee;
+
+  Vec3 e_p;
+  Vec3 e_R;
+
+  Vec3 pdot;
+  Vec3 pdot_d;
+  Vec3 omega;
+
+  Vec3 f;
+  Vec3 m;
+  Vec3 external_force;
+  Vec3 external_moment;
+  Vec3 contact_force_bias;
+  Vec3 contact_moment_bias;
+  double push;
+
+  Vec7 tau_cmd;
+};
+
+struct DesiredMotion {
+  Vec3 p_d;
+  Vec3 pdot_d;
+};
+
+struct FiniteScrewAxis {
+  Vec3 axis_point_from_start = Vec3::Zero();
+  Vec3 axis_dir = Vec3::Zero();
+  double pitch = 0.0;
+  double angle = 0.0;
+  bool valid = false;
+};
+
+struct CartesianInertiaEstimate {
+  Vec3 translational = Vec3::Ones();
+  Vec3 rotational = Vec3::Ones();
+  bool valid = false;
+};
+
+// Everything the one-shot set-up report needs, captured by the control loop at
+// the moment the set-up phase ends.
+struct SetUpReport {
+  // How the phase ended.
+  bool stopped_on_moment = false;  // false = hit the duration limit
+  double phase_time = 0.0;
+  double force_delta_norm = 0.0;
+  double moment_delta_norm = 0.0;
+
+  // Pose and contact wrench at the end of the phase.
+  Vec3 p_EE = Vec3::Zero();
+  Mat3 R_EE = Mat3::Identity();
+  Vec3 tool_contact_point = Vec3::Zero();
+  Vec3 external_force = Vec3::Zero();
+  Vec3 contact_moment_at_edge = Vec3::Zero();
+
+  // Reference captured when the phase started (first contact).
+  Vec3 first_contact_tcp = Vec3::Zero();
+  Vec3 first_contact_point = Vec3::Zero();
+  Mat3 R_contact_start = Mat3::Identity();
+  Vec3 contact_force_bias = Vec3::Zero();
+
+  // The diagonal set-up spring that was active, already in base coordinates.
+  Mat3 Kp = Mat3::Zero();
+  Mat3 Dp = Mat3::Zero();
+  Mat3 KR = Mat3::Zero();
+  Mat3 DR = Mat3::Zero();
+};
+
+Parameters readParameters(const std::vector<std::string>& filenames);
+
+void updateParameterValues(
+    const std::string& filename,
+    const std::vector<std::pair<std::string, std::string>>& updates);
+
+void appendMat6ParameterUpdates(
+    std::vector<std::pair<std::string, std::string>>& updates,
+    const std::string& prefix,
+    const Mat6x6& matrix);
+
+Array7 vec7ToArray(const Vec7& v);
+
+Array7 filledArray7(double value);
+
+Array6 filledArray6(double value);
+
+double smallestSingularValue(const Mat6x7& J);
+
+Vec3 normalizedOrFallback(const Vec3& v, const Vec3& fallback);
+
+Mat3 skewMatrix(const Vec3& v);
+
+double smoothStep(double r);
+
+double smoothStepDerivative(double r, double T);
+
+void grindSweep(double t, double amplitude, double stroke_duration,
+                double& s, double& s_dot);
+
+double grindStrokeDuration(const Parameters& params);
+
+double setUpPush(const Parameters& params, double phase_time, double start_push);
+
+Vec3 nearestPointOnAxis(
+    const Vec3& point,
+    const Vec3& axis_point,
+    const Vec3& axis_direction);
+
+FiniteScrewAxis computeFiniteScrewAxis(
+    const Vec3& p_start,
+    const Mat3& R_start,
+    const Vec3& p_end,
+    const Mat3& R_end);
+
+Mat6x6 blockDiagonal(const Mat3& translational, const Mat3& rotational);
+
+Mat6x6 offsetAdjoint(const Vec3& r_c);
+
+Mat6x6 adjointTransformedGain(const Mat6x6& pole_gain, const Vec3& r_c);
+
+Mat6x6 blockDiagonalRotation(const Mat3& R);
+
+Mat3 makeSpatialGainMatrix(const Vec3& diagonal_in_task_frame, const Mat3& R_task);
+
+CartesianInertiaEstimate computeCartesianInertiaEstimate(
+    const Mat7x7& joint_mass,
+    const Mat6x7& J,
+    const Mat3& R_task);
+
+Vec3 criticalDampingFromStiffness(const Vec3& inertia,
+                                  const Vec3& stiffness,
+                                  double damping_ratio,
+                                  const Vec3& min_damping,
+                                  double max_damping);
+
+Vec3 orientationError(const Mat3& R_current, const Mat3& R_desired);
+
+Mat3 makeSurfaceFrameFromNormalTangent(const Vec3& normal_input, const Vec3& tangent1_input);
+
+Mat3 makeAlignmentTargetFrame(const Parameters& params);
+
+Mat3 rotationBetweenUnitVectors(const Vec3& from_unit, const Vec3& to_unit);
+
+Vec3 desiredToolAxisInBase(const Parameters& params, const Mat3& R_alignment_target);
+
+Vec3 currentToolAxisInBase(const Parameters& params, const Mat3& R_EE);
+
+Mat3 makeToolOrientationForAlignmentTarget(
+    const Parameters& params,
+    const Mat3& R_alignment_target,
+    const Mat3& R_start);
+
+Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_alignment_target);
+
+void startKeyboardStopThread(
+    const Parameters& params,
+    std::atomic<bool>& stop_requested,
+    std::atomic<bool>& proceed_requested,
+    std::atomic<bool>& guide_requested,
+    std::atomic<char>& guidance_menu_key,
+    std::atomic<bool>& gate_continue);
+
+void configureCollisionBehavior(Robot& robot, const Parameters& params);
+
+Vec7 computeNullspaceTorque(
+    const Parameters& params,
+    const Model& model,
+    const RobotState& state,
+    const Mat6x7& J,
+    const Vec7& dq,
+    const Vec7& q_start);
+
+bool openGripper(const Parameters& params, Gripper& gripper);
+
+bool graspTool(const Parameters& params, Gripper& gripper);
+
+void askStartupRunMode(Parameters& params);
+
+bool performStartupGripperAction(const Parameters& params);
+
+bool runManualGuidanceStart(Parameters& params,
+                            Robot& robot,
+                            const Model& model,
+                            std::atomic<bool>& stop_requested,
+                            std::atomic<char>& guidance_menu_key);
+
+const char* phaseName(ControlPhase phase);
+
+const char* nullspaceModeName(NullspaceMode mode);
+
+void printVec3Mm(const char* label, const Vec3& v);
+
+void printVec3Deg(const char* label, const Vec3& v);
+
+void printGainVec(const char* label, const Vec3& v);
+
+void printVec7Deg(const char* label, const Vec7& v);
+
+void printSpatialGain6(const char* label, const Mat6x6& M);
+
+void printSpatialGainEigenvalues(const char* label, const Mat6x6& M);
+
+void printJointStartEndTableDeg(const Vec7& q_start, const Vec7& q_final);
+
+void printParameters(const Parameters& params);
+
+void printContactEdgeDebug(const Vec3& offset_ee,
+                           const Vec3& p_EE_at_contact,
+                           const Vec3& contact_point);
+
+void printApproachOrientDebug(double phase_time,
+                              double axis_error_deg,
+                              double rot_error_deg);
+
+void printApproachDescendDebug(double phase_time,
+                               double distance_mm,
+                               double height_mm,
+                               double target_height_mm,
+                               double force_n);
+
+void printSetUpDebug(double phase_time,
+                     double tip_deg,
+                     double force_n,
+                     double moment_nm,
+                     double moment_limit_nm,
+                     double edge_mm);
+
+void printGrindDebug(double phase_time,
+                     double sweep_mm,
+                     double track_error_mm,
+                     double press_n);
+
+void printHoldDebug(double phase_time,
+                    double force_n,
+                    double pos_error_mm,
+                    double rot_error_deg);
+
+void printFinalSummary(const Vec3& final_p_d,
+                       const Vec3& final_p_EE,
+                       const Vec3& final_e_p,
+                       const Vec3& final_e_R,
+                       const std::string& csv_file_name);
+
+void writeLogToCsv(
+    const std::vector<LogData>& log_data,
+    const std::string& csv_file_name);
+
+void reportSetUpResult(const Parameters& params,
+                       const Mat3& R_alignment_target,
+                       const SetUpReport& report,
+                       std::vector<std::pair<std::string, std::string>>* parameter_updates);
