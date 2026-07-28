@@ -1,0 +1,23 @@
+
+Press Enter to recover and configure the robot.
+Robot recovered or already ready.
+Collision: custom thresholds.
+
+=== Startup choice ===
+  q = go to q_init (from params/common.txt), then choose again
+  g = guiding mode: go to q_init, then hand-guide to your pose;
+      use s+Enter for sequence or h+Enter for hold
+  o = open the Franka hand now (release/load tool), then choose again
+  c = close/grasp the tool now, then choose again
+  r = continue to run mode (available after q_init is reached)
+Choice [q/g/o/c/r, Enter = q]: Moving to q_init...
+q_init reached.
+
+=== Startup choice ===
+  q = go to q_init (from params/common.txt), then choose again
+  g = guiding mode: go to q_init, then hand-guide to your pose;
+      use s+Enter for sequence or h+Enter for hold
+  o = open the Franka hand now (release/load tool), then choose again
+  c = close/grasp the tool now, then choose again
+  r = continue to run mode
+Choice [q/g/o/c/r, Enter = q]: 
