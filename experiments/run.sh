@@ -64,6 +64,10 @@ else
 fi
 
 restore_params() {
+  # Ctrl-C fires INT and then EXIT, so without this guard the second call finds
+  # the backup already deleted and prints a bogus "cp: cannot stat" error --
+  # which is indistinguishable from a real restore failure at a glance.
+  [ -d "$BACKUP" ] || return 0
   cp -a "$BACKUP/." "$PARAMS/"
   rm -rf "$BACKUP"
   echo ""

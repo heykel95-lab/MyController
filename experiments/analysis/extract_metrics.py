@@ -143,6 +143,12 @@ def process_run(run_id, repeat_tag, run_dir):
                 tip = m.get("tip_final_deg", 0.0)
                 if tip > 0 and drift > 0.1 * tip:
                     flags.append("not-converged")
+            else:
+                # A CSV exists but the run never got as far as the set-up press
+                # -- aborted during approach, typically. Every set-up metric is
+                # blank, and without a flag the run counts as good and enters
+                # the means as a hole.
+                flags.append("no-setup-phase")
         except Exception as exc:  # noqa: BLE001
             flags.append(f"setup-parse-error({type(exc).__name__})")
 
