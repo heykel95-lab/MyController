@@ -137,3 +137,13 @@ else
   echo "  $OUT"
 fi
 echo "exit status: $STATUS"
+
+# Propagate it. Without this the script always returned 0 (the status of the
+# echo above), so a batch written as
+#   for i in 1 2 3; do ./experiments/run.sh <id> $i || break; done
+# ran on after an aborted run and burned the remaining repeat indices in
+# seconds. A run that produced no CSV is a failure and must stop the batch.
+if [ "$MOVED" -eq 0 ] && [ "$STATUS" -eq 0 ]; then
+  exit 1
+fi
+exit "$STATUS"
