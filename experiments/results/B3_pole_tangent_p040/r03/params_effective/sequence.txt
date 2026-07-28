@@ -1,0 +1,211 @@
+# ====================================================================
+# PHASE SEQUENCE parameters
+# ====================================================================
+# Sequence run: approach -> set up -> grind.
+# Surface/tool geometry and auto-damping toggles live in common.txt.
+# This file owns the auto-written coupled_K_tcp / coupled_D_tcp entries.
+
+# 1 = sequence. 0 = hold at the start pose.
+use_phase_sequence = 1
+
+# 0 = skip orient and start at descend.
+use_approach_orient = 1
+
+
+# ====================================================================
+# Phase 1: approach
+# ====================================================================
+# ----- orient step -----
+# Minimum time in the orient step before it may switch to descend [s].
+approach_orient_min_time = 0.5
+
+# Tool-axis error threshold for switching to descend [rad].
+approach_orient_error_threshold = 0.035
+
+# ----- shared approach impedance (orient AND descend) -----
+# Surface-frame order: [tangent1, tangent2, normal].
+approach_Kp_normal = 150.0
+approach_Kp_tangent1 = 150.0
+approach_Kp_tangent2 = 150.0
+approach_KR_normal = 90.0
+approach_KR_tangent1 = 90.0
+approach_KR_tangent2 = 90.0
+# Manual damping fallback [Ns/m | Nms/rad].
+approach_Dp_normal = 20.0
+approach_Dp_tangent1 = 20.0
+approach_Dp_tangent2 = 20.0
+approach_DR_normal = 12.0
+approach_DR_tangent1 = 12.0
+approach_DR_tangent2 = 12.0
+
+# ----- descend step -----
+# Switches to set up when the active contact point reaches this clearance.
+descend_surface_clearance = 0.020
+
+# Descend moves into the surface along -normal.
+# Speed [m/s] and maximum travel before the run gives up [m].
+descend_speed = 0.1
+descend_max_distance = 0.640
+
+
+# ====================================================================
+# Phase 2: set up
+# ====================================================================
+# Ends on setup_moment_threshold after setup_min_time, or on setup_timeout.
+# 12.0 from G2: the push ramp ends at 4.0 s, force overshoots to ~65 N and
+# relaxes to ~60 N by 4.6 s, after which tip and force are flat to 12 s
+# (t8 drift 0.002 deg, t12 drift 0.000 deg). At 4.0 s the phase was being cut
+# at the overshoot, so every number taken from it was a transient.
+setup_min_time = 2.0
+setup_timeout = 12.0
+setup_moment_threshold = 150.0
+
+# Alignment starts from the actual contact-point height captured at the end of
+# descend. End + speed define the ramp; ramp time is derived as
+# abs(end - captured_start) / speed. setup_timeout is independent and may stop
+# the phase before the configured end is reached.
+# Check setup_Kp_z * setup_push_end against safety.txt thresholds.
+setup_push_speed = 0.050
+setup_push_end = 0.180
+
+# Translational spring, base frame [x, y, z].
+setup_Kp_x = 2000.0
+setup_Kp_y = 2000.0
+setup_Kp_z = 350.0
+# Manual damping FALLBACK [Ns/m], same fallback conditions as the approach Dp.
+setup_Dp_x = 10.0
+setup_Dp_y = 10.0
+setup_Dp_z = 175.0
+
+# Rotational spring, surface frame [tangent1, tangent2, normal].
+setup_KR_normal = 50.0
+setup_KR_tangent1 = 5.0
+setup_KR_tangent2 = 5.0
+# Manual damping FALLBACK [Nms/rad].
+setup_DR_normal = 10.0
+setup_DR_tangent1 = 10.01
+setup_DR_tangent2 = 10.01
+
+
+# ====================================================================
+# Phase 3: grind
+# ====================================================================
+# 1 = commanded sweep. 0 = free-slide press hold.
+grind_sweep_enabled = 1
+print_grind_debug = 0
+
+# Sweep path: smooth ping-pong along tangent1 or tangent2.
+grind_axis = 2
+grind_amplitude_m = 0.03
+grind_frequency_hz = 0.2
+
+
+# ====================================================================
+# Enter gates between phases
+# ====================================================================
+# Bare Enter continues; e+Enter stops.
+pause_before_set_up = 1
+pause_before_grind = 0
+
+# Stiff hold while paused at the pre-set-up gate. Auto damping fits translation
+# toward pause_hold_Dp and rotation toward the approach damping inherited by the
+# old gate behavior.
+pause_hold_Kp = 5000.0
+pause_hold_Dp = 200.0
+pause_hold_auto_damping = 1
+
+
+# ====================================================================
+# Coupled (pole-based) stiffness during set up
+# ====================================================================
+# Command the 6x6 spring during set up.
+use_coupled_stiffness = 1
+
+# K/D source: block diagonal, manual pole, or saved matrices below.
+coupled_use_block_diagonal = 0
+coupled_pole_manual = 1
+coupled_pole_from_edge_x = 0.046820
+coupled_pole_from_edge_y = 0.000000
+coupled_pole_from_edge_z = 0.076209
+
+# 1 = freeze pole at first contact. 0 = update from the live edge.
+coupled_pole_freeze_at_contact = 1
+
+# Print the coupled-stiffness diagnostics in the set-up report.
+print_coupled_diagnostics = 1
+
+# Saved 6x6 coupled gains, base frame, rows/cols [fx fy fz mx my mz].
+# Auto-written after a set-up phase with a valid finite screw axis.
+coupled_gains_saved = 1
+coupled_K_tcp_00 = 3000
+coupled_K_tcp_01 = 0
+coupled_K_tcp_02 = 0
+coupled_K_tcp_03 = 0
+coupled_K_tcp_04 = 71.4135088
+coupled_K_tcp_05 = 782.118358
+coupled_K_tcp_10 = 0
+coupled_K_tcp_11 = 3000
+coupled_K_tcp_12 = 0
+coupled_K_tcp_13 = -71.4135088
+coupled_K_tcp_14 = 0
+coupled_K_tcp_15 = -374.027261
+coupled_K_tcp_20 = 0
+coupled_K_tcp_21 = 0
+coupled_K_tcp_22 = 500
+coupled_K_tcp_23 = -130.35306
+coupled_K_tcp_24 = 62.3378768
+coupled_K_tcp_25 = 0
+coupled_K_tcp_30 = 0
+coupled_K_tcp_31 = -71.4135088
+coupled_K_tcp_32 = -130.35306
+coupled_K_tcp_33 = 45.6838034
+coupled_K_tcp_34 = -16.2518659
+coupled_K_tcp_35 = 8.90353303
+coupled_K_tcp_40 = 71.4135088
+coupled_K_tcp_41 = 0
+coupled_K_tcp_42 = 62.3378768
+coupled_K_tcp_43 = -16.2518659
+coupled_K_tcp_44 = 24.4340042
+coupled_K_tcp_45 = 19.0520592
+coupled_K_tcp_50 = 782.118358
+coupled_K_tcp_51 = -374.027261
+coupled_K_tcp_52 = 0
+coupled_K_tcp_53 = 8.90353303
+coupled_K_tcp_54 = 19.0520592
+coupled_K_tcp_55 = 260.573153
+coupled_D_tcp_00 = 100
+coupled_D_tcp_01 = 0
+coupled_D_tcp_02 = 0
+coupled_D_tcp_03 = 0
+coupled_D_tcp_04 = 2.38045029
+coupled_D_tcp_05 = 26.0706119
+coupled_D_tcp_10 = 0
+coupled_D_tcp_11 = 100
+coupled_D_tcp_12 = 0
+coupled_D_tcp_13 = -2.38045029
+coupled_D_tcp_14 = 0
+coupled_D_tcp_15 = -12.4675754
+coupled_D_tcp_20 = 0
+coupled_D_tcp_21 = 0
+coupled_D_tcp_22 = 50
+coupled_D_tcp_23 = -13.035306
+coupled_D_tcp_24 = 6.23378768
+coupled_D_tcp_25 = 0
+coupled_D_tcp_30 = 0
+coupled_D_tcp_31 = -2.38045029
+coupled_D_tcp_32 = -13.035306
+coupled_D_tcp_33 = 13.4650495
+coupled_D_tcp_34 = -1.62518659
+coupled_D_tcp_35 = 0.296784434
+coupled_D_tcp_40 = 2.38045029
+coupled_D_tcp_41 = 0
+coupled_D_tcp_42 = 6.23378768
+coupled_D_tcp_43 = -1.62518659
+coupled_D_tcp_44 = 10.8437917
+coupled_D_tcp_45 = 0.621466199
+coupled_D_tcp_50 = 26.0706119
+coupled_D_tcp_51 = -12.4675754
+coupled_D_tcp_52 = 0
+coupled_D_tcp_53 = 0.296784434
+coupled_D_tcp_54 = 0.621466199
+coupled_D_tcp_55 = 18.3512484
