@@ -1,0 +1,4 @@
+# A6_clearance_30mm
+# Applied on top of surface_grinding_controller/params/.
+# Only keys listed here differ from the nominal set.
+descend_surface_clearance = 0.03

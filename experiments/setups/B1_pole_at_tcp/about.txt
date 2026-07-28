@@ -1,0 +1,8 @@
+run_id:   B1_pole_at_tcp
+repeats:  3
+
+purpose:
+  Coupled law with the pole placed at the TCP (zero lever).
+
+pass criterion:
+  Must reproduce the decoupled baseline. Second correctness gate: the adjoint reduces to the identity when r_c = 0.

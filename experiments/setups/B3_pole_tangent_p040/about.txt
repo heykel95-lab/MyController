@@ -1,0 +1,8 @@
+run_id:   B3_pole_tangent_p040
+repeats:  3
+
+purpose:
+  Pole swept along surface tangent t1, +0.04 m, at fixed normal offset +0.08 m.
+
+pass criterion:
+  Isolates the tangential pole component. The nominal configuration is dominated by a tangential offset that has never been tested alone.

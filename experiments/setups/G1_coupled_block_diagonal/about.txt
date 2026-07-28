@@ -1,0 +1,8 @@
+run_id:   G1_coupled_block_diagonal
+repeats:  3
+
+purpose:
+  Coupled 6x6 path with block-diagonal gains must reproduce the decoupled wrench exactly. This is the correctness gate for every coupled result.
+
+pass criterion:
+  Tip angle and steady force within the G3 repeatability band of G1_decoupled_baseline. Historically 8.6 deg vs 9.0 deg.

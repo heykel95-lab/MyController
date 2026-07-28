@@ -1,0 +1,6 @@
+# A3_lateral_Kp_2000
+# Applied on top of surface_grinding_controller/params/.
+# Only keys listed here differ from the nominal set.
+use_coupled_stiffness = 0
+setup_Kp_x = 2000.0
+setup_Kp_y = 2000.0

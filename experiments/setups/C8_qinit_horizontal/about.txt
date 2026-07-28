@@ -1,0 +1,8 @@
+run_id:   C8_qinit_horizontal
+repeats:  3
+
+purpose:
+  Null-space generality, mode 3, q_init_case = horizontal.
+
+pass criterion:
+  Improvement should scale with distance from the optimum, not depend on one lucky pose.

@@ -1,0 +1,8 @@
+run_id:   C5_alpha_0p08
+repeats:  3
+
+purpose:
+  Probe distance sweep, nullspace_alpha = 0.08, mode 2.
+
+pass criterion:
+  Tests the claim that alpha is only a sampling step. The selected sign must not flip with alpha, and probe/(2*alpha) should be roughly alpha-invariant.

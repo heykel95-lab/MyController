@@ -1,0 +1,8 @@
+run_id:   C4_ksigma_1p0
+repeats:  3
+
+purpose:
+  Sigma torque magnitude sweep, nullspace_k_sigma = 1.0, mode 2.
+
+pass criterion:
+  Finds the threshold where the sigma torque overcomes friction. The README failure mode is 'tau active but nullspace speed near zero'.

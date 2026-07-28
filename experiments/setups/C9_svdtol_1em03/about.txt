@@ -1,0 +1,8 @@
+run_id:   C9_svdtol_1em03
+repeats:  3
+
+purpose:
+  SVD truncation sensitivity, nullspace_svd_relative_tolerance = 0.001.
+
+pass criterion:
+  Likely only matters near a singularity. If flat, report as a one-line robustness note rather than a thesis section.

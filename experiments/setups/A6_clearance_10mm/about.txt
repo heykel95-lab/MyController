@@ -1,0 +1,8 @@
+run_id:   A6_clearance_10mm
+repeats:  3
+
+purpose:
+  Handoff height, descend_surface_clearance = 0.01 m.
+
+pass criterion:
+  The final equilibrium should not depend on where set-up took over. If it does, the frozen first_contact references are contaminated.

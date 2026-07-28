@@ -325,6 +325,9 @@ struct LogData {
 
   Vec3 e_p;
   Vec3 e_R;
+  // Residual tool-axis-to-surface angle [rad]. Unlike e_R this is referenced to
+  // the configured surface, so it measures alignment quality directly.
+  double alignment_angle;
 
   Vec3 pdot;
   Vec3 pdot_d;
@@ -471,6 +474,13 @@ Mat3 rotationBetweenUnitVectors(const Vec3& from_unit, const Vec3& to_unit);
 Vec3 desiredToolAxisInBase(const Parameters& params, const Mat3& R_alignment_target);
 
 Vec3 currentToolAxisInBase(const Parameters& params, const Mat3& R_EE);
+
+// Residual tool-axis-to-surface angle [rad], non-negative. Distinct from e_R,
+// which is referenced to the orientation frozen at the clearance transition.
+double toolSurfaceMisalignmentAngle(
+    const Parameters& params,
+    const Mat3& R_EE,
+    const Mat3& R_alignment_target);
 
 Mat3 makeToolOrientationForAlignmentTarget(
     const Parameters& params,

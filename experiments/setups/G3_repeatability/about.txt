@@ -1,0 +1,8 @@
+run_id:   G3_repeatability
+repeats:  5
+
+purpose:
+  Noise floor. Nominal configuration, full teardown and reset between repeats.
+
+pass criterion:
+  Report the standard deviation of tip, alignment gain, force, edge travel and axis distance. No later difference smaller than ~2 sigma may be claimed as an effect.

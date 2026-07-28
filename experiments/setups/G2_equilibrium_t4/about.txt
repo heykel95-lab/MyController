@@ -1,0 +1,8 @@
+run_id:   G2_equilibrium_t4
+repeats:  3
+
+purpose:
+  Is the 4 s set-up phase long enough to reach equilibrium?
+
+pass criterion:
+  Compare with G2_equilibrium_t8 and t12. If the tip angle still grows after 4 s, every reported value is a transient and the quasi-static gain-selection argument does not hold.

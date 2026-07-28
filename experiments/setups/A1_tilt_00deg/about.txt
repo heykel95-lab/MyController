@@ -1,0 +1,8 @@
+run_id:   A1_tilt_00deg
+repeats:  3
+
+purpose:
+  Initial misalignment sweep, surface tilt b = 0.0 deg.
+
+pass criterion:
+  Alignment gain should grow with initial misalignment, then saturate. Gives the x-axis for the alignment claim.

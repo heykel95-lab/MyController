@@ -1,0 +1,7 @@
+# Raw controller logs are ~15 MB per run. The provenance files, the derived
+# metrics and the figures next to them ARE tracked, so every figure stays
+# traceable to a commit and a parameter set without carrying the bulk data.
+results/**/*.csv
+
+__pycache__/
+*.pyc

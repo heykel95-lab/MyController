@@ -1,0 +1,8 @@
+run_id:   B2_pole_normal_m080
+repeats:  3
+
+purpose:
+  Pole swept ALONG THE SURFACE NORMAL, s = -0.08 m from the contact edge. Offset is written in base coordinates as s * n.
+
+pass criterion:
+  The main experiment. Expect a sign flip at the edge (s = 0), assist on the far side, an optimum near +0.08 m, and decay by +0.12 m as the quadratic lever term re-stiffens the rotation.

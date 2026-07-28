@@ -1,0 +1,6 @@
+# C8_qinit_tilted_tool
+# Applied on top of surface_grinding_controller/params/.
+# Only keys listed here differ from the nominal set.
+nullspace_mode = 3
+q_init_case = tilted_tool
+print_sigma_debug = 1

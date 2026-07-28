@@ -1,0 +1,8 @@
+run_id:   C6_deadband_at_optimum
+repeats:  3
+
+purpose:
+  Hold started at a good-sigma configuration, mode 2.
+
+pass criterion:
+  Expect C <= 1 and no sustained push: confirms the deadband settles instead of hunting at the optimum.

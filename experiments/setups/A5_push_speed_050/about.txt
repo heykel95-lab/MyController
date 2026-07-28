@@ -1,0 +1,8 @@
+run_id:   A5_push_speed_050
+repeats:  3
+
+purpose:
+  Press rate, setup_push_speed = 0.05 m/s.
+
+pass criterion:
+  Chapter 4 gain selection assumes quasi-static behaviour. If the tip depends on speed, that assumption needs qualifying in the text.

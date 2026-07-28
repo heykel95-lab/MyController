@@ -1,0 +1,8 @@
+run_id:   G1_decoupled_baseline
+repeats:  5
+
+purpose:
+  Decoupled wrench, no coupling. The reference every other run is compared against.
+
+pass criterion:
+  Establishes the baseline. No pass/fail on its own.

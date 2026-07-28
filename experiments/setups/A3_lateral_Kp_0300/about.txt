@@ -1,0 +1,8 @@
+run_id:   A3_lateral_Kp_0300
+repeats:  3
+
+purpose:
+  Lateral translational compliance, setup_Kp_x = setup_Kp_y = 300.0 N/m.
+
+pass criterion:
+  Tests the 'added lateral compliance' case (thesis Test 4). Expect the measured axis to move toward the contact edge if sliding helps.

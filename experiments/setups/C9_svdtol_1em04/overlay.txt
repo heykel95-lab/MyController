@@ -1,0 +1,6 @@
+# C9_svdtol_1em04
+# Applied on top of surface_grinding_controller/params/.
+# Only keys listed here differ from the nominal set.
+nullspace_mode = 3
+nullspace_svd_relative_tolerance = 0.0001
+print_sigma_debug = 1

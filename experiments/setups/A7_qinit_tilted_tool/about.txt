@@ -1,0 +1,8 @@
+run_id:   A7_qinit_tilted_tool
+repeats:  3
+
+purpose:
+  Arm posture, q_init_case = tilted_tool.
+
+pass criterion:
+  Separates a property of the impedance from a property of the configuration.

@@ -1,0 +1,6 @@
+# C6_deadband_at_optimum
+# Applied on top of surface_grinding_controller/params/.
+# Only keys listed here differ from the nominal set.
+nullspace_mode = 2
+q_init_case = horizontal
+print_sigma_debug = 1

@@ -1,0 +1,8 @@
+run_id:   C1_hold_drift_mode0
+repeats:  2
+
+purpose:
+  Hold, null-space off, 60 s, arm untouched.
+
+pass criterion:
+  Control group: establishes the sigma_min drift caused by noise alone.

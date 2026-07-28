@@ -75,6 +75,18 @@ void reportSetUpResult(const Parameters& params,
          tcp_from_contact_mm(0), tcp_from_contact_mm(1), tcp_from_contact_mm(2),
          tcp_from_contact_mm.norm());
 
+  // Alignment quality against the configured surface. tip (above) says how far
+  // the tool turned; this says how flat it ended up. They are different
+  // questions and only this one answers "did the alignment work".
+  const double align_before_deg =
+      (180.0 / M_PI) *
+      toolSurfaceMisalignmentAngle(params, r.R_contact_start, R_alignment_target);
+  const double align_after_deg =
+      (180.0 / M_PI) *
+      toolSurfaceMisalignmentAngle(params, r.R_EE, R_alignment_target);
+  printf("alignment: before=%.2f deg | after=%.2f deg | gain=%+.2f deg\n",
+         align_before_deg, align_after_deg, align_before_deg - align_after_deg);
+
   printSurfaceFrameBreakdown(R_alignment_target, r);
 
   // One exact axis for the whole tipping motion, computed only from the start

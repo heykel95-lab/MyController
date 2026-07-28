@@ -1,0 +1,4 @@
+# A5_push_speed_100
+# Applied on top of surface_grinding_controller/params/.
+# Only keys listed here differ from the nominal set.
+setup_push_speed = 0.1

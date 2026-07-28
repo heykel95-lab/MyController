@@ -1,0 +1,8 @@
+run_id:   A4_push_end_010mm
+repeats:  3
+
+purpose:
+  Press depth, setup_push_end = 0.1 m.
+
+pass criterion:
+  Historically force rose while tip stayed flat. Reproducing that confirms the equilibrium is geometry-limited, not press-limited.

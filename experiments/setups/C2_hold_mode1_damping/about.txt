@@ -1,0 +1,8 @@
+run_id:   C2_hold_mode1_damping
+repeats:  5
+
+purpose:
+  Hold, push-and-release protocol, nullspace_mode = 1 (damping).
+
+pass criterion:
+  Core comparison. Metrics: recovered sigma_min, recovery time, vBest sign, tau_sigma norm. C3 (task invariance) is extracted from the same logs at no extra cost.

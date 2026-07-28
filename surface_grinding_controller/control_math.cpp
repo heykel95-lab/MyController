@@ -346,6 +346,24 @@ Vec3 currentToolAxisInBase(const Parameters& params, const Mat3& R_EE) {
   return R_EE * normalizedOrFallback(params.tool_axis_ee, Vec3(0.0, 0.0, 1.0));
 }
 
+double toolSurfaceMisalignmentAngle(
+    const Parameters& params,
+    const Mat3& R_EE,
+    const Mat3& R_alignment_target) {
+  // Residual angle between the physical tool axis and the signed surface
+  // target. This is the alignment quality itself: it is zero when the tool face
+  // lies flat on the plane. It is NOT the same quantity as the logged e_R,
+  // which is measured against the orientation frozen at the clearance
+  // transition and therefore reports how far the tool turned, not how flat it
+  // ended up. Always non-negative, so a drop across the phase is the useful
+  // alignment gain.
+  const Vec3 tool_axis = currentToolAxisInBase(params, R_EE).normalized();
+  const Vec3 target_axis =
+      desiredToolAxisInBase(params, R_alignment_target).normalized();
+  const double dot = std::max(-1.0, std::min(1.0, tool_axis.dot(target_axis)));
+  return std::acos(dot);
+}
+
 Mat3 makeToolOrientationForAlignmentTarget(
     const Parameters& params,
     const Mat3& R_alignment_target,

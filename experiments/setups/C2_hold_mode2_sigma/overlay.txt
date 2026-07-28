@@ -1,0 +1,5 @@
+# C2_hold_mode2_sigma
+# Applied on top of surface_grinding_controller/params/.
+# Only keys listed here differ from the nominal set.
+nullspace_mode = 2
+print_sigma_debug = 1

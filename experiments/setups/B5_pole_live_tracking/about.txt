@@ -1,0 +1,8 @@
+run_id:   B5_pole_live_tracking
+repeats:  3
+
+purpose:
+  Pole recomputed from the moving edge each cycle instead of frozen at first contact.
+
+pass criterion:
+  Historically the equilibrium was essentially unchanged and freezing was preferred for predictability. Confirms the design recommendation.

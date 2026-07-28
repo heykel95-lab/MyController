@@ -1,0 +1,8 @@
+run_id:   A2_KRtan_30
+repeats:  5
+
+purpose:
+  Rotational stiffness sweep on the tipping axes, KR_tangent = 30.0 N m/rad, decoupled command.
+
+pass criterion:
+  Expect tip down and peak force up as KR rises. This run series replaces the invented Table 5.1 in the thesis.

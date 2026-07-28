@@ -1,0 +1,67 @@
+65 setups, 213 total runs
+
+G1_coupled_block_diagonal          x3  Coupled 6x6 path with block-diagonal gains must reproduce the decoupled wrench exactly.
+G1_decoupled_baseline              x5  Decoupled wrench, no coupling.
+G2_equilibrium_t4                  x3  Is the 4 s set-up phase long enough to reach equilibrium?
+G2_equilibrium_t8                  x3  Same, 8 s.
+G2_equilibrium_t12                 x3  Same, 12 s.
+G3_repeatability                   x5  Noise floor.
+A1_tilt_00deg                      x3  Initial misalignment sweep, surface tilt b = 0.0 deg.
+A1_tilt_05deg                      x3  Initial misalignment sweep, surface tilt b = 5.0 deg.
+A1_tilt_10deg                      x3  Initial misalignment sweep, surface tilt b = 10.0 deg.
+A1_tilt_15deg                      x3  Initial misalignment sweep, surface tilt b = 15.0 deg.
+A2_KRtan_05                        x5  Rotational stiffness sweep on the tipping axes, KR_tangent = 5.0 N m/rad, decoupled command.
+A2_KRtan_15                        x5  Rotational stiffness sweep on the tipping axes, KR_tangent = 15.0 N m/rad, decoupled command.
+A2_KRtan_30                        x5  Rotational stiffness sweep on the tipping axes, KR_tangent = 30.0 N m/rad, decoupled command.
+A2_KRtan_50                        x5  Rotational stiffness sweep on the tipping axes, KR_tangent = 50.0 N m/rad, decoupled command.
+A3_lateral_Kp_2000                 x3  Lateral translational compliance, setup_Kp_x = setup_Kp_y = 2000.0 N/m.
+A3_lateral_Kp_0800                 x3  Lateral translational compliance, setup_Kp_x = setup_Kp_y = 800.0 N/m.
+A3_lateral_Kp_0300                 x3  Lateral translational compliance, setup_Kp_x = setup_Kp_y = 300.0 N/m.
+A4_push_end_010mm                  x3  Press depth, setup_push_end = 0.1 m.
+A4_push_end_014mm                  x3  Press depth, setup_push_end = 0.14 m.
+A4_push_end_018mm                  x3  Press depth, setup_push_end = 0.18 m.
+A5_push_speed_020                  x3  Press rate, setup_push_speed = 0.02 m/s.
+A5_push_speed_050                  x3  Press rate, setup_push_speed = 0.05 m/s.
+A5_push_speed_100                  x3  Press rate, setup_push_speed = 0.1 m/s.
+A6_clearance_10mm                  x3  Handoff height, descend_surface_clearance = 0.01 m.
+A6_clearance_20mm                  x3  Handoff height, descend_surface_clearance = 0.02 m.
+A6_clearance_30mm                  x3  Handoff height, descend_surface_clearance = 0.03 m.
+A7_qinit_tilted_tool               x3  Arm posture, q_init_case = tilted_tool.
+A7_qinit_tilted_close              x3  Arm posture, q_init_case = tilted_close.
+A7_qinit_table                     x3  Arm posture, q_init_case = table.
+B1_pole_at_tcp                     x3  Coupled law with the pole placed at the TCP (zero lever).
+B2_pole_normal_m120                x3  Pole swept ALONG THE SURFACE NORMAL, s = -0.12 m from the contact edge.
+B2_pole_normal_m080                x3  Pole swept ALONG THE SURFACE NORMAL, s = -0.08 m from the contact edge.
+B2_pole_normal_m040                x3  Pole swept ALONG THE SURFACE NORMAL, s = -0.04 m from the contact edge.
+B2_pole_normal_p000                x3  Pole swept ALONG THE SURFACE NORMAL, s = +0.00 m from the contact edge.
+B2_pole_normal_p040                x3  Pole swept ALONG THE SURFACE NORMAL, s = +0.04 m from the contact edge.
+B2_pole_normal_p080                x3  Pole swept ALONG THE SURFACE NORMAL, s = +0.08 m from the contact edge.
+B2_pole_normal_p120                x3  Pole swept ALONG THE SURFACE NORMAL, s = +0.12 m from the contact edge.
+B2_pole_normal_p160                x3  Pole swept ALONG THE SURFACE NORMAL, s = +0.16 m from the contact edge.
+B3_pole_tangent_m080               x3  Pole swept along surface tangent t1, -0.08 m, at fixed normal offset +0.08 m.
+B3_pole_tangent_m040               x3  Pole swept along surface tangent t1, -0.04 m, at fixed normal offset +0.08 m.
+B3_pole_tangent_p000               x3  Pole swept along surface tangent t1, +0.00 m, at fixed normal offset +0.08 m.
+B3_pole_tangent_p040               x3  Pole swept along surface tangent t1, +0.04 m, at fixed normal offset +0.08 m.
+B5_pole_live_tracking              x3  Pole recomputed from the moving edge each cycle instead of frozen at first contact.
+B6_pole_on_measured_axis           x2  Pole commanded AT the measured Chasles axis from the best B2 run.
+C1_hold_drift_mode0                x2  Hold, null-space off, 60 s, arm untouched.
+C2_hold_mode0_off                  x5  Hold, push-and-release protocol, nullspace_mode = 0 (off).
+C2_hold_mode1_damping              x5  Hold, push-and-release protocol, nullspace_mode = 1 (damping).
+C2_hold_mode2_sigma                x5  Hold, push-and-release protocol, nullspace_mode = 2 (sigma).
+C2_hold_mode3_both                 x5  Hold, push-and-release protocol, nullspace_mode = 3 (both).
+C4_ksigma_0p5                      x3  Sigma torque magnitude sweep, nullspace_k_sigma = 0.5, mode 2.
+C4_ksigma_1p0                      x3  Sigma torque magnitude sweep, nullspace_k_sigma = 1.0, mode 2.
+C4_ksigma_2p0                      x3  Sigma torque magnitude sweep, nullspace_k_sigma = 2.0, mode 2.
+C4_ksigma_4p0                      x3  Sigma torque magnitude sweep, nullspace_k_sigma = 4.0, mode 2.
+C5_alpha_0p02                      x3  Probe distance sweep, nullspace_alpha = 0.02, mode 2.
+C5_alpha_0p04                      x3  Probe distance sweep, nullspace_alpha = 0.04, mode 2.
+C5_alpha_0p08                      x3  Probe distance sweep, nullspace_alpha = 0.08, mode 2.
+C5_alpha_0p16                      x3  Probe distance sweep, nullspace_alpha = 0.16, mode 2.
+C6_deadband_at_optimum             x3  Hold started at a good-sigma configuration, mode 2.
+C8_qinit_horizontal                x3  Null-space generality, mode 3, q_init_case = horizontal.
+C8_qinit_tilted_tool               x3  Null-space generality, mode 3, q_init_case = tilted_tool.
+C8_qinit_tilted_close              x3  Null-space generality, mode 3, q_init_case = tilted_close.
+C8_qinit_table                     x3  Null-space generality, mode 3, q_init_case = table.
+C9_svdtol_1em03                    x3  SVD truncation sensitivity, nullspace_svd_relative_tolerance = 0.001.
+C9_svdtol_1em04                    x3  SVD truncation sensitivity, nullspace_svd_relative_tolerance = 0.0001.
+C9_svdtol_1em05                    x3  SVD truncation sensitivity, nullspace_svd_relative_tolerance = 1e-05.

@@ -1,0 +1,8 @@
+run_id:   G2_equilibrium_t8
+repeats:  3
+
+purpose:
+  Same, 8 s.
+
+pass criterion:
+  See G2_equilibrium_t4.
