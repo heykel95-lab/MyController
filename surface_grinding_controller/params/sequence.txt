@@ -51,15 +51,18 @@ descend_max_distance = 0.640
 # ====================================================================
 # Phase 2: set up
 # ====================================================================
-# Ends on setup_moment_threshold after setup_min_time, or on setup_duration.
+# Ends on setup_moment_threshold after setup_min_time, or on setup_timeout.
 setup_min_time = 2.0
-setup_duration = 3.0
+setup_timeout = 3.0
 setup_moment_threshold = 150.0
 
-# Position preload ramps into the surface; grind keeps the final preload.
-# Check setup_Kp_z * setup_max_push against safety.txt thresholds.
+# Alignment starts from the actual contact-point height captured at the end of
+# descend. End + speed define the ramp; ramp time is derived as
+# abs(end - captured_start) / speed. setup_timeout is independent and may stop
+# the phase before the configured end is reached.
+# Check setup_Kp_z * setup_push_end against safety.txt thresholds.
 setup_push_speed = 0.050
-setup_max_push = 0.180
+setup_push_end = 0.180
 
 # Translational spring, base frame [x, y, z].
 setup_Kp_x = 2000.0
@@ -100,9 +103,12 @@ grind_frequency_hz = 0.2
 pause_before_set_up = 1
 pause_before_grind = 0
 
-# Position-only stiff hold while paused at a gate.
+# Stiff hold while paused at the pre-set-up gate. Auto damping fits translation
+# toward pause_hold_Dp and rotation toward the approach damping inherited by the
+# old gate behavior.
 pause_hold_Kp = 5000.0
 pause_hold_Dp = 200.0
+pause_hold_auto_damping = 1
 
 
 # ====================================================================
@@ -114,7 +120,7 @@ use_coupled_stiffness = 1
 # K/D source: block diagonal, manual pole, or saved matrices below.
 coupled_use_block_diagonal = 0
 coupled_pole_manual = 1
-coupled_pole_from_edge_x = 0.0
+coupled_pole_from_edge_x = -0.08
 coupled_pole_from_edge_y = 0.08
 coupled_pole_from_edge_z = 0.0
 

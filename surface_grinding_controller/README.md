@@ -18,6 +18,14 @@ The switch from phase 1 to phase 2 is **geometric**, not force-based: it fires
 at the clearance height above the configured plane. Estimated external force is
 printed during the descent but never decides anything.
 
+The two downward motions have independent trajectory parameters. Free-space
+descent uses `descend_speed`, `descend_surface_clearance`, and the
+`descend_max_distance` safety guard. At the handoff, set-up captures the actual
+contact-point plane coordinate as its start, then ramps toward
+`setup_push_end` at `setup_push_speed`. The ramp time is derived from start,
+end, and speed; `setup_timeout` is an independent phase limit and may stop the
+ramp before its endpoint.
+
 Instead of the sequence, the startup menu can pick a plain **hold** at the start
 pose. From a hold, `g+Enter` hands the tool over to manual guidance and
 `p+Enter` re-captures the pose and restarts the whole sequence from there.

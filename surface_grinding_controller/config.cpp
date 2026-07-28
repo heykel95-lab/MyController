@@ -251,6 +251,9 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
   p.hold_KR = getDouble("hold_KR", p.hold_KR);
   p.hold_DR = getDouble("hold_DR", p.hold_DR);
   p.hold_auto_damping = getBool("hold_auto_damping", p.hold_auto_damping);
+  p.hold_auto_match_manual_damping =
+      getBool("hold_auto_match_manual_damping",
+              p.hold_auto_match_manual_damping);
   p.hold_auto_damping_factor =
       getDouble("hold_auto_damping_factor", p.hold_auto_damping_factor);
 
@@ -275,7 +278,15 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
       getBool("use_tool_contact_point_control", p.use_tool_contact_point_control);
   p.auto_select_tool_contact_edge =
       getBool("auto_select_tool_contact_edge", p.auto_select_tool_contact_edge);
-  p.tool_contact_point_ee = getVec3Xyz("tool_contact_point_ee", p.tool_contact_point_ee);
+  p.tool_contact_face_center_ee =
+      getVec3Xyz("tool_contact_face_center_ee", p.tool_contact_face_center_ee);
+  p.tool_contact_half_width_ee =
+      getVec3Xyz("tool_contact_half_width_ee", p.tool_contact_half_width_ee);
+  p.tool_contact_half_length_ee =
+      getVec3Xyz("tool_contact_half_length_ee", p.tool_contact_half_length_ee);
+  p.tool_contact_feature_tie_tolerance =
+      getDouble("tool_contact_feature_tie_tolerance",
+                p.tool_contact_feature_tie_tolerance);
   p.constrain_rotation_about_alignment_normal =
       getBool("constrain_rotation_about_alignment_normal",
               p.constrain_rotation_about_alignment_normal);
@@ -305,10 +316,10 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
 
   // ---- phase 2: set up ----
   p.setup_min_time = getDouble("setup_min_time", p.setup_min_time);
-  p.setup_duration = getDouble("setup_duration", p.setup_duration);
+  p.setup_timeout = getDouble("setup_timeout", p.setup_timeout);
   p.setup_moment_threshold = getDouble("setup_moment_threshold", p.setup_moment_threshold);
   p.setup_push_speed = getDouble("setup_push_speed", p.setup_push_speed);
-  p.setup_max_push = getDouble("setup_max_push", p.setup_max_push);
+  p.setup_push_end = getDouble("setup_push_end", p.setup_push_end);
   p.setup_Kp_diag = getVec3Xyz("setup_Kp", p.setup_Kp_diag);
   p.setup_Dp_diag = getVec3Xyz("setup_Dp", p.setup_Dp_diag);
   p.setup_KR_diag = getVec3Task("setup_KR", p.setup_KR_diag);
@@ -328,6 +339,8 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
   p.pause_before_grind = getBool("pause_before_grind", p.pause_before_grind);
   p.pause_hold_Kp = getDouble("pause_hold_Kp", p.pause_hold_Kp);
   p.pause_hold_Dp = getDouble("pause_hold_Dp", p.pause_hold_Dp);
+  p.pause_hold_auto_damping =
+      getBool("pause_hold_auto_damping", p.pause_hold_auto_damping);
 
   // ---- coupled stiffness ----
   p.use_coupled_stiffness = getBool("use_coupled_stiffness", p.use_coupled_stiffness);

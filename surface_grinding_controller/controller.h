@@ -107,8 +107,9 @@ struct Parameters {
   double hold_Kp = 300.0;
   double hold_Dp = 50.0;
   double hold_KR = 40.0;
-  double hold_DR = 8.0;  // applied directly; hold rotation is not auto-damped
+  double hold_DR = 8.0;
   bool hold_auto_damping = true;
+  bool hold_auto_match_manual_damping = true;
   double hold_auto_damping_factor = 1.0;
 
   // Surface plane and tool geometry.
@@ -122,7 +123,10 @@ struct Parameters {
   double tool_axis_target_sign = -1.0;
   bool use_tool_contact_point_control = true;
   bool auto_select_tool_contact_edge = true;
-  Vec3 tool_contact_point_ee = Vec3(0.0, 0.0, 0.0);
+  Vec3 tool_contact_face_center_ee = Vec3(0.0, 0.0, 0.0);
+  Vec3 tool_contact_half_width_ee = Vec3(0.0, 0.0, 0.0);
+  Vec3 tool_contact_half_length_ee = Vec3(0.0, 0.0, 0.0);
+  double tool_contact_feature_tie_tolerance = 0.0001;
   // Rotational spring mask in the alignment-target frame.
   bool constrain_rotation_about_alignment_normal = true;
   bool constrain_rotation_about_alignment_tangent1 = true;
@@ -145,11 +149,11 @@ struct Parameters {
 
   // Phase 2: set up.
   double setup_min_time = 0.3;       // before the moment early-exit can fire
-  double setup_duration = 15.0;      // hard time limit for the phase
+  double setup_timeout = 15.0;       // hard time limit for the phase
   double setup_moment_threshold = 60.0;
   // Position preload ramped into the surface; grind inherits the final value.
   double setup_push_speed = 0.0;
-  double setup_max_push = 0.0;
+  double setup_push_end = 0.0;
   // Translational spring, base frame [x, y, z].
   Vec3 setup_Kp_diag = Vec3(40.0, 40.0, 5500.0);
   Vec3 setup_Dp_diag = Vec3(10.0, 10.0, 175.0);
@@ -169,9 +173,10 @@ struct Parameters {
   // Enter gates between phases.
   bool pause_before_set_up = false;  // hold at the clearance height
   bool pause_before_grind = false;   // hold the seated/pressed pose
-  // Position-only stiff hold while paused.
+  // Stiff position hold; rotation retains the approach stiffness.
   double pause_hold_Kp = 5000.0;
   double pause_hold_Dp = 200.0;
+  bool pause_hold_auto_damping = true;
 
   // Coupled (pole-based) stiffness for the set-up phase.
   bool use_coupled_stiffness = false;
@@ -329,7 +334,10 @@ void grindSweep(double t, double amplitude, double stroke_duration,
 
 double grindStrokeDuration(const Parameters& params);
 
-double setUpPush(const Parameters& params, double phase_time, double start_push);
+double setUpPush(const Parameters& params,
+                 double phase_time,
+                 double start_push,
+                 double& push_speed);
 
 Vec3 nearestPointOnAxis(
     const Vec3& point,
@@ -404,7 +412,7 @@ bool openGripper(const Parameters& params, Gripper& gripper);
 
 bool graspTool(const Parameters& params, Gripper& gripper);
 
-void askStartupRunMode(Parameters& params);
+void askStartupRunMode(Parameters& params, Robot& robot);
 
 bool performStartupGripperAction(const Parameters& params);
 

@@ -186,13 +186,18 @@ void printParameters(const Parameters& params) {
          params.use_phase_sequence ? "phase sequence" : "hold",
          params.use_approach_orient ? "on" : "off",
          nullspaceModeName(params.nullspace_mode));
-  printf("hold: Kp=%.1f N/m | damping=%s",
-         params.hold_Kp,
-         params.hold_auto_damping ? "auto-critical" : "manual");
+  printf("hold: Kp=%.1f N/m | KR=%.1f Nm/rad | damping=%s",
+         params.hold_Kp, params.hold_KR,
+         params.hold_auto_damping ? "auto translation+rotation" : "manual");
   if (params.hold_auto_damping) {
-    printf(" (factor %.2f)\n", params.hold_auto_damping_factor);
+    if (params.hold_auto_match_manual_damping) {
+      printf(" (factor fitted online toward Dp=%.1f Ns/m)\n", params.hold_Dp);
+    } else {
+      printf(" (factor %.2f)\n", params.hold_auto_damping_factor);
+    }
   } else {
-    printf(" (Dp=%.1f Ns/m)\n", params.hold_Dp);
+    printf(" (Dp=%.1f Ns/m, DR=%.1f Nms/rad)\n",
+           params.hold_Dp, params.hold_DR);
   }
   printf("manual_guidance_start: %s | manual_damping=%.2f\n",
          params.use_manual_guidance_start ? "on" : "off",
@@ -201,10 +206,24 @@ void printParameters(const Parameters& params) {
          1000.0 * params.descend_surface_clearance,
          params.descend_speed,
          1000.0 * params.descend_max_distance);
-  printf("set_up: duration=%.1f s | moment_threshold=%.1f Nm | max_push=%.0f mm\n",
-         params.setup_duration,
-         params.setup_moment_threshold,
-         1000.0 * params.setup_max_push);
+  const double nominal_setup_distance =
+      std::abs(params.setup_push_end + params.descend_surface_clearance);
+  const double nominal_setup_ramp_time =
+      (std::abs(params.setup_push_speed) > 1e-12)
+          ? nominal_setup_distance / std::abs(params.setup_push_speed)
+          : 0.0;
+  printf("alignment push: start=captured | end=%+.0f mm | speed=%.3f m/s | "
+         "ramp_time~=%.1f s | timeout=%.1f s | moment_threshold=%.1f Nm\n",
+         1000.0 * params.setup_push_end,
+         std::abs(params.setup_push_speed),
+         nominal_setup_ramp_time,
+         params.setup_timeout,
+         params.setup_moment_threshold);
+  if (params.setup_timeout > 0.0 &&
+      nominal_setup_ramp_time > params.setup_timeout) {
+    printf("  note: alignment timeout occurs before the configured push end "
+           "(unless the captured start is closer).\n");
+  }
   printf("grind: %s | axis=tangent%d | amplitude=%.0f mm | frequency=%.2f Hz\n",
          params.grind_sweep_enabled ? "sweep" : "free-slide hold",
          params.grind_axis == 2 ? 2 : 1,
@@ -216,8 +235,10 @@ void printParameters(const Parameters& params) {
          params.coupled_use_block_diagonal
              ? "block-diagonal (no coupling)"
              : (params.coupled_pole_manual ? "manual" : "saved matrices"));
-  printf("gates: pause_before_set_up=%s | pause_before_grind=%s | debug_period=%.2f s\n",
+  printf("gates: pause_before_set_up=%s | pause_auto_damping=%s | "
+         "pause_before_grind=%s | debug_period=%.2f s\n",
          params.pause_before_set_up ? "on" : "off",
+         params.pause_hold_auto_damping ? "on" : "off",
          params.pause_before_grind ? "on" : "off",
          params.debug_period);
   printf("alignment-target normal=[%+.3f, %+.3f, %+.3f] | tilt a(x)=%.1f deg, b(y)=%.1f deg (from angles)\n",
@@ -226,6 +247,12 @@ void printParameters(const Parameters& params) {
          params.alignment_target_normal(2),
          params.alignment_target_tilt_angle_deg,
          params.alignment_target_tilt_angle_y_deg);
+  printf("tool face: %.0f x %.0f mm | center offset EE=[%+.1f, %+.1f, %+.1f] mm\n",
+         2000.0 * params.tool_contact_half_width_ee.norm(),
+         2000.0 * params.tool_contact_half_length_ee.norm(),
+         1000.0 * params.tool_contact_face_center_ee(0),
+         1000.0 * params.tool_contact_face_center_ee(1),
+         1000.0 * params.tool_contact_face_center_ee(2));
 }
 
 void printContactEdgeDebug(const Vec3& offset_ee,
@@ -392,21 +419,36 @@ bool graspTool(const Parameters& params, Gripper& gripper) {
   }
 }
 
-void askStartupRunMode(Parameters& params) {
+void askStartupRunMode(Parameters& params, Robot& robot) {
   const bool default_sequence = params.use_phase_sequence;
+  bool q_init_reached = false;
+
+  const auto move_to_q_init = [&]() {
+    printf("Moving to q_init...\n");
+    MotionGenerator motion_generator(0.4, params.q_init);
+    robot.control(motion_generator);
+    printf("q_init reached.\n");
+    q_init_reached = true;
+  };
 
   // Menu 1: where the start pose comes from. Loops so the gripper action runs
-  // and returns here instead of leaving the menu.
+  // and q_init can be reached before the user continues.
   while (true) {
     printf("\n=== Startup choice ===\n");
-    printf("Start pose:\n");
-    printf("  q = go to q_init (from params/common.txt)\n");
+    printf("  q = go to q_init (from params/common.txt), then choose again\n");
     printf("  g = guiding mode: go to q_init, then hand-guide to your pose,\n");
     printf("      p+Enter to lock it as the start (e+Enter prints it as q_init)\n");
     printf("  o = open the Franka hand now (release/load tool), then choose again\n");
-    printf("Choice [q/g/o, Enter = q]: ");
+    printf("  c = close/grasp the tool now, then choose again\n");
+    printf("  r = continue to run mode%s\n",
+           q_init_reached ? "" : " (available after q_init is reached)");
+    printf("Choice [q/g/o/c/r, Enter = q]: ");
 
     const std::string choice = readChoice();
+    if (choice.empty() || matches(choice, {"q", "qinit"})) {
+      move_to_q_init();
+      continue;
+    }
     if (matches(choice, {"o", "open"})) {
       try {
         Gripper gripper(params.robot_ip);
@@ -418,34 +460,6 @@ void askStartupRunMode(Parameters& params) {
       params.startup_gripper_manual = true;
       continue;
     }
-    if (matches(choice, {"g", "guide", "guiding"})) {
-      params.use_manual_guidance_start = true;
-      printf("Selected: guiding mode (hand-place the start pose after q_init).\n");
-    } else {
-      params.use_manual_guidance_start = false;
-      if (!choice.empty() && !matches(choice, {"q", "qinit"})) {
-        printf("Unknown start-pose choice '%s'; using q_init.\n", choice.c_str());
-      }
-    }
-    break;
-  }
-
-  // In guiding mode the run mode is chosen at the END of guiding, so asking
-  // here would be redundant.
-  if (params.use_manual_guidance_start) {
-    printf("Run mode (s/h) will be chosen at the end of guiding.\n");
-    return;
-  }
-
-  // Menu 2: run mode, with the same on-demand gripper action.
-  while (true) {
-    printf("\n=== Run mode ===\n");
-    printf("  s = phase sequence (approach / set up / grind)\n");
-    printf("  h = hold at the start pose\n");
-    printf("  c = close/grasp the tool now, then choose again\n");
-    printf("Choice [s/h/c, Enter = %s]: ", default_sequence ? "s" : "h");
-
-    const std::string choice = readChoice();
     if (matches(choice, {"c", "close", "grasp"})) {
       try {
         Gripper gripper(params.robot_ip);
@@ -456,18 +470,50 @@ void askStartupRunMode(Parameters& params) {
       params.startup_gripper_manual = true;
       continue;
     }
-    if (matches(choice, {"s", "sequence"})) {
-      params.use_phase_sequence = true;
-    } else if (matches(choice, {"h", "hold"})) {
-      params.use_phase_sequence = false;
-    } else {
-      params.use_phase_sequence = default_sequence;
-      if (!choice.empty()) {
-        printf("Unknown run-mode choice '%s'; using default %s.\n",
-               choice.c_str(), default_sequence ? "sequence" : "hold");
+    if (matches(choice, {"r", "run", "continue"})) {
+      if (!q_init_reached) {
+        printf("Reach q_init with q before continuing.\n");
+        continue;
       }
+      params.use_manual_guidance_start = false;
+      break;
     }
-    break;
+    if (matches(choice, {"g", "guide", "guiding"})) {
+      if (!q_init_reached) {
+        move_to_q_init();
+      }
+      params.use_manual_guidance_start = true;
+      printf("Selected: guiding mode (hand-place the start pose after q_init).\n");
+      break;
+    }
+    printf("Unknown startup choice '%s'; choose q, g, o, c, or r.\n",
+           choice.c_str());
+  }
+
+  // In guiding mode the run mode is chosen at the END of guiding, so asking
+  // here would be redundant.
+  if (params.use_manual_guidance_start) {
+    printf("Run mode (s/h) will be chosen at the end of guiding.\n");
+    return;
+  }
+
+  // Menu 2: run mode.
+  printf("\n=== Run mode ===\n");
+  printf("  s = phase sequence (approach / set up / grind)\n");
+  printf("  h = hold at the start pose\n");
+  printf("Choice [s/h, Enter = %s]: ", default_sequence ? "s" : "h");
+
+  const std::string choice = readChoice();
+  if (matches(choice, {"s", "sequence"})) {
+    params.use_phase_sequence = true;
+  } else if (matches(choice, {"h", "hold"})) {
+    params.use_phase_sequence = false;
+  } else {
+    params.use_phase_sequence = default_sequence;
+    if (!choice.empty()) {
+      printf("Unknown run-mode choice '%s'; using default %s.\n",
+             choice.c_str(), default_sequence ? "sequence" : "hold");
+    }
   }
 
   if (params.use_phase_sequence) {

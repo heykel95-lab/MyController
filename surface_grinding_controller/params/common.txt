@@ -28,8 +28,12 @@ print_hold_debug = 0
 # Online damping: D = factor*2*sqrt(M*K). Manual Dp/DR entries are fallbacks.
 # factor: 1.0 = critical, <1 lighter, >1 heavier.
 
-# Hold mode: computed once at hold entry from hold_Kp.
+# Hold mode: compute translation and rotation once at hold entry.
+# With matching enabled, one factor is fitted online so the three translational
+# coefficients stay as close as possible to hold_Dp (currently 50 Ns/m).
 hold_auto_damping = 1
+hold_auto_match_manual_damping = 1
+# Used directly only when hold_auto_match_manual_damping = 0.
 hold_auto_damping_factor = 1.0
 
 # Phase 1: approach orient + descend.
@@ -95,18 +99,34 @@ constrain_rotation_about_alignment_tangent2 = 1
 # --------------------------------------------------------------------
 # Tool geometry
 # --------------------------------------------------------------------
-# Physical tool axis in EE frame; sign picks along/opposite the surface normal.
+# Grinding-face normal is +Z_EE. The sign picks along/opposite the surface
+# normal; -1 points the +Z_EE face toward the surface.
 tool_axis_ee_x = 0.0
 tool_axis_ee_y = 0.0
 tool_axis_ee_z = 1.0
 tool_axis_target_sign = -1.0
 
-# Contact edge offset in EE/TCP frame. Auto-select locks the leading edge.
+# Center of the rectangular grinding face, 20 mm along +Z_EE from the hand.
 use_tool_contact_point_control = 1
 auto_select_tool_contact_edge = 1
-tool_contact_point_ee_x = 0.0
-tool_contact_point_ee_y = 0.040
-tool_contact_point_ee_z = 0.0
+tool_contact_face_center_ee_x = 0.0
+tool_contact_face_center_ee_y = 0.0
+tool_contact_face_center_ee_z = 0.020
+
+# Half-width: 40 mm total along X_EE.
+tool_contact_half_width_ee_x = 0.020
+tool_contact_half_width_ee_y = 0.0
+tool_contact_half_width_ee_z = 0.0
+
+# Half-length: 120 mm total along Y_EE (the old 80 mm face used 40 mm here).
+tool_contact_half_length_ee_x = 0.0
+tool_contact_half_length_ee_y = 0.060
+tool_contact_half_length_ee_z = 0.0
+
+# Corners within this normal-distance difference are treated as one physical
+# edge/face for the controlled contact point. Clearance still uses the closest
+# individual corner. [m]
+tool_contact_feature_tie_tolerance = 0.0001
 
 # --------------------------------------------------------------------
 # Initial joint configuration [rad]

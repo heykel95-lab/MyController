@@ -93,12 +93,25 @@ double grindStrokeDuration(const Parameters& params) {
   return (params.grind_frequency_hz > 1e-9) ? (0.5 / params.grind_frequency_hz) : 0.0;
 }
 
-double setUpPush(const Parameters& params, double phase_time, double start_push) {
-  double push = start_push + params.setup_push_speed * phase_time;
-  if (params.setup_max_push > 0.0) {
-    push = std::min(params.setup_max_push, push);
+double setUpPush(const Parameters& params,
+                 double phase_time,
+                 double start_push,
+                 double& push_speed) {
+  const double delta = params.setup_push_end - start_push;
+  const double speed_magnitude = std::abs(params.setup_push_speed);
+  if (std::abs(delta) <= 1e-12 || speed_magnitude <= 1e-12) {
+    push_speed = 0.0;
+    return (std::abs(delta) <= 1e-12) ? params.setup_push_end : start_push;
   }
-  return push;
+
+  const double direction = (delta >= 0.0) ? 1.0 : -1.0;
+  const double signed_speed = direction * speed_magnitude;
+  const double unclamped = start_push + signed_speed * std::max(0.0, phase_time);
+  const bool end_reached = (direction > 0.0)
+                               ? (unclamped >= params.setup_push_end)
+                               : (unclamped <= params.setup_push_end);
+  push_speed = end_reached ? 0.0 : signed_speed;
+  return end_reached ? params.setup_push_end : unclamped;
 }
 
 // ====================================================================

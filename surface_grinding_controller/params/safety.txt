@@ -7,7 +7,7 @@
 # Finite, not a safety bypass -- increase only under supervision.
 #
 # Cross-check against the set-up press: the peak preload force is roughly
-# setup_Kp_z * setup_max_push (sequence.txt), and it must stay below the
+# setup_Kp_z * setup_push_end (sequence.txt), and it must stay below the
 # force thresholds here or the reflex will trip mid-run.
 use_custom_collision_behavior = 1
 collision_torque_acc = 140.0

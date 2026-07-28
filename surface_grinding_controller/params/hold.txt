@@ -12,14 +12,15 @@
 # Cartesian position stiffness [N/m], base x/y/z.
 hold_Kp = 300.0
 
-# Manual damping FALLBACK [Ns/m], paired with hold_Kp. Used only when
-# hold_auto_damping is off, OR when it is on but the online task-space inertia
-# estimate is unavailable at hold entry -- i.e. near a kinematic singularity
-# (Jacobian loses rank) or if the inertia comes out non-finite / non-positive.
-# Otherwise D = hold_auto_damping_factor * 2 * sqrt(M * hold_Kp) is used.
+# Manual damping target/fallback [Ns/m], paired with hold_Kp. With
+# hold_auto_match_manual_damping = 1, the online factor is fitted so the three
+# auto coefficients are collectively as close as possible to this value. It is
+# also the fallback if the online inertia estimate is unavailable.
 hold_Dp = 50.0
 
-# Isotropic rotational hold spring [Nm/rad | Nms/rad]. hold_DR is applied
-# directly -- hold rotation is NOT auto-damped.
+# Isotropic rotational hold spring [Nm/rad]. hold_DR [Nms/rad] is the fallback
+# if auto damping is disabled/unavailable. Otherwise rotation uses the online
+# formula D_R = factor * 2 * sqrt(I * hold_KR), with the same fitted factor as
+# translation.
 hold_KR = 40.0
 hold_DR = 8.0

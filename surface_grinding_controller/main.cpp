@@ -16,23 +16,9 @@ int main() {
         "params/hold.txt",
         "params/guidance.txt",
     });
-    askStartupRunMode(params);
-    printParameters(params);
-
-    // Saved coupled matrices are needed only when they are the selected source.
-    const bool needs_saved_coupled_gains =
-        params.use_phase_sequence &&
-        params.use_coupled_stiffness && !params.coupled_use_block_diagonal &&
-        !params.coupled_pole_manual;
-    if (needs_saved_coupled_gains && !params.coupled_gains_saved) {
-      fprintf(stderr, "Coupled stiffness needs saved K_TCP/D_TCP, but none was found.\n");
-      fprintf(stderr, "Run once with use_coupled_stiffness = 0 so the set-up report can save them.\n");
-      return -1;
-    }
-
     Robot robot(params.robot_ip);
 
-    printf("\nPress Enter to recover/configure and move to q_init.\n");
+    printf("\nPress Enter to recover and configure the robot.\n");
     std::string enter_line;
     std::getline(std::cin, enter_line);
 
@@ -46,11 +32,19 @@ int main() {
     }
 
     configureCollisionBehavior(robot, params);
+    askStartupRunMode(params, robot);
+    printParameters(params);
 
-    printf("Moving to q_init...\n");
-    MotionGenerator motion_generator(0.4, params.q_init);
-    robot.control(motion_generator);
-    printf("q_init reached.\n");
+    // Saved coupled matrices are needed only when they are the selected source.
+    const bool needs_saved_coupled_gains =
+        params.use_phase_sequence &&
+        params.use_coupled_stiffness && !params.coupled_use_block_diagonal &&
+        !params.coupled_pole_manual;
+    if (needs_saved_coupled_gains && !params.coupled_gains_saved) {
+      fprintf(stderr, "Coupled stiffness needs saved K_TCP/D_TCP, but none was found.\n");
+      fprintf(stderr, "Run once with use_coupled_stiffness = 0 so the set-up report can save them.\n");
+      return -1;
+    }
 
     if (!performStartupGripperAction(params)) {
       return -1;
@@ -96,8 +90,45 @@ int main() {
         params.use_start_as_surface_point ? p_start : params.surface_point;
 
     const Vec3 descend_direction = -R_alignment_target.col(2);
-    // The set-up preload starts at the clearance height and ramps into contact.
-    const double push_start = -params.descend_surface_clearance;
+
+    // Four corners of the rectangular grinding face. Selecting every corner
+    // tied for the greatest projection along the descend direction gives the
+    // center of a leading face (4-way tie), edge (2-way tie), or corner.
+    const Vec3& face_center = params.tool_contact_face_center_ee;
+    const Vec3& half_width = params.tool_contact_half_width_ee;
+    const Vec3& half_length = params.tool_contact_half_length_ee;
+    const std::array<Vec3, 4> tool_face_corners_ee = {{
+        face_center + half_width + half_length,
+        face_center + half_width - half_length,
+        face_center - half_width + half_length,
+        face_center - half_width - half_length,
+    }};
+    const auto selectLeadingToolContact =
+        [&](const Mat3& R_EE, double& leading_projection_out) -> Vec3 {
+      std::array<double, 4> projection;
+      double leading_projection =
+          (R_EE * tool_face_corners_ee[0]).dot(descend_direction);
+      projection[0] = leading_projection;
+      for (std::size_t i = 1; i < tool_face_corners_ee.size(); ++i) {
+        projection[i] = (R_EE * tool_face_corners_ee[i]).dot(descend_direction);
+        leading_projection = std::max(leading_projection, projection[i]);
+      }
+      leading_projection_out = leading_projection;
+
+      // Exact single-axis tilts produce equal projections at both endpoints of
+      // the leading edge. Average tied points so the controlled point is the
+      // edge center rather than an arbitrary corner.
+      Vec3 selected = Vec3::Zero();
+      int selected_count = 0;
+      for (std::size_t i = 0; i < tool_face_corners_ee.size(); ++i) {
+        if (leading_projection - projection[i] <=
+            params.tool_contact_feature_tie_tolerance) {
+          selected += tool_face_corners_ee[i];
+          ++selected_count;
+        }
+      }
+      return selected / static_cast<double>(selected_count);
+    };
 
     // ---- gain sets, one per phase group ----
     auto taskGain = [&](const Vec3& diagonal) -> Mat3 {
@@ -137,7 +168,7 @@ int main() {
     Vec3 first_contact_tcp = p_start;
     Vec3 first_contact_point = p_start;
     Mat3 R_contact_start = R_d_alignment_target;
-    Vec3 active_tool_contact_offset_ee = params.tool_contact_point_ee;
+    Vec3 active_tool_contact_offset_ee = params.tool_contact_face_center_ee;
 
     // Gate state. Each gate arms once, then blocks until a bare Enter.
     bool gate_set_up_armed = false;
@@ -148,6 +179,7 @@ int main() {
     bool gate_grind_passed = false;
 
     // The preload frozen when the set-up phase ends; grind presses with it.
+    double setup_push_start = -params.descend_surface_clearance;
     double grind_push = 0.0;
 
     // Auto-damping is cached per phase group.
@@ -159,6 +191,10 @@ int main() {
     Mat3 DR_setup_cached = DR_setup;
     bool hold_damp_computed = false;
     Mat3 Dp_hold_cached = Dp_hold;
+    Mat3 DR_hold_cached = DR_hold;
+    bool pause_damp_computed = false;
+    Mat3 Dp_pause_cached = Dp_pause;
+    Mat3 DR_pause_cached = DR_approach;
 
     std::vector<std::pair<std::string, std::string>> pending_parameter_updates;
     pending_parameter_updates.reserve(96);
@@ -245,7 +281,7 @@ int main() {
           first_contact_tcp = p_start;
           first_contact_point = p_start;
           R_contact_start = R_d_alignment_target;
-          active_tool_contact_offset_ee = params.tool_contact_point_ee;
+          active_tool_contact_offset_ee = params.tool_contact_face_center_ee;
 
           phase = initial_phase;
           phase_start_time = time;
@@ -255,9 +291,14 @@ int main() {
           gate_paused_time = 0.0;
           gate_grind_armed = false;
           gate_grind_passed = false;
+          setup_push_start = -params.descend_surface_clearance;
           grind_push = 0.0;
           hold_damp_computed = false;
           Dp_hold_cached = Dp_hold;
+          DR_hold_cached = DR_hold;
+          pause_damp_computed = false;
+          Dp_pause_cached = Dp_pause;
+          DR_pause_cached = DR_approach;
           printf("\n=== Restarting sequence from re-guided pose ===\n");
           printVec7Deg("q_start", q_start);
           printVec3Mm("p_start", p_start);
@@ -274,18 +315,19 @@ int main() {
       // Active tool contact point.
       // ---------------------------------------------------------------
       Vec3 tool_contact_offset_ee = Vec3::Zero();
+      double leading_contact_projection = 0.0;
       if (params.use_tool_contact_point_control) {
         if (edge_locked) {
           tool_contact_offset_ee = active_tool_contact_offset_ee;
+          leading_contact_projection =
+              (R_EE * tool_contact_offset_ee).dot(descend_direction);
         } else if (params.auto_select_tool_contact_edge) {
-          const Vec3 positive_edge = R_EE * params.tool_contact_point_ee;
-          const Vec3 negative_edge = R_EE * (-params.tool_contact_point_ee);
           tool_contact_offset_ee =
-              (positive_edge.dot(descend_direction) >= negative_edge.dot(descend_direction))
-                  ? params.tool_contact_point_ee
-                  : Vec3(-params.tool_contact_point_ee);
+              selectLeadingToolContact(R_EE, leading_contact_projection);
         } else {
-          tool_contact_offset_ee = params.tool_contact_point_ee;
+          tool_contact_offset_ee = params.tool_contact_face_center_ee;
+          leading_contact_projection =
+              (R_EE * tool_contact_offset_ee).dot(descend_direction);
         }
       }
       const Vec3 tool_contact_point = p_EE + R_EE * tool_contact_offset_ee;
@@ -344,9 +386,12 @@ int main() {
 
           const Vec3 surface_normal = (-descend_direction).normalized();
           const double height_above_surface =
+              surface_normal.dot(p_EE - surface_point_runtime) -
+              leading_contact_projection;
+          const double controlled_point_height =
               surface_normal.dot(tool_contact_point - surface_point_runtime);
           const Vec3 projected_surface_point =
-              tool_contact_point - height_above_surface * surface_normal;
+              tool_contact_point - controlled_point_height * surface_normal;
           const bool clearance_reached =
               height_above_surface <= params.descend_surface_clearance;
           const double force_along_descend =
@@ -392,6 +437,10 @@ int main() {
             active_tool_contact_offset_ee = tool_contact_offset_ee;
             first_contact_tcp = p_EE;
             first_contact_point = projected_surface_point;
+            // Signed plane coordinate: negative above the surface, positive
+            // into it. Capture the actual controlled-point height so setup
+            // begins continuously even if descend overshot the clearance.
+            setup_push_start = -controlled_point_height;
             R_contact_start = R_EE;
             contact_force_bias = external_force;
             contact_moment_bias = external_moment;
@@ -421,9 +470,13 @@ int main() {
         // -------------------------------------------------------------
         case ControlPhase::kSetUp: {
           const double phase_time = time - phase_start_time;
-          const double push = setUpPush(params, phase_time, push_start);
+          double setup_push_velocity = 0.0;
+          const double push =
+              setUpPush(params, phase_time, setup_push_start,
+                        setup_push_velocity);
           const Vec3 edge_target = first_contact_point + push * descend_direction;
           desired.p_d = edge_target - R_contact_start * tool_contact_offset_ee;
+          desired.pdot_d = setup_push_velocity * descend_direction;
           edge_target_log = edge_target;
           push_log = push;
 
@@ -452,7 +505,7 @@ int main() {
           const bool stopped_on_moment =
               phase_time >= params.setup_min_time &&
               moment_delta_norm >= params.setup_moment_threshold;
-          if (!stopped_on_moment && phase_time < params.setup_duration) {
+          if (!stopped_on_moment && phase_time < params.setup_timeout) {
             break;
           }
 
@@ -570,8 +623,13 @@ int main() {
       if (phase != ControlPhase::kHold) {
         hold_damp_computed = false;
       }
+      if (!pause_hold_active) {
+        pause_damp_computed = false;
+      }
 
       const bool need_damping_update =
+          (pause_hold_active && params.pause_hold_auto_damping &&
+           !pause_damp_computed) ||
           (in_approach && params.approach_auto_damping && !approach_damp_computed) ||
           (after_contact && params.setup_auto_damping && !setup_damp_computed) ||
           (phase == ControlPhase::kHold && params.hold_auto_damping && !hold_damp_computed);
@@ -596,7 +654,62 @@ int main() {
                  params.auto_damping_min_from_manual ? " (manual = floor)" : "");
         };
 
-        if (in_approach) {
+        if (pause_hold_active) {
+          const CartesianInertiaEstimate inertia_base =
+              computeCartesianInertiaEstimate(joint_mass, J, Mat3::Identity());
+          const CartesianInertiaEstimate inertia_task =
+              computeCartesianInertiaEstimate(joint_mass, J, R_alignment_target);
+          if (inertia_base.valid && inertia_task.valid) {
+            const Vec3 unit_critical_Dp = criticalDampingFromStiffness(
+                inertia_base.translational,
+                Vec3::Constant(params.pause_hold_Kp),
+                1.0, Vec3::Zero(), params.auto_damping_max);
+            const Vec3 unit_critical_DR = criticalDampingFromStiffness(
+                inertia_task.rotational,
+                params.approach_KR_diag,
+                1.0, Vec3::Zero(), params.auto_damping_max);
+
+            const Mat3 approach_DR_task =
+                R_alignment_target.transpose() * DR_approach_cached *
+                R_alignment_target;
+            const Vec3 target_Dp = Vec3::Constant(params.pause_hold_Dp);
+            const Vec3 target_DR = approach_DR_task.diagonal();
+            const auto fittedFactor = [](const Vec3& unit_critical,
+                                         const Vec3& target) {
+              const double denominator = unit_critical.squaredNorm();
+              return (denominator > 1e-12)
+                         ? unit_critical.dot(target) / denominator
+                         : 1.0;
+            };
+            const double Dp_factor = fittedFactor(unit_critical_Dp, target_Dp);
+            const double DR_factor = fittedFactor(unit_critical_DR, target_DR);
+
+            const Vec3 Dp_diag = criticalDampingFromStiffness(
+                inertia_base.translational,
+                Vec3::Constant(params.pause_hold_Kp),
+                Dp_factor, dampingFloor(target_Dp), params.auto_damping_max);
+            const Vec3 DR_diag = criticalDampingFromStiffness(
+                inertia_task.rotational,
+                params.approach_KR_diag,
+                DR_factor, dampingFloor(target_DR), params.auto_damping_max);
+            Dp_pause_cached = Dp_diag.asDiagonal();
+            DR_pause_cached =
+                makeSpatialGainMatrix(DR_diag, R_alignment_target);
+            printf("pause auto damping: fitted Dp factor=%.3f, DR factor=%.3f\n",
+                   Dp_factor, DR_factor);
+            reportDamping("pause Dp [xyz]", "Ns/m", Dp_diag, target_Dp);
+            reportDamping("pause DR [t1t2n]", "Nms/rad", DR_diag, target_DR);
+          } else {
+            Dp_pause_cached = Dp_pause;
+            DR_pause_cached = params.approach_auto_damping
+                                  ? DR_approach_cached
+                                  : DR_approach;
+            printf("pause damping: inertia estimate unavailable, using "
+                   "Dp=%.1f Ns/m and inherited approach DR\n",
+                   params.pause_hold_Dp);
+          }
+          pause_damp_computed = true;
+        } else if (in_approach) {
           const CartesianInertiaEstimate inertia =
               computeCartesianInertiaEstimate(joint_mass, J, R_alignment_target);
           if (inertia.valid) {
@@ -637,19 +750,46 @@ int main() {
           const CartesianInertiaEstimate inertia_base =
               computeCartesianInertiaEstimate(joint_mass, J, Mat3::Identity());
           if (inertia_base.valid) {
-            const Vec3 manual_hold = Vec3::Constant(params.hold_Dp);
+            const Vec3 manual_hold_Dp = Vec3::Constant(params.hold_Dp);
+            const Vec3 manual_hold_DR = Vec3::Constant(params.hold_DR);
+            double hold_factor = params.hold_auto_damping_factor;
+            if (params.hold_auto_match_manual_damping) {
+              const Vec3 unit_critical_Dp = criticalDampingFromStiffness(
+                  inertia_base.translational,
+                  Vec3::Constant(params.hold_Kp),
+                  1.0, Vec3::Zero(), params.auto_damping_max);
+              const double denominator = unit_critical_Dp.squaredNorm();
+              if (denominator > 1e-12) {
+                // Least-squares scalar that makes factor*unit_critical_Dp as
+                // close as possible to [hold_Dp, hold_Dp, hold_Dp].
+                hold_factor =
+                    params.hold_Dp * unit_critical_Dp.sum() / denominator;
+              }
+              printf("hold auto damping: fitted factor=%.3f toward Dp=%.1f Ns/m\n",
+                     hold_factor, params.hold_Dp);
+            }
             const Vec3 Dp_diag = criticalDampingFromStiffness(
                 inertia_base.translational,
                 Vec3::Constant(params.hold_Kp),
-                params.hold_auto_damping_factor,
-                dampingFloor(manual_hold),
+                hold_factor,
+                dampingFloor(manual_hold_Dp),
+                params.auto_damping_max);
+            const Vec3 DR_diag = criticalDampingFromStiffness(
+                inertia_base.rotational,
+                Vec3::Constant(params.hold_KR),
+                hold_factor,
+                dampingFloor(manual_hold_DR),
                 params.auto_damping_max);
             Dp_hold_cached = Dp_diag.asDiagonal();
-            reportDamping("hold Dp", "Ns/m", Dp_diag, manual_hold);
+            DR_hold_cached = DR_diag.asDiagonal();
+            reportDamping("hold Dp", "Ns/m", Dp_diag, manual_hold_Dp);
+            reportDamping("hold DR", "Nms/rad", DR_diag, manual_hold_DR);
           } else {
             Dp_hold_cached = Dp_hold;
-            printf("hold damping: inertia estimate unavailable, using hold_Dp=%.1f Ns/m\n",
-                   params.hold_Dp);
+            DR_hold_cached = DR_hold;
+            printf("hold damping: inertia estimate unavailable, using "
+                   "hold_Dp=%.1f Ns/m and hold_DR=%.1f Nms/rad\n",
+                   params.hold_Dp, params.hold_DR);
           }
           hold_damp_computed = true;
         }
@@ -662,6 +802,11 @@ int main() {
       const Mat3& Dp_setup_eff = params.setup_auto_damping ? Dp_setup_cached : Dp_setup;
       const Mat3& DR_setup_eff = params.setup_auto_damping ? DR_setup_cached : DR_setup;
       const Mat3& Dp_hold_eff = params.hold_auto_damping ? Dp_hold_cached : Dp_hold;
+      const Mat3& DR_hold_eff = params.hold_auto_damping ? DR_hold_cached : DR_hold;
+      const Mat3& Dp_pause_eff =
+          params.pause_hold_auto_damping ? Dp_pause_cached : Dp_pause;
+      const Mat3& DR_pause_eff =
+          params.pause_hold_auto_damping ? DR_pause_cached : DR_approach_eff;
 
       // ---------------------------------------------------------------
       // Select gains for this phase; gate hold overrides position gains.
@@ -669,7 +814,7 @@ int main() {
       const Mat3* Kp_phase = &Kp_hold;
       const Mat3* Dp_phase = &Dp_hold_eff;
       const Mat3* KR_phase = &KR_hold;
-      const Mat3* DR_phase = &DR_hold;
+      const Mat3* DR_phase = &DR_hold_eff;
       switch (phase) {
         case ControlPhase::kApproachOrient:
         case ControlPhase::kApproachDescend:
@@ -690,9 +835,9 @@ int main() {
           break;
       }
       const Mat3& Kp_used = pause_hold_active ? Kp_pause : *Kp_phase;
-      const Mat3& Dp_used = pause_hold_active ? Dp_pause : *Dp_phase;
+      const Mat3& Dp_used = pause_hold_active ? Dp_pause_eff : *Dp_phase;
       const Mat3& KR_used = *KR_phase;
-      const Mat3& DR_used = *DR_phase;
+      const Mat3& DR_used = pause_hold_active ? DR_pause_eff : *DR_phase;
 
       // ---------------------------------------------------------------
       // Control law: decoupled 3x3 springs or coupled 6x6 spring.
