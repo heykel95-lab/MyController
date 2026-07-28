@@ -5,10 +5,13 @@
 CXX := g++
 TARGET := surface_grinding_controller
 TOOL_OFFSET_TARGET := check_tool_offset
+MEASURE_PLANE_TARGET := measure_plane
 SRC := main.cpp
 TOOLS_DIR := tools
 TOOL_OFFSET_SRC := $(TOOLS_DIR)/check_tool_offset.cpp
 TOOL_OFFSET_BIN := $(TOOLS_DIR)/$(TOOL_OFFSET_TARGET)
+MEASURE_PLANE_SRC := $(TOOLS_DIR)/measure_plane.cpp
+MEASURE_PLANE_BIN := $(TOOLS_DIR)/$(MEASURE_PLANE_TARGET)
 
 # Implementation units split out of the module headers. Each is
 # compiled once into its own .o and linked into both programs, so the function
@@ -58,6 +61,11 @@ $(TOOL_OFFSET_TARGET): $(TOOL_OFFSET_BIN)
 $(TOOL_OFFSET_BIN): $(TOOL_OFFSET_SRC) $(CONTROLLER_OBJS) $(EXAMPLES_COMMON_OBJ) $(HEADERS)
 	$(CXX) $(CXXFLAGS) $(TOOL_OFFSET_SRC) $(CONTROLLER_OBJS) $(EXAMPLES_COMMON_OBJ) -o $@ $(LDFLAGS) $(LDLIBS)
 
+$(MEASURE_PLANE_TARGET): $(MEASURE_PLANE_BIN)
+
+$(MEASURE_PLANE_BIN): $(MEASURE_PLANE_SRC) $(CONTROLLER_OBJS) $(EXAMPLES_COMMON_OBJ) $(HEADERS)
+	$(CXX) $(CXXFLAGS) $(MEASURE_PLANE_SRC) $(CONTROLLER_OBJS) $(EXAMPLES_COMMON_OBJ) -o $@ $(LDFLAGS) $(LDLIBS)
+
 run: $(TARGET)
 	./$(TARGET)
 
@@ -65,4 +73,4 @@ check: $(TARGET)
 	ldd ./$(TARGET) | grep franka
 
 clean:
-	rm -f $(TARGET) $(TOOL_OFFSET_BIN) $(CONTROLLER_OBJS) $(EXAMPLES_COMMON_OBJ)
+	rm -f $(TARGET) $(TOOL_OFFSET_BIN) $(MEASURE_PLANE_BIN) $(CONTROLLER_OBJS) $(EXAMPLES_COMMON_OBJ)
