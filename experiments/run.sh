@@ -82,6 +82,13 @@ cp "$OVERLAY" "$OUT/overlay.txt"
 
 echo "--- starting controller (drive it as usual; 'e'+Enter to stop) ---"
 echo ""
+
+# Marker used to tell this run's CSVs apart from ones left over in the
+# working directory. Without it a stale log from an earlier session gets
+# archived as though it belonged to this run.
+STAMP="$(mktemp)"
+touch "$STAMP"
+
 cd "$SGC" || exit 1
 set -o pipefail
 ./surface_grinding_controller 2>&1 | tee "$OUT/terminal.log"
@@ -92,15 +99,22 @@ echo "controller_exit: $STATUS" >> "$OUT/meta.txt"
 
 shopt -s nullglob
 MOVED=0
+SKIPPED=0
 for f in "$SGC"/*.csv; do
-  mv "$f" "$OUT/"
-  MOVED=$((MOVED + 1))
+  if [ "$f" -nt "$STAMP" ]; then
+    mv "$f" "$OUT/"
+    MOVED=$((MOVED + 1))
+  else
+    echo "  skipping stale $(basename "$f") (predates this run, left in place)"
+    SKIPPED=$((SKIPPED + 1))
+  fi
 done
 shopt -u nullglob
+rm -f "$STAMP"
 
 echo ""
 if [ "$MOVED" -eq 0 ]; then
-  echo "WARNING: no CSV produced. The run probably stopped before writing."
+  echo "WARNING: no CSV produced by this run. It probably stopped before writing."
   echo "         $OUT keeps the transcript and parameters anyway."
 else
   echo "archived $MOVED CSV file(s) to:"
