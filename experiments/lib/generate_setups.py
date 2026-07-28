@@ -126,7 +126,11 @@ for tilt in (0.0, 5.0, 10.0, 15.0):
         + pole_keys(pole_offset_along(n, 0.08)),
     )
 
-for kr in (5.0, 15.0, 30.0, 50.0):
+# Three points, roughly x3 apart, rather than four evenly spaced ones: 30 was
+# the least informative of the original set, sitting between 15 and 50 on a
+# response that is expected to be monotonic. 5.0 is the nominal value, so that
+# arm doubles as a replication check against G1_decoupled_baseline.
+for kr in (5.0, 15.0, 50.0):
     add(
         f"A2_KRtan_{int(kr):02d}",
         f"Rotational stiffness sweep on the tipping axes, KR_tangent = {kr} "

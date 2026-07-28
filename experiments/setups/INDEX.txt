@@ -1,4 +1,4 @@
-64 setups, 211 total runs
+63 setups, 206 total runs
 
 G1_coupled_block_diagonal          x3  Coupled 6x6 path with block-diagonal gains must reproduce the decoupled wrench exactly.
 G1_decoupled_baseline              x5  Decoupled wrench, no coupling.
@@ -12,7 +12,6 @@ A1_tilt_10deg                      x3  Initial misalignment sweep, surface tilt 
 A1_tilt_15deg                      x3  Initial misalignment sweep, surface tilt b = 15.0 deg.
 A2_KRtan_05                        x5  Rotational stiffness sweep on the tipping axes, KR_tangent = 5.0 N m/rad, decoupled command.
 A2_KRtan_15                        x5  Rotational stiffness sweep on the tipping axes, KR_tangent = 15.0 N m/rad, decoupled command.
-A2_KRtan_30                        x5  Rotational stiffness sweep on the tipping axes, KR_tangent = 30.0 N m/rad, decoupled command.
 A2_KRtan_50                        x5  Rotational stiffness sweep on the tipping axes, KR_tangent = 50.0 N m/rad, decoupled command.
 A3_lateral_Kp_2000                 x3  Lateral translational compliance, setup_Kp_x = setup_Kp_y = 2000.0 N/m.
 A3_lateral_Kp_0800                 x3  Lateral translational compliance, setup_Kp_x = setup_Kp_y = 800.0 N/m.
