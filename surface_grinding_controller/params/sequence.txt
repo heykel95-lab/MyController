@@ -53,7 +53,7 @@ descend_max_distance = 0.640
 # ====================================================================
 # Ends on setup_moment_threshold after setup_min_time, or on setup_timeout.
 setup_min_time = 2.0
-setup_timeout = 3.0
+setup_timeout = 4.0
 setup_moment_threshold = 150.0
 
 # Alignment starts from the actual contact-point height captured at the end of
@@ -74,9 +74,9 @@ setup_Dp_y = 10.0
 setup_Dp_z = 175.0
 
 # Rotational spring, surface frame [tangent1, tangent2, normal].
-setup_KR_normal = 10.0
-setup_KR_tangent1 = 0.05
-setup_KR_tangent2 = 0.05
+setup_KR_normal = 50.0
+setup_KR_tangent1 = 5.0
+setup_KR_tangent2 = 5.0
 # Manual damping FALLBACK [Nms/rad].
 setup_DR_normal = 10.0
 setup_DR_tangent1 = 10.01

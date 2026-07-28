@@ -383,18 +383,20 @@ void startKeyboardStopThread(
     std::atomic<bool>& proceed_requested,
     std::atomic<bool>& guide_requested,
     std::atomic<char>& guidance_menu_key,
+    std::atomic<bool>& guided_hold_selector_pending,
     std::atomic<bool>& gate_continue) {
   printf("Press e+Enter to stop the controller before the duration expires.\n");
   if (params.use_manual_guidance_start) {
-    printf("Press p+Enter to leave manual guidance and start the phase sequence.\n");
+    printf("During startup guidance: use s+Enter for sequence or h+Enter for hold.\n");
   }
-  printf("During hold: press g+Enter to hand-guide the tool, then p+Enter to restart the sequence.\n");
+  printf("During hold: press g+Enter to hand-guide the tool, then p+Enter to recapture and resume hold.\n");
   if (params.experiment_duration <= 0.0) {
     printf("experiment_duration <= 0: running indefinitely until e + Enter.\n");
   }
 
   std::thread keyboard_thread([&stop_requested, &proceed_requested,
                                &guide_requested, &guidance_menu_key,
+                               &guided_hold_selector_pending,
                                &gate_continue]() {
     std::string line;
     while (std::getline(std::cin, line)) {
@@ -416,6 +418,16 @@ void startKeyboardStopThread(
         guidance_menu_key.store('s');
       } else if (line == "h" || line == "H") {
         guidance_menu_key.store('h');
+        // During startup guidance, hand stdin to the synchronous 0/1/2 hold
+        // selector after this key ends the robot control loop. Without this
+        // handoff, both threads could consume the next input line.
+        while (guided_hold_selector_pending.load() &&
+               !stop_requested.load()) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        if (stop_requested.load()) {
+          break;
+        }
       }
     }
   });
@@ -454,53 +466,97 @@ Vec7 computeNullspaceTorque(
     const RobotState& state,
     const Mat6x7& J,
     const Vec7& dq,
-    const Vec7& q_start) {
-  Vec7 tau_nullspace = Vec7::Zero();
+    SigmaDiagnostics& sigma) {
+  sigma = SigmaDiagnostics{};
+  sigma.alpha = std::abs(params.nullspace_alpha);
+  sigma.k_sigma = params.nullspace_k_sigma;
+  sigma.deadband = std::max(0.0, params.nullspace_sigma_deadband);
 
   if (!params.use_nullspace_optimization ||
       params.nullspace_mode == NullspaceMode::kOff) {
-    return tau_nullspace;
+    return Vec7::Zero();
   }
 
   Map<const Vec7> q_current(state.q.data());
 
+  // Moore-Penrose pseudo-inverse from the Jacobian singular values:
+  //   J^+ = sum_i (1/sigma_i) v_i u_i^T
+  // Singular directions below the relative cutoff are omitted. Unlike the
+  // previous damped normal-equation inverse, this produces an exact projector
+  // onto the retained SVD nullspace.
+  Eigen::JacobiSVD<Mat6x7> svd_current(
+      J, Eigen::ComputeFullU | Eigen::ComputeFullV);
+  const Eigen::Matrix<double, 6, 1> singular_values =
+      svd_current.singularValues();
+  sigma.sigma_current = singular_values.minCoeff();
+  const double sigma_max = singular_values.maxCoeff();
+  const double svd_cutoff =
+      std::max(0.0, params.nullspace_svd_relative_tolerance) * sigma_max;
+
+  Mat7x6 J_pinv = Mat7x6::Zero();
+  for (int i = 0; i < 6; ++i) {
+    if (singular_values(i) > svd_cutoff) {
+      J_pinv +=
+          (1.0 / singular_values(i)) *
+          svd_current.matrixV().col(i) *
+          svd_current.matrixU().col(i).transpose();
+    }
+  }
+
   const Mat7x7 I7 = Mat7x7::Identity();
-  const Mat6x6 I6 = Mat6x6::Identity();
-  // Damping factor for the pseudo-inverse, for stability near singularities.
-  const double lambda = 0.05;
-  const Mat6x6 JJt_damped = J * J.transpose() + lambda * lambda * I6;
-
-  // Joint nullspace projector N = I - J^T * (J J^T + lambda^2 I)^-1 * J.
-  // Solving the system is more stable than forming the inverse explicitly.
-  const Mat7x7 N = I7 - J.transpose() * JJt_damped.ldlt().solve(J);
-
-  // Restoring spring in the nullspace:
-  //   tau_return [Nm] = N * (k_start * (q_start - q) - d * dq)
-  // This keeps the arm from slowly drifting in the nullspace while the TCP is
-  // held at the same Cartesian place.
-  if (params.nullspace_mode == NullspaceMode::kPostureOnly ||
-      params.nullspace_mode == NullspaceMode::kPostureAndSigma) {
-    tau_nullspace =
-        N * (params.nullspace_k_start * (q_start - q_current) - params.nullspace_damping * dq);
+  // Torque nullspace projector N_tau = (I - J^+ J)^T. For the
+  // Moore-Penrose inverse it is symmetric; symmetrize only for roundoff.
+  Mat7x7 N_tau = I7 - J.transpose() * J_pinv.transpose();
+  N_tau = 0.5 * (N_tau + N_tau.transpose());
+  const Vec7 dq_nullspace = N_tau * dq;
+  sigma.nullspace_velocity = dq_nullspace;
+  sigma.nullspace_speed = dq_nullspace.norm();
+  if (sigma.nullspace_speed > 1e-12) {
+    Eigen::Index dominant_velocity_index = 0;
+    dq_nullspace.cwiseAbs().maxCoeff(&dominant_velocity_index);
+    sigma.dominant_velocity_joint =
+        static_cast<int>(dominant_velocity_index) + 1;
+    const double dominant_velocity =
+        dq_nullspace(dominant_velocity_index);
+    sigma.dominant_velocity_fraction =
+        (dominant_velocity * dominant_velocity) /
+        dq_nullspace.squaredNorm();
   }
 
-  if (params.nullspace_mode == NullspaceMode::kPostureOnly) {
-    return tau_nullspace;
+  // Mode 1 has no q_start spring: it only dissipates joint velocity projected
+  // onto the nullspace, so the arm settles wherever the redundant axis stops.
+  const bool damping_enabled =
+      params.nullspace_mode == NullspaceMode::kDampingOnly ||
+      params.nullspace_mode == NullspaceMode::kDampingAndSigma;
+  Vec7 tau_damping = Vec7::Zero();
+  if (damping_enabled) {
+    tau_damping.noalias() =
+        -params.nullspace_damping * dq_nullspace;
   }
+  if (params.nullspace_mode == NullspaceMode::kDampingOnly) {
+    return tau_damping;
+  }
+  const bool sigma_only =
+      params.nullspace_mode == NullspaceMode::kSigmaOnly;
+  const Vec7 sigma_fallback =
+      sigma_only ? Vec7::Zero() : tau_damping;
 
   // Sigma-min term: step along the 1D nullspace direction n of the 6x7
   // Jacobian in whichever sign increases the smallest singular value.
-  Eigen::JacobiSVD<Mat6x7> svd_current(J, Eigen::ComputeFullU | Eigen::ComputeFullV);
   Vec7 n = svd_current.matrixV().col(6);
 
   if (n.norm() <= 1e-9) {
-    return tau_nullspace;
+    return sigma_fallback;
   }
 
   n.normalize();
 
-  const Array7 q_plus_array = vec7ToArray(Vec7(q_current + params.nullspace_alpha * n));
-  const Array7 q_minus_array = vec7ToArray(Vec7(q_current - params.nullspace_alpha * n));
+  const double alpha = sigma.alpha;
+  if (alpha <= 1e-12) {
+    return sigma_fallback;
+  }
+  const Array7 q_plus_array = vec7ToArray(Vec7(q_current + alpha * n));
+  const Array7 q_minus_array = vec7ToArray(Vec7(q_current - alpha * n));
 
   const std::array<double, 42> J_plus_array =
       model.zeroJacobian(Frame::kEndEffector, q_plus_array, state.F_T_EE, state.EE_T_K);
@@ -510,15 +566,42 @@ Vec7 computeNullspaceTorque(
   Map<const Mat6x7> J_plus(J_plus_array.data());
   Map<const Mat6x7> J_minus(J_minus_array.data());
 
-  const double sigma_direction =
-      (smallestSingularValue(J_plus) > smallestSingularValue(J_minus)) ? 1.0 : -1.0;
-
-  const Vec7 tau_sigma =
-      N * (params.nullspace_k_sigma * sigma_direction * params.nullspace_alpha * n);
-
-  if (params.nullspace_mode == NullspaceMode::kSigmaOnly) {
-    return tau_sigma;
+  const double sigma_plus = smallestSingularValue(J_plus);
+  const double sigma_minus = smallestSingularValue(J_minus);
+  if (!std::isfinite(sigma_plus) || !std::isfinite(sigma_minus)) {
+    return sigma_fallback;
+  }
+  const double sigma_difference = sigma_plus - sigma_minus;
+  sigma.samples_valid = true;
+  sigma.sigma_plus = sigma_plus;
+  sigma.sigma_minus = sigma_minus;
+  sigma.sigma_difference = sigma_difference;
+  if (std::abs(sigma_difference) <= sigma.deadband) {
+    return sigma_fallback;
   }
 
-  return tau_nullspace + tau_sigma;
+  const double sigma_direction = (sigma_difference > 0.0) ? 1.0 : -1.0;
+  const Vec7 best_direction = sigma_direction * n;
+  sigma.direction_valid = true;
+  sigma.direction_sign = sigma_direction;
+  sigma.best_direction = best_direction;
+  sigma.speed_toward_better = best_direction.dot(dq_nullspace);
+  Eigen::Index dominant_direction_index = 0;
+  best_direction.cwiseAbs().maxCoeff(&dominant_direction_index);
+  sigma.dominant_direction_joint =
+      static_cast<int>(dominant_direction_index) + 1;
+  const double dominant_direction =
+      best_direction(dominant_direction_index);
+  sigma.dominant_direction_fraction =
+      dominant_direction * dominant_direction;
+  sigma.jacobian_null_residual = (J * best_direction).norm();
+  // alpha determines only where sigma is sampled. k_sigma is the commanded
+  // torque magnitude along the better (+n or -n) nullspace direction.
+  const Vec7 tau_sigma =
+      params.nullspace_k_sigma * N_tau * best_direction;
+  sigma.tau_sigma = tau_sigma;
+  sigma.tau_sigma_norm = tau_sigma.norm();
+  sigma.push_active = sigma.tau_sigma_norm > 0.0;
+
+  return sigma_only ? tau_sigma : tau_damping + tau_sigma;
 }

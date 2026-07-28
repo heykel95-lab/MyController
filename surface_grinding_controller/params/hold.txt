@@ -6,8 +6,8 @@
 # hold_Kp/hold_Dp and ORIENTATION with hold_KR/hold_DR, both isotropic in the
 # base frame. The auto-damping toggle/factor for hold live in common.txt.
 #
-# From hold you can press g+Enter to hand-guide the tool and p+Enter to restart
-# the whole sequence from the new pose.
+# From hold you can press g+Enter to hand-guide the tool and p+Enter to
+# re-capture the new pose and resume hold.
 
 # Cartesian position stiffness [N/m], base x/y/z.
 hold_Kp = 300.0

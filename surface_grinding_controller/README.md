@@ -28,7 +28,7 @@ ramp before its endpoint.
 
 Instead of the sequence, the startup menu can pick a plain **hold** at the start
 pose. From a hold, `g+Enter` hands the tool over to manual guidance and
-`p+Enter` re-captures the pose and restarts the whole sequence from there.
+`p+Enter` re-captures the pose and resumes hold from there.
 
 Optional Enter gates (`pause_before_set_up`, `pause_before_grind`) freeze the
 run between phases with a stiff position lock until you press Enter.
@@ -103,14 +103,105 @@ writes the implied `coupled_K_tcp` / `coupled_D_tcp` back into
 
 ## Nullspace
 
-Off during the approach; active from phase 2 onward.
+The projector is built from an SVD Moore-Penrose inverse:
 
 ```text
-tau_null  = N * (k_start * (q_start - q) - d_null * dq)
-tau_sigma = N * (k_sigma * alpha * sign * n)
+J+    = V * Sigma+ * U^T
+N_tau = (I - J+ * J)^T
 ```
 
-`nullspace_mode` selects posture only, sigma only, both, or off.
+The available nullspace laws are:
+
+```text
+off:       tau = 0
+damping:   tau = -d_null * N_tau * dq
+sigma:     tau = k_sigma * sign * N_tau * n
+both:      tau = -d_null * N_tau * dq + k_sigma * sign * N_tau * n
+```
+
+The interactive hold menu exposes all four modes: 0 off, 1 damping only,
+2 sigma only, and 3 damping plus sigma. This allows the isolated terms and the
+damped combined response to be tested from the same captured hold pose.
+
+Here `n` is the one-dimensional 6x7 Jacobian nullspace direction. The sign is
+chosen by comparing `sigma_min(q + alpha*n)` with
+`sigma_min(q - alpha*n)`. `alpha` is only the sampling step; it does not scale
+the commanded sigma torque.
+
+With `print_sigma_debug = 1`, a sigma-enabled hold (mode 2 or 3) prints one
+rate-limited tuning block. Its fields mean:
+
+```text
+min      current sigma_min
+d/dt     measured change of sigma_min between debug lines
+probe    abs(sigma_plus - sigma_minus)
+C        probe/deadband (C <= 1 disables the sigma push)
+|grad|   probe/(2*alpha), for comparing different alpha trials
+tau      norm of the commanded sigma torque
+vN       absolute nullspace joint speed
+vBest    signed speed toward the selected better-sigma direction
+nBest    sign-selected unit joint direction that improves sigma_min
+dominant joint with the largest absolute nBest component and its squared share
+dqN      projected nullspace velocity of q1..q7
+moving   joint with the largest absolute dqN component and its squared share
+tauS     commanded sigma-torque contribution for q1..q7
+||J*nBest|| numerical check that nBest is in the Jacobian nullspace
+```
+
+The displayed direction share is `nBest_i^2`, because `nBest` is unit length.
+The displayed motion share is `dqN_i^2 / ||dqN||^2`. In the CSV, joint index
+zero and `sigma_direction_valid = 0` mean that no better direction was
+available. Treat `||J*nBest||` only as a near-zero numerical consistency check;
+its translational and rotational Jacobian rows have different physical units.
+
+After releasing a manual push, a useful comeback has `vBest > 0` and normally
+`d/dt > 0`. If `C` is frequently at or below 1 while the arm is visibly away
+from its better configuration, the alpha probe is not clearly separating the
+two directions; near the optimum, `C <= 1` is expected. If `tau` is active but
+`vN` stays near zero, `k_sigma` is too weak to overcome the present robot/task
+effects. The CSV
+contains the raw sigma samples and response values needed to derive the printed
+metrics for plotting and comparing short runs. The raw `sigma_direction` sign can flip with the
+arbitrary SVD vector sign; use `vBest`, the absolute probe difference, and the
+sigma trend to interpret physical behavior. `nBest` includes that sign choice,
+so it is the physical better-sigma direction. Its `dominant` joint is only the
+largest local component; it does not designate a permanent "nullspace joint."
+The terminal block is intended for short diagnostic runs; set
+`print_sigma_debug = 0` for timing-sensitive runs and use the buffered CSV
+fields instead.
+
+### Compact sigma debug file
+
+Every sigma-enabled hold test (mode 2 or 3) is also buffered into:
+
+```text
+surface_grinding_controller_sigma_debug.csv
+```
+
+The controller writes this compact file at 20 Hz after a normal stop, before it
+writes the much larger general log. There is no file I/O inside the 1 kHz
+control callback. After a test, stop with `e+Enter`; the file is then available
+in this project folder for direct analysis without copying terminal output. If
+a collision/reflex or another control exception ends the test, the partial
+compact trace is saved before the exception is reported.
+
+The `event` column separates `hold_start`, `manual_guide_start`, `recapture`,
+normal `sample` rows, `stop`, and `exception`. Each `p+Enter` recapture increments
+`segment_id` and resets `phase_time_s`, so separate push-and-release trials can
+be compared cleanly. The file includes raw `q1..q7` and `dq1..dq7`, the
+sign-selected sigma direction and torque, sigma response, Cartesian
+position/orientation errors, task torque, external wrench changes, Franka
+contact flags, and the peak motion/load observed between 20 Hz samples.
+
+The external joint-torque baseline is captured when hold starts and again at
+`p+Enter`. Release the arm before pressing `p`; otherwise the new baseline can
+include your hand force. External estimates and contact flags are
+evidence of a manual push, not an infallible automatic “hands on” classifier,
+so the event boundaries and the known test procedure still matter.
+
+The file name, sample period, and buffer capacity are configured by
+`sigma_debug_csv_file_name`, `sigma_debug_log_period`, and
+`max_sigma_debug_rows` in `params/common.txt`.
 
 ## Parameter files
 

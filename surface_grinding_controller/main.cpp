@@ -56,12 +56,17 @@ int main() {
     std::atomic<bool> proceed_requested(false);
     std::atomic<bool> guide_requested(false);
     std::atomic<char> guidance_menu_key(0);
+    std::atomic<bool> guided_hold_selector_pending(
+        params.use_manual_guidance_start);
     std::atomic<bool> gate_continue(false);
     startKeyboardStopThread(params, stop_requested, proceed_requested,
-                            guide_requested, guidance_menu_key, gate_continue);
+                            guide_requested, guidance_menu_key,
+                            guided_hold_selector_pending, gate_continue);
 
     if (params.use_manual_guidance_start &&
-        !runManualGuidanceStart(params, robot, model, stop_requested, guidance_menu_key)) {
+        !runManualGuidanceStart(params, robot, model, stop_requested,
+                                guidance_menu_key,
+                                guided_hold_selector_pending)) {
       return 0;
     }
 
@@ -158,9 +163,17 @@ int main() {
         !params.use_phase_sequence  ? ControlPhase::kHold
         : params.use_approach_orient ? ControlPhase::kApproachOrient
                                      : ControlPhase::kApproachDescend;
+    const bool sigma_hold_diagnostics_enabled =
+        initial_phase == ControlPhase::kHold &&
+        (params.nullspace_mode == NullspaceMode::kSigmaOnly ||
+         params.nullspace_mode == NullspaceMode::kDampingAndSigma);
     ControlPhase phase = initial_phase;
     double phase_start_time = 0.0;
     double next_debug_time = 0.0;
+    double next_sigma_debug_time = 0.0;
+    double last_sigma_debug_time = 0.0;
+    double last_sigma_debug_value = 0.0;
+    bool last_sigma_debug_valid = false;
     bool descend_failed = false;
 
     // Contact reference, captured when the descend step reaches the clearance
@@ -212,6 +225,120 @@ int main() {
     std::size_t log_rows_written = 0;
     bool log_buffer_wrapped = false;
 
+    // Independent compact logger for sigma-enabled hold tuning. It is sampled
+    // much more slowly than the full CSV and retains explicit guide/recapture
+    // events even when the full 1 kHz log wraps.
+    const double sigma_debug_log_period =
+        std::max(0.001, params.sigma_debug_log_period);
+    const std::size_t max_sigma_debug_rows =
+        static_cast<std::size_t>(
+            std::max(0, params.max_sigma_debug_rows));
+    std::vector<SigmaDebugRow> sigma_debug_data(max_sigma_debug_rows);
+    std::size_t sigma_debug_write_index = 0;
+    std::size_t sigma_debug_rows_written = 0;
+    bool sigma_debug_buffer_wrapped = false;
+    int sigma_debug_segment_id = 0;
+    double next_sigma_debug_file_time = 0.0;
+
+    double peak_sigma_nullspace_speed = 0.0;
+    double peak_sigma_abs_speed_toward_better = 0.0;
+    double min_sigma_speed_toward_better = 0.0;
+    double max_sigma_speed_toward_better = 0.0;
+    double peak_sigma_position_error = 0.0;
+    double peak_sigma_rotation_error = 0.0;
+    double peak_sigma_external_force_delta = 0.0;
+    double peak_sigma_external_moment_delta = 0.0;
+    double peak_sigma_external_joint_torque_delta = 0.0;
+
+    Vec7 sigma_debug_external_joint_torque_bias = Vec7::Zero();
+    bool sigma_debug_external_joint_torque_bias_valid = false;
+
+    auto appendSigmaDebugRow = [&](const SigmaDebugRow& row) {
+      if (max_sigma_debug_rows == 0) {
+        return;
+      }
+      sigma_debug_data[sigma_debug_write_index] = row;
+      sigma_debug_write_index =
+          (sigma_debug_write_index + 1) % max_sigma_debug_rows;
+      if (sigma_debug_rows_written < max_sigma_debug_rows) {
+        ++sigma_debug_rows_written;
+      } else {
+        sigma_debug_buffer_wrapped = true;
+      }
+    };
+
+    auto resetSigmaDebugPeaks = [&]() {
+      peak_sigma_nullspace_speed = 0.0;
+      peak_sigma_abs_speed_toward_better = 0.0;
+      min_sigma_speed_toward_better = 0.0;
+      max_sigma_speed_toward_better = 0.0;
+      peak_sigma_position_error = 0.0;
+      peak_sigma_rotation_error = 0.0;
+      peak_sigma_external_force_delta = 0.0;
+      peak_sigma_external_moment_delta = 0.0;
+      peak_sigma_external_joint_torque_delta = 0.0;
+    };
+
+    bool sigma_debug_file_written = false;
+    auto persistSigmaDebugBuffer = [&]() -> bool {
+      if (sigma_debug_file_written ||
+          params.sigma_debug_csv_file_name.empty() ||
+          sigma_debug_rows_written == 0) {
+        return sigma_debug_file_written;
+      }
+
+      try {
+        std::vector<SigmaDebugRow> ordered_sigma_debug_data;
+        ordered_sigma_debug_data.reserve(sigma_debug_rows_written);
+        if (sigma_debug_buffer_wrapped) {
+          ordered_sigma_debug_data.insert(
+              ordered_sigma_debug_data.end(),
+              sigma_debug_data.begin() +
+                  static_cast<std::ptrdiff_t>(
+                      sigma_debug_write_index),
+              sigma_debug_data.end());
+          ordered_sigma_debug_data.insert(
+              ordered_sigma_debug_data.end(),
+              sigma_debug_data.begin(),
+              sigma_debug_data.begin() +
+                  static_cast<std::ptrdiff_t>(
+                      sigma_debug_write_index));
+          printf("Sigma debug buffer wrapped: kept latest %zu rows at %.1f Hz.\n",
+                 sigma_debug_rows_written,
+                 1.0 / sigma_debug_log_period);
+        } else {
+          ordered_sigma_debug_data.insert(
+              ordered_sigma_debug_data.end(),
+              sigma_debug_data.begin(),
+              sigma_debug_data.begin() +
+                  static_cast<std::ptrdiff_t>(
+                      sigma_debug_rows_written));
+        }
+
+        sigma_debug_file_written =
+            writeSigmaDebugToCsv(
+                ordered_sigma_debug_data,
+                params.sigma_debug_csv_file_name);
+        if (sigma_debug_file_written) {
+          printf("sigma debug csv: %s (%zu rows)\n",
+                 params.sigma_debug_csv_file_name.c_str(),
+                 ordered_sigma_debug_data.size());
+        }
+      } catch (const std::exception& e) {
+        fprintf(stderr, "Could not persist sigma debug buffer: %s\n",
+                e.what());
+      }
+      return sigma_debug_file_written;
+    };
+
+    if (sigma_hold_diagnostics_enabled) {
+      SigmaDebugRow hold_start_row;
+      hold_start_row.segment_id = sigma_debug_segment_id;
+      hold_start_row.event = SigmaDebugEvent::kHoldStart;
+      hold_start_row.q = q_start;
+      appendSigmaDebugRow(hold_start_row);
+    }
+
     double time = 0.0;
     Vec3 final_p_EE = Vec3::Zero();
     Vec3 final_p_d = Vec3::Zero();
@@ -226,11 +353,21 @@ int main() {
     // 3. Control loop: libfranka calls this back at ~1 kHz with the current
     //    state and expects the 7 commanded joint torques in return.
     // ================================================================
-    robot.control([&](const RobotState& state, Duration period) -> Torques {
+    try {
+      robot.control([&](const RobotState& state, Duration period) -> Torques {
       time += period.toSec();
 
       Map<const Vec7> dq(state.dq.data());
       Map<const Vec7> q_current(state.q.data());
+      Map<const Vec7> external_joint_torque(
+          state.tau_ext_hat_filtered.data());
+      const bool joint_contact =
+          std::any_of(state.joint_contact.begin(), state.joint_contact.end(),
+                      [](double value) { return value > 0.0; });
+      const bool cartesian_contact =
+          std::any_of(state.cartesian_contact.begin(),
+                      state.cartesian_contact.end(),
+                      [](double value) { return value > 0.0; });
 
       // kEndEffector Jacobian includes any configured F_T_EE tool offset.
       std::array<double, 42> jacobian_array = model.zeroJacobian(Frame::kEndEffector, state);
@@ -253,9 +390,38 @@ int main() {
       if (phase == ControlPhase::kHold && guide_requested.load()) {
         guide_requested.store(false);
         proceed_requested.store(false);
+
+        if (sigma_hold_diagnostics_enabled) {
+          SigmaDebugRow guide_row;
+          guide_row.run_time = time;
+          guide_row.phase_time = time - phase_start_time;
+          guide_row.segment_id = sigma_debug_segment_id;
+          guide_row.event = SigmaDebugEvent::kManualGuideStart;
+          guide_row.q = q_current;
+          guide_row.dq = dq;
+          guide_row.e_p = p_start - p_EE;
+          guide_row.e_R = orientationError(R_EE, R_d);
+          guide_row.pdot = pdot;
+          guide_row.omega = omega;
+          guide_row.external_force_delta =
+              external_force - contact_force_bias;
+          guide_row.external_moment_delta =
+              external_moment - contact_moment_bias;
+          guide_row.external_joint_torque_baseline_valid =
+              sigma_debug_external_joint_torque_bias_valid;
+          if (sigma_debug_external_joint_torque_bias_valid) {
+            guide_row.external_joint_torque_delta =
+                external_joint_torque -
+                sigma_debug_external_joint_torque_bias;
+          }
+          guide_row.joint_contact = joint_contact;
+          guide_row.cartesian_contact = cartesian_contact;
+          appendSigmaDebugRow(guide_row);
+        }
+
         phase = ControlPhase::kManualGuide;
         phase_start_time = time;
-        printf("\nphase: manual_guide (move the tool by hand; p+Enter restarts the sequence, e+Enter stops)\n");
+        printf("\nphase: manual_guide (move the tool by hand; p+Enter recaptures and resumes hold, e+Enter stops)\n");
       }
       if (phase == ControlPhase::kManualGuide) {
         Array7 coriolis_array = model.coriolis(state);
@@ -263,6 +429,31 @@ int main() {
         const Array7 tau_array =
             vec7ToArray(Vec7(coriolis - params.manual_guidance_damping * dq));
         if (stop_requested.load()) {
+          if (sigma_hold_diagnostics_enabled) {
+            SigmaDebugRow stop_row;
+            stop_row.run_time = time;
+            stop_row.phase_time = time - phase_start_time;
+            stop_row.segment_id = sigma_debug_segment_id;
+            stop_row.event = SigmaDebugEvent::kStop;
+            stop_row.q = q_current;
+            stop_row.dq = dq;
+            stop_row.pdot = pdot;
+            stop_row.omega = omega;
+            stop_row.external_force_delta =
+                external_force - contact_force_bias;
+            stop_row.external_moment_delta =
+                external_moment - contact_moment_bias;
+            stop_row.external_joint_torque_baseline_valid =
+                sigma_debug_external_joint_torque_bias_valid;
+            if (sigma_debug_external_joint_torque_bias_valid) {
+              stop_row.external_joint_torque_delta =
+                  external_joint_torque -
+                  sigma_debug_external_joint_torque_bias;
+            }
+            stop_row.joint_contact = joint_contact;
+            stop_row.cartesian_contact = cartesian_contact;
+            appendSigmaDebugRow(stop_row);
+          }
           printf("\nStop requested with e + Enter. Finishing control loop...\n");
           return MotionFinished(Torques(tau_array));
         }
@@ -285,7 +476,14 @@ int main() {
 
           phase = initial_phase;
           phase_start_time = time;
+          ++sigma_debug_segment_id;
+          next_sigma_debug_file_time = time;
+          sigma_debug_external_joint_torque_bias = external_joint_torque;
+          sigma_debug_external_joint_torque_bias_valid = true;
+          resetSigmaDebugPeaks();
           next_debug_time = time;
+          next_sigma_debug_time = time;
+          last_sigma_debug_valid = false;
           gate_set_up_armed = false;
           gate_set_up_passed = false;
           gate_paused_time = 0.0;
@@ -299,7 +497,24 @@ int main() {
           pause_damp_computed = false;
           Dp_pause_cached = Dp_pause;
           DR_pause_cached = DR_approach;
-          printf("\n=== Restarting sequence from re-guided pose ===\n");
+
+          if (sigma_hold_diagnostics_enabled) {
+            SigmaDebugRow recapture_row;
+            recapture_row.run_time = time;
+            recapture_row.phase_time = 0.0;
+            recapture_row.segment_id = sigma_debug_segment_id;
+            recapture_row.event = SigmaDebugEvent::kRecapture;
+            recapture_row.q = q_current;
+            recapture_row.dq = dq;
+            recapture_row.pdot = pdot;
+            recapture_row.omega = omega;
+            recapture_row.external_joint_torque_baseline_valid = true;
+            recapture_row.joint_contact = joint_contact;
+            recapture_row.cartesian_contact = cartesian_contact;
+            appendSigmaDebugRow(recapture_row);
+          }
+
+          printf("\n=== Resuming hold from re-guided pose ===\n");
           printVec7Deg("q_start", q_start);
           printVec3Mm("p_start", p_start);
           printf("phase: %s\n", phaseName(phase));
@@ -896,12 +1111,138 @@ int main() {
       }
 
       // nullspace_mode controls whether this is active for the whole sequence.
+      SigmaDiagnostics sigma_diagnostics;
       const Vec7 tau_nullspace =
-          computeNullspaceTorque(params, model, state, J, dq, q_start);
+          computeNullspaceTorque(
+              params, model, state, J, dq, sigma_diagnostics);
+
+      if (phase == ControlPhase::kHold &&
+          sigma_hold_diagnostics_enabled &&
+          params.print_sigma_debug &&
+          params.debug_period > 0.0 &&
+          time >= next_sigma_debug_time) {
+        double sigma_rate = 0.0;
+        const bool sigma_rate_valid =
+            last_sigma_debug_valid && time > last_sigma_debug_time;
+        if (sigma_rate_valid) {
+          sigma_rate =
+              (sigma_diagnostics.sigma_current - last_sigma_debug_value) /
+              (time - last_sigma_debug_time);
+        }
+        printSigmaDebug(
+            time - phase_start_time,
+            sigma_diagnostics,
+            sigma_rate,
+            sigma_rate_valid);
+        last_sigma_debug_time = time;
+        last_sigma_debug_value = sigma_diagnostics.sigma_current;
+        last_sigma_debug_valid = true;
+        next_sigma_debug_time = time + params.debug_period;
+      }
 
       Array7 coriolis_array = model.coriolis(state);
       Map<const Vec7> coriolis(coriolis_array.data());
-      const Vec7 tau_cmd = J.transpose() * wrench + tau_nullspace + coriolis;
+      const Vec7 tau_task = J.transpose() * wrench;
+      const Vec7 tau_cmd = tau_task + tau_nullspace + coriolis;
+
+      Vec7 sigma_debug_external_joint_torque_delta = Vec7::Zero();
+      if (phase == ControlPhase::kHold &&
+          sigma_hold_diagnostics_enabled &&
+          !sigma_debug_external_joint_torque_bias_valid) {
+        sigma_debug_external_joint_torque_bias = external_joint_torque;
+        sigma_debug_external_joint_torque_bias_valid = true;
+      }
+      if (sigma_debug_external_joint_torque_bias_valid) {
+        sigma_debug_external_joint_torque_delta =
+            external_joint_torque -
+            sigma_debug_external_joint_torque_bias;
+      }
+
+      if (phase == ControlPhase::kHold &&
+          sigma_hold_diagnostics_enabled) {
+        const Vec3 external_force_delta =
+            external_force - contact_force_bias;
+        const Vec3 external_moment_delta =
+            external_moment - contact_moment_bias;
+
+        peak_sigma_nullspace_speed =
+            std::max(peak_sigma_nullspace_speed,
+                     sigma_diagnostics.nullspace_speed);
+        peak_sigma_abs_speed_toward_better =
+            std::max(peak_sigma_abs_speed_toward_better,
+                     std::abs(
+                         sigma_diagnostics.speed_toward_better));
+        min_sigma_speed_toward_better =
+            std::min(min_sigma_speed_toward_better,
+                     sigma_diagnostics.speed_toward_better);
+        max_sigma_speed_toward_better =
+            std::max(max_sigma_speed_toward_better,
+                     sigma_diagnostics.speed_toward_better);
+        peak_sigma_position_error =
+            std::max(peak_sigma_position_error, e_p.norm());
+        peak_sigma_rotation_error =
+            std::max(peak_sigma_rotation_error, e_R.norm());
+        peak_sigma_external_force_delta =
+            std::max(peak_sigma_external_force_delta,
+                     external_force_delta.norm());
+        peak_sigma_external_moment_delta =
+            std::max(peak_sigma_external_moment_delta,
+                     external_moment_delta.norm());
+        peak_sigma_external_joint_torque_delta =
+            std::max(
+                peak_sigma_external_joint_torque_delta,
+                sigma_debug_external_joint_torque_delta.norm());
+
+        if (time >= next_sigma_debug_file_time) {
+          SigmaDebugRow debug_row;
+          debug_row.run_time = time;
+          debug_row.phase_time = time - phase_start_time;
+          debug_row.segment_id = sigma_debug_segment_id;
+          debug_row.event = SigmaDebugEvent::kSample;
+          debug_row.q = q_current;
+          debug_row.dq = dq;
+          debug_row.e_p = e_p;
+          debug_row.e_R = e_R;
+          debug_row.pdot = pdot;
+          debug_row.omega = omega;
+          debug_row.command_force = f;
+          debug_row.command_moment = m;
+          debug_row.external_force_delta = external_force_delta;
+          debug_row.external_moment_delta = external_moment_delta;
+          debug_row.external_joint_torque_delta =
+              sigma_debug_external_joint_torque_delta;
+          debug_row.external_joint_torque_baseline_valid =
+              sigma_debug_external_joint_torque_bias_valid;
+          debug_row.joint_contact = joint_contact;
+          debug_row.cartesian_contact = cartesian_contact;
+          debug_row.sigma = sigma_diagnostics;
+          debug_row.tau_task_norm = tau_task.norm();
+          debug_row.tau_nullspace_norm = tau_nullspace.norm();
+          debug_row.tau_cmd_norm = tau_cmd.norm();
+          debug_row.peak_nullspace_speed =
+              peak_sigma_nullspace_speed;
+          debug_row.peak_abs_speed_toward_better =
+              peak_sigma_abs_speed_toward_better;
+          debug_row.min_speed_toward_better =
+              min_sigma_speed_toward_better;
+          debug_row.max_speed_toward_better =
+              max_sigma_speed_toward_better;
+          debug_row.peak_position_error =
+              peak_sigma_position_error;
+          debug_row.peak_rotation_error =
+              peak_sigma_rotation_error;
+          debug_row.peak_external_force_delta =
+              peak_sigma_external_force_delta;
+          debug_row.peak_external_moment_delta =
+              peak_sigma_external_moment_delta;
+          debug_row.peak_external_joint_torque_delta =
+              peak_sigma_external_joint_torque_delta;
+          appendSigmaDebugRow(debug_row);
+          resetSigmaDebugPeaks();
+          next_sigma_debug_file_time +=
+              sigma_debug_log_period;
+        }
+      }
 
       // ---------------------------------------------------------------
       // Logging into the pre-sized ring buffer (no allocation here).
@@ -912,6 +1253,7 @@ int main() {
         LogData& row = log_data[log_write_index];
         row.time = time;
         row.phase = static_cast<int>(phase);
+        row.nullspace_mode = static_cast<int>(params.nullspace_mode);
         row.p_EE = p_EE;
         row.p_d = desired.p_d;
         row.tool_contact_point = tool_contact_point;
@@ -931,6 +1273,8 @@ int main() {
         row.contact_force_bias = contact_force_bias;
         row.contact_moment_bias = contact_moment_bias;
         row.push = push_log;
+        row.sigma = sigma_diagnostics;
+        row.tau_nullspace_norm = tau_nullspace.norm();
         row.tau_cmd = tau_cmd;
 
         log_write_index = (log_write_index + 1) % max_log_rows;
@@ -950,13 +1294,91 @@ int main() {
       const Array7 tau_array = vec7ToArray(tau_cmd);
       if ((params.experiment_duration > 0.0 && time >= params.experiment_duration) ||
           stop_requested.load()) {
+        if (phase == ControlPhase::kHold &&
+            sigma_hold_diagnostics_enabled) {
+          SigmaDebugRow stop_row;
+          stop_row.run_time = time;
+          stop_row.phase_time = time - phase_start_time;
+          stop_row.segment_id = sigma_debug_segment_id;
+          stop_row.event = SigmaDebugEvent::kStop;
+          stop_row.q = q_current;
+          stop_row.dq = dq;
+          stop_row.e_p = e_p;
+          stop_row.e_R = e_R;
+          stop_row.pdot = pdot;
+          stop_row.omega = omega;
+          stop_row.command_force = f;
+          stop_row.command_moment = m;
+          stop_row.external_force_delta =
+              external_force - contact_force_bias;
+          stop_row.external_moment_delta =
+              external_moment - contact_moment_bias;
+          stop_row.external_joint_torque_delta =
+              sigma_debug_external_joint_torque_delta;
+          stop_row.external_joint_torque_baseline_valid =
+              sigma_debug_external_joint_torque_bias_valid;
+          stop_row.joint_contact = joint_contact;
+          stop_row.cartesian_contact = cartesian_contact;
+          stop_row.sigma = sigma_diagnostics;
+          stop_row.tau_task_norm = tau_task.norm();
+          stop_row.tau_nullspace_norm = tau_nullspace.norm();
+          stop_row.tau_cmd_norm = tau_cmd.norm();
+          stop_row.peak_nullspace_speed =
+              std::max(peak_sigma_nullspace_speed,
+                       sigma_diagnostics.nullspace_speed);
+          stop_row.peak_abs_speed_toward_better =
+              std::max(peak_sigma_abs_speed_toward_better,
+                       std::abs(
+                           sigma_diagnostics.speed_toward_better));
+          stop_row.min_speed_toward_better =
+              std::min(min_sigma_speed_toward_better,
+                       sigma_diagnostics.speed_toward_better);
+          stop_row.max_speed_toward_better =
+              std::max(max_sigma_speed_toward_better,
+                       sigma_diagnostics.speed_toward_better);
+          stop_row.peak_position_error =
+              std::max(peak_sigma_position_error, e_p.norm());
+          stop_row.peak_rotation_error =
+              std::max(peak_sigma_rotation_error, e_R.norm());
+          stop_row.peak_external_force_delta =
+              std::max(
+                  peak_sigma_external_force_delta,
+                  stop_row.external_force_delta.norm());
+          stop_row.peak_external_moment_delta =
+              std::max(
+                  peak_sigma_external_moment_delta,
+                  stop_row.external_moment_delta.norm());
+          stop_row.peak_external_joint_torque_delta =
+              std::max(
+                  peak_sigma_external_joint_torque_delta,
+                  sigma_debug_external_joint_torque_delta.norm());
+          appendSigmaDebugRow(stop_row);
+        }
         if (stop_requested.load()) {
           printf("\nStop requested with e + Enter. Finishing control loop...\n");
         }
         return MotionFinished(Torques(tau_array));
       }
       return Torques(tau_array);
-    });
+      });
+    } catch (...) {
+      // Preserve the diagnostic trace even when a collision/reflex or another
+      // control exception ends the experiment.
+      if (sigma_hold_diagnostics_enabled) {
+        SigmaDebugRow exception_row;
+        exception_row.run_time = time;
+        exception_row.phase_time = time - phase_start_time;
+        exception_row.segment_id = sigma_debug_segment_id;
+        exception_row.event = SigmaDebugEvent::kException;
+        exception_row.q = final_q;
+        appendSigmaDebugRow(exception_row);
+      }
+      (void)persistSigmaDebugBuffer();
+      throw;
+    }
+
+    // Make the compact diagnostic available before writing the large log.
+    (void)persistSigmaDebugBuffer();
 
     // ================================================================
     // 4. Post-run: persist queued parameters, write the CSV, print results

@@ -122,14 +122,14 @@ NullspaceMode parseNullspaceMode(const std::string& input, NullspaceMode fallbac
     return NullspaceMode::kOff;
   }
   if (value == "1" || value == "posture" || value == "tau_nullspace" ||
-      value == "nullspace") {
-    return NullspaceMode::kPostureOnly;
+      value == "nullspace" || value == "damping") {
+    return NullspaceMode::kDampingOnly;
   }
   if (value == "2" || value == "sigma" || value == "tau_sigma") {
     return NullspaceMode::kSigmaOnly;
   }
   if (value == "3" || value == "both" || value == "combined") {
-    return NullspaceMode::kPostureAndSigma;
+    return NullspaceMode::kDampingAndSigma;
   }
 
   return fallback;
@@ -217,9 +217,19 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
       std::max(1, static_cast<int>(getDouble("log_every_n_cycles", p.log_every_n_cycles)));
   p.max_log_rows =
       std::max(0, static_cast<int>(getDouble("max_log_rows", p.max_log_rows)));
+  p.sigma_debug_csv_file_name =
+      getString("sigma_debug_csv_file_name", p.sigma_debug_csv_file_name);
+  p.sigma_debug_log_period =
+      std::max(0.001,
+               getDouble("sigma_debug_log_period", p.sigma_debug_log_period));
+  p.max_sigma_debug_rows =
+      std::max(0, static_cast<int>(
+                      getDouble("max_sigma_debug_rows",
+                                p.max_sigma_debug_rows)));
   p.debug_period = getDouble("debug_period", p.debug_period);
   p.print_hold_debug = getBool("print_hold_debug", p.print_hold_debug);
   p.print_grind_debug = getBool("print_grind_debug", p.print_grind_debug);
+  p.print_sigma_debug = getBool("print_sigma_debug", p.print_sigma_debug);
   p.print_coupled_diagnostics =
       getBool("print_coupled_diagnostics", p.print_coupled_diagnostics);
 
@@ -358,16 +368,20 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
   p.use_nullspace_optimization =
       getBool("use_nullspace_optimization", p.use_nullspace_optimization);
   p.nullspace_mode = p.use_nullspace_optimization
-      ? NullspaceMode::kPostureAndSigma
+      ? NullspaceMode::kDampingAndSigma
       : NullspaceMode::kOff;
   if (values.count("nullspace_mode")) {
     p.nullspace_mode = parseNullspaceMode(values["nullspace_mode"], p.nullspace_mode);
   }
   p.use_nullspace_optimization = (p.nullspace_mode != NullspaceMode::kOff);
-  p.nullspace_k_start = getDouble("nullspace_k_start", p.nullspace_k_start);
   p.nullspace_damping = getDouble("nullspace_damping", p.nullspace_damping);
   p.nullspace_k_sigma = getDouble("nullspace_k_sigma", p.nullspace_k_sigma);
   p.nullspace_alpha = getDouble("nullspace_alpha", p.nullspace_alpha);
+  p.nullspace_sigma_deadband =
+      getDouble("nullspace_sigma_deadband", p.nullspace_sigma_deadband);
+  p.nullspace_svd_relative_tolerance =
+      getDouble("nullspace_svd_relative_tolerance",
+                p.nullspace_svd_relative_tolerance);
 
   p.auto_damping_max = getDouble("auto_damping_max", p.auto_damping_max);
   p.auto_damping_min_from_manual =

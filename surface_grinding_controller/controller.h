@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cctype>
 #include <stdio.h>
@@ -63,9 +64,9 @@ enum class ControlPhase {
 
 enum class NullspaceMode {
   kOff = 0,
-  kPostureOnly = 1,
+  kDampingOnly = 1,
   kSigmaOnly = 2,
-  kPostureAndSigma = 3
+  kDampingAndSigma = 3
 };
 
 struct Parameters {
@@ -75,9 +76,14 @@ struct Parameters {
   std::string csv_file_name = "surface_grinding_controller_log.csv";
   int log_every_n_cycles = 5;
   int max_log_rows = 120000;
+  std::string sigma_debug_csv_file_name =
+      "surface_grinding_controller_sigma_debug.csv";
+  double sigma_debug_log_period = 0.05;
+  int max_sigma_debug_rows = 20000;
   double debug_period = 0.20;
   bool print_hold_debug = true;
   bool print_grind_debug = true;
+  bool print_sigma_debug = true;
   bool print_coupled_diagnostics = true;
 
   // Gripper action performed once after q_init.
@@ -193,11 +199,12 @@ struct Parameters {
 
   // Nullspace optimization.
   bool use_nullspace_optimization = true;
-  NullspaceMode nullspace_mode = NullspaceMode::kPostureAndSigma;
-  double nullspace_k_start = 1.0;
+  NullspaceMode nullspace_mode = NullspaceMode::kDampingAndSigma;
   double nullspace_damping = 1.0;
-  double nullspace_k_sigma = 0.5;
-  double nullspace_alpha = 0.01;
+  double nullspace_k_sigma = 0.05;
+  double nullspace_alpha = 0.03;
+  double nullspace_sigma_deadband = 1e-6;
+  double nullspace_svd_relative_tolerance = 1e-4;
 
   // Auto-damping options.
   double auto_damping_max = 8000.0;
@@ -224,9 +231,89 @@ struct Parameters {
   double collision_force_nom = 80.0;
 };
 
+struct SigmaDiagnostics {
+  bool samples_valid = false;
+  bool direction_valid = false;
+  bool push_active = false;
+  double sigma_current = 0.0;
+  double sigma_plus = 0.0;
+  double sigma_minus = 0.0;
+  double sigma_difference = 0.0;
+  double direction_sign = 0.0;
+  double alpha = 0.0;
+  double k_sigma = 0.0;
+  double deadband = 0.0;
+  double tau_sigma_norm = 0.0;
+  double nullspace_speed = 0.0;
+  double speed_toward_better = 0.0;
+  // Sign-selected unit nullspace direction, projected joint velocity, and
+  // commanded sigma-torque contribution. Fixed-size vectors must be
+  // explicitly initialized.
+  Vec7 best_direction = Vec7::Zero();
+  Vec7 nullspace_velocity = Vec7::Zero();
+  Vec7 tau_sigma = Vec7::Zero();
+  // Joint indices are one-based for direct comparison with q1..q7; zero means
+  // that no direction/motion was available.
+  int dominant_direction_joint = 0;
+  int dominant_velocity_joint = 0;
+  double dominant_direction_fraction = 0.0;
+  double dominant_velocity_fraction = 0.0;
+  double jacobian_null_residual = 0.0;
+};
+
+enum class SigmaDebugEvent {
+  kSample = 0,
+  kHoldStart = 1,
+  kManualGuideStart = 2,
+  kRecapture = 3,
+  kStop = 4,
+  kException = 5
+};
+
+// Compact, preallocated diagnostic row for sigma-enabled hold experiments.
+// Rows are buffered in the realtime loop and written only after control ends.
+struct SigmaDebugRow {
+  double run_time = 0.0;
+  double phase_time = 0.0;
+  int segment_id = 0;
+  SigmaDebugEvent event = SigmaDebugEvent::kSample;
+
+  Vec7 q = Vec7::Zero();
+  Vec7 dq = Vec7::Zero();
+  Vec3 e_p = Vec3::Zero();
+  Vec3 e_R = Vec3::Zero();
+  Vec3 pdot = Vec3::Zero();
+  Vec3 omega = Vec3::Zero();
+  Vec3 command_force = Vec3::Zero();
+  Vec3 command_moment = Vec3::Zero();
+  Vec3 external_force_delta = Vec3::Zero();
+  Vec3 external_moment_delta = Vec3::Zero();
+  Vec7 external_joint_torque_delta = Vec7::Zero();
+  bool external_joint_torque_baseline_valid = false;
+  bool joint_contact = false;
+  bool cartesian_contact = false;
+
+  SigmaDiagnostics sigma;
+  double tau_task_norm = 0.0;
+  double tau_nullspace_norm = 0.0;
+  double tau_cmd_norm = 0.0;
+
+  // Peaks accumulated between compact samples so brief pushes are not lost.
+  double peak_nullspace_speed = 0.0;
+  double peak_abs_speed_toward_better = 0.0;
+  double min_speed_toward_better = 0.0;
+  double max_speed_toward_better = 0.0;
+  double peak_position_error = 0.0;
+  double peak_rotation_error = 0.0;
+  double peak_external_force_delta = 0.0;
+  double peak_external_moment_delta = 0.0;
+  double peak_external_joint_torque_delta = 0.0;
+};
+
 struct LogData {
   double time;
   int phase;
+  int nullspace_mode;
 
   Vec3 p_EE;
   Vec3 p_d;
@@ -251,6 +338,8 @@ struct LogData {
   Vec3 contact_moment_bias;
   double push;
 
+  SigmaDiagnostics sigma;
+  double tau_nullspace_norm;
   Vec7 tau_cmd;
 };
 
@@ -396,6 +485,7 @@ void startKeyboardStopThread(
     std::atomic<bool>& proceed_requested,
     std::atomic<bool>& guide_requested,
     std::atomic<char>& guidance_menu_key,
+    std::atomic<bool>& guided_hold_selector_pending,
     std::atomic<bool>& gate_continue);
 
 void configureCollisionBehavior(Robot& robot, const Parameters& params);
@@ -406,7 +496,7 @@ Vec7 computeNullspaceTorque(
     const RobotState& state,
     const Mat6x7& J,
     const Vec7& dq,
-    const Vec7& q_start);
+    SigmaDiagnostics& sigma);
 
 bool openGripper(const Parameters& params, Gripper& gripper);
 
@@ -420,7 +510,8 @@ bool runManualGuidanceStart(Parameters& params,
                             Robot& robot,
                             const Model& model,
                             std::atomic<bool>& stop_requested,
-                            std::atomic<char>& guidance_menu_key);
+                            std::atomic<char>& guidance_menu_key,
+                            std::atomic<bool>& guided_hold_selector_pending);
 
 const char* phaseName(ControlPhase phase);
 
@@ -473,6 +564,11 @@ void printHoldDebug(double phase_time,
                     double pos_error_mm,
                     double rot_error_deg);
 
+void printSigmaDebug(double phase_time,
+                     const SigmaDiagnostics& sigma,
+                     double sigma_rate,
+                     bool sigma_rate_valid);
+
 void printFinalSummary(const Vec3& final_p_d,
                        const Vec3& final_p_EE,
                        const Vec3& final_e_p,
@@ -481,6 +577,10 @@ void printFinalSummary(const Vec3& final_p_d,
 
 void writeLogToCsv(
     const std::vector<LogData>& log_data,
+    const std::string& csv_file_name);
+
+bool writeSigmaDebugToCsv(
+    const std::vector<SigmaDebugRow>& debug_data,
     const std::string& csv_file_name);
 
 void reportSetUpResult(const Parameters& params,

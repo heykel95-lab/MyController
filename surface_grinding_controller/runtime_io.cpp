@@ -13,6 +13,41 @@ void writeVec3(std::ofstream& out, const Vec3& v) {
   out << v(0) << "," << v(1) << "," << v(2) << ",";
 }
 
+void writeVec7(std::ofstream& out, const Vec7& v) {
+  for (int i = 0; i < 7; ++i) {
+    out << v(i) << ",";
+  }
+}
+
+void writeVec3Scaled(std::ofstream& out, const Vec3& v, double scale) {
+  out << scale * v(0) << "," << scale * v(1) << ","
+      << scale * v(2) << ",";
+}
+
+void writeVec7Scaled(std::ofstream& out, const Vec7& v, double scale) {
+  for (int i = 0; i < 7; ++i) {
+    out << scale * v(i) << ",";
+  }
+}
+
+const char* sigmaDebugEventName(SigmaDebugEvent event) {
+  switch (event) {
+    case SigmaDebugEvent::kSample:
+      return "sample";
+    case SigmaDebugEvent::kHoldStart:
+      return "hold_start";
+    case SigmaDebugEvent::kManualGuideStart:
+      return "manual_guide_start";
+    case SigmaDebugEvent::kRecapture:
+      return "recapture";
+    case SigmaDebugEvent::kStop:
+      return "stop";
+    case SigmaDebugEvent::kException:
+      return "exception";
+  }
+  return "unknown";
+}
+
 }  // namespace
 
 void writeLogToCsv(
@@ -42,10 +77,26 @@ void writeLogToCsv(
            << "force_after_contact_x,force_after_contact_y,force_after_contact_z,"
            << "moment_after_contact_x,moment_after_contact_y,moment_after_contact_z,"
            << "push,"
+           << "nullspace_mode,"
+           << "sigma_samples_valid,sigma_push_active,"
+           << "sigma_current,sigma_plus,sigma_minus,sigma_difference,"
+           << "sigma_direction,sigma_alpha,sigma_k_sigma,sigma_deadband,"
+           << "tau_sigma_norm,nullspace_speed,sigma_speed_toward_better,"
+           << "sigma_direction_valid,"
+           << "sigma_n_best_1,sigma_n_best_2,sigma_n_best_3,sigma_n_best_4,"
+           << "sigma_n_best_5,sigma_n_best_6,sigma_n_best_7,"
+           << "nullspace_dq_1,nullspace_dq_2,nullspace_dq_3,nullspace_dq_4,"
+           << "nullspace_dq_5,nullspace_dq_6,nullspace_dq_7,"
+           << "tau_sigma_1,tau_sigma_2,tau_sigma_3,tau_sigma_4,"
+           << "tau_sigma_5,tau_sigma_6,tau_sigma_7,"
+           << "sigma_dominant_joint,sigma_dominant_fraction,"
+           << "nullspace_velocity_dominant_joint,"
+           << "nullspace_velocity_dominant_fraction,sigma_Jn_norm,"
+           << "tau_nullspace_norm,"
            << "tau_cmd_1,tau_cmd_2,tau_cmd_3,tau_cmd_4,tau_cmd_5,tau_cmd_6,tau_cmd_7"
            << "\n";
 
-  log_file << std::fixed << std::setprecision(6);
+  log_file << std::fixed << std::setprecision(9);
   for (const auto& row : log_data) {
     log_file << row.time << "," << row.phase << ",";
     writeVec3(log_file, row.p_EE);
@@ -69,12 +120,232 @@ void writeLogToCsv(
     writeVec3(log_file, Vec3(row.external_force - row.contact_force_bias));
     writeVec3(log_file, Vec3(row.external_moment - row.contact_moment_bias));
     log_file << row.push << ","
+             << row.nullspace_mode << ","
+             << static_cast<int>(row.sigma.samples_valid) << ","
+             << static_cast<int>(row.sigma.push_active) << ","
+             << row.sigma.sigma_current << ","
+             << row.sigma.sigma_plus << ","
+             << row.sigma.sigma_minus << ","
+             << row.sigma.sigma_difference << ","
+             << row.sigma.direction_sign << ","
+             << row.sigma.alpha << ","
+             << row.sigma.k_sigma << ","
+             << row.sigma.deadband << ","
+             << row.sigma.tau_sigma_norm << ","
+             << row.sigma.nullspace_speed << ","
+             << row.sigma.speed_toward_better << ","
+             << static_cast<int>(row.sigma.direction_valid) << ",";
+    writeVec7(log_file, row.sigma.best_direction);
+    writeVec7(log_file, row.sigma.nullspace_velocity);
+    writeVec7(log_file, row.sigma.tau_sigma);
+    log_file << row.sigma.dominant_direction_joint << ","
+             << row.sigma.dominant_direction_fraction << ","
+             << row.sigma.dominant_velocity_joint << ","
+             << row.sigma.dominant_velocity_fraction << ","
+             << row.sigma.jacobian_null_residual << ","
+             << row.tau_nullspace_norm << ","
              << row.tau_cmd(0) << "," << row.tau_cmd(1) << ","
              << row.tau_cmd(2) << "," << row.tau_cmd(3) << ","
              << row.tau_cmd(4) << "," << row.tau_cmd(5) << ","
              << row.tau_cmd(6)
              << "\n";
   }
+}
+
+bool writeSigmaDebugToCsv(
+    const std::vector<SigmaDebugRow>& debug_data,
+    const std::string& csv_file_name) {
+  std::ofstream out(csv_file_name);
+  if (!out) {
+    fprintf(stderr, "Could not open sigma debug CSV: %s\n",
+            csv_file_name.c_str());
+    return false;
+  }
+
+  out << "run_time_s,segment_id,phase_time_s,event,"
+      << "sigma_min,sigma_rate_per_s,sigma_plus,sigma_minus,"
+      << "probe_difference,probe_confidence,gradient_abs_per_rad,"
+      << "direction_valid,push_active,k_sigma_Nm,alpha_rad,"
+      << "tau_sigma_norm_Nm,sigma_power_W,"
+      << "nullspace_speed_rad_s,speed_toward_better_rad_s,"
+      << "peak_nullspace_speed_rad_s,"
+      << "peak_abs_speed_toward_better_rad_s,"
+      << "min_speed_toward_better_rad_s,"
+      << "max_speed_toward_better_rad_s,"
+      << "raw_joint_speed_rad_s,nullspace_speed_fraction,"
+      << "raw_velocity_dominant_joint,raw_velocity_dominant_share_pct,"
+      << "sigma_dominant_joint,sigma_dominant_share_pct,"
+      << "position_error_mm,rotation_error_deg,"
+      << "peak_position_error_mm,peak_rotation_error_deg,"
+      << "cartesian_speed_mm_s,angular_speed_deg_s,"
+      << "command_force_norm_N,command_moment_norm_Nm,"
+      << "tau_task_norm_Nm,tau_nullspace_norm_Nm,tau_cmd_norm_Nm,"
+      << "external_force_delta_norm_N,"
+      << "external_moment_delta_norm_Nm,"
+      << "external_joint_torque_delta_norm_Nm,"
+      << "external_joint_torque_along_nbest_Nm,"
+      << "peak_external_force_delta_norm_N,"
+      << "peak_external_moment_delta_norm_Nm,"
+      << "peak_external_joint_torque_delta_norm_Nm,"
+      << "external_joint_torque_baseline_valid,"
+      << "joint_contact,cartesian_contact,Jn_norm,"
+      << "e_p_x_mm,e_p_y_mm,e_p_z_mm,"
+      << "e_R_x_deg,e_R_y_deg,e_R_z_deg,"
+      << "q1_deg,q2_deg,q3_deg,q4_deg,q5_deg,q6_deg,q7_deg,"
+      << "dq1_rad_s,dq2_rad_s,dq3_rad_s,dq4_rad_s,"
+      << "dq5_rad_s,dq6_rad_s,dq7_rad_s,"
+      << "n_best_1,n_best_2,n_best_3,n_best_4,"
+      << "n_best_5,n_best_6,n_best_7,"
+      << "dqN_1_rad_s,dqN_2_rad_s,dqN_3_rad_s,dqN_4_rad_s,"
+      << "dqN_5_rad_s,dqN_6_rad_s,dqN_7_rad_s,"
+      << "tau_sigma_1_Nm,tau_sigma_2_Nm,tau_sigma_3_Nm,"
+      << "tau_sigma_4_Nm,tau_sigma_5_Nm,tau_sigma_6_Nm,"
+      << "tau_sigma_7_Nm,"
+      << "tau_ext_delta_1_Nm,tau_ext_delta_2_Nm,"
+      << "tau_ext_delta_3_Nm,tau_ext_delta_4_Nm,"
+      << "tau_ext_delta_5_Nm,tau_ext_delta_6_Nm,"
+      << "tau_ext_delta_7_Nm\n";
+
+  out << std::fixed << std::setprecision(9);
+  constexpr double kRadToDeg = 180.0 / M_PI;
+
+  int previous_sample_segment = -1;
+  double previous_sample_time = 0.0;
+  double previous_sigma = 0.0;
+  bool previous_sample_valid = false;
+
+  for (const auto& row : debug_data) {
+    const bool is_sample = row.event == SigmaDebugEvent::kSample;
+    const bool rate_valid =
+        is_sample && previous_sample_valid &&
+        row.segment_id == previous_sample_segment &&
+        row.phase_time > previous_sample_time;
+    const double sigma_rate =
+        rate_valid
+            ? (row.sigma.sigma_current - previous_sigma) /
+                  (row.phase_time - previous_sample_time)
+            : 0.0;
+
+    const double probe_difference = std::abs(row.sigma.sigma_difference);
+    const double probe_confidence =
+        row.sigma.deadband > 0.0
+            ? probe_difference / row.sigma.deadband
+            : 0.0;
+    const double gradient_abs =
+        row.sigma.alpha > 0.0
+            ? probe_difference / (2.0 * row.sigma.alpha)
+            : 0.0;
+    const double raw_joint_speed = row.dq.norm();
+    const double nullspace_fraction =
+        raw_joint_speed > 1e-12
+            ? row.sigma.nullspace_speed / raw_joint_speed
+            : 0.0;
+
+    int raw_dominant_joint = 0;
+    double raw_dominant_share = 0.0;
+    if (raw_joint_speed > 1e-12) {
+      Eigen::Index raw_dominant_index = 0;
+      row.dq.cwiseAbs().maxCoeff(&raw_dominant_index);
+      raw_dominant_joint = static_cast<int>(raw_dominant_index) + 1;
+      const double component = row.dq(raw_dominant_index);
+      raw_dominant_share =
+          100.0 * component * component / row.dq.squaredNorm();
+    }
+
+    const double external_torque_along_nbest =
+        row.sigma.direction_valid
+            ? row.sigma.best_direction.dot(
+                  row.external_joint_torque_delta)
+            : 0.0;
+
+    out << row.run_time << ","
+        << row.segment_id << ","
+        << row.phase_time << ","
+        << sigmaDebugEventName(row.event) << ","
+        << row.sigma.sigma_current << ",";
+    if (rate_valid) {
+      out << sigma_rate;
+    }
+    out << ","
+        << row.sigma.sigma_plus << ","
+        << row.sigma.sigma_minus << ","
+        << probe_difference << ","
+        << probe_confidence << ","
+        << gradient_abs << ","
+        << static_cast<int>(row.sigma.direction_valid) << ","
+        << static_cast<int>(row.sigma.push_active) << ","
+        << row.sigma.k_sigma << ","
+        << row.sigma.alpha << ","
+        << row.sigma.tau_sigma_norm << ","
+        << row.sigma.tau_sigma.dot(row.dq) << ","
+        << row.sigma.nullspace_speed << ","
+        << row.sigma.speed_toward_better << ","
+        << row.peak_nullspace_speed << ","
+        << row.peak_abs_speed_toward_better << ","
+        << row.min_speed_toward_better << ","
+        << row.max_speed_toward_better << ","
+        << raw_joint_speed << ","
+        << nullspace_fraction << ","
+        << raw_dominant_joint << ","
+        << raw_dominant_share << ","
+        << row.sigma.dominant_direction_joint << ","
+        << 100.0 * row.sigma.dominant_direction_fraction << ","
+        << 1000.0 * row.e_p.norm() << ","
+        << kRadToDeg * row.e_R.norm() << ","
+        << 1000.0 * row.peak_position_error << ","
+        << kRadToDeg * row.peak_rotation_error << ","
+        << 1000.0 * row.pdot.norm() << ","
+        << kRadToDeg * row.omega.norm() << ","
+        << row.command_force.norm() << ","
+        << row.command_moment.norm() << ","
+        << row.tau_task_norm << ","
+        << row.tau_nullspace_norm << ","
+        << row.tau_cmd_norm << ","
+        << row.external_force_delta.norm() << ","
+        << row.external_moment_delta.norm() << ","
+        << row.external_joint_torque_delta.norm() << ","
+        << external_torque_along_nbest << ","
+        << row.peak_external_force_delta << ","
+        << row.peak_external_moment_delta << ","
+        << row.peak_external_joint_torque_delta << ","
+        << static_cast<int>(
+               row.external_joint_torque_baseline_valid) << ","
+        << static_cast<int>(row.joint_contact) << ","
+        << static_cast<int>(row.cartesian_contact) << ","
+        << row.sigma.jacobian_null_residual << ",";
+    writeVec3Scaled(out, row.e_p, 1000.0);
+    writeVec3Scaled(out, row.e_R, kRadToDeg);
+    writeVec7Scaled(out, row.q, kRadToDeg);
+    writeVec7(out, row.dq);
+    writeVec7(out, row.sigma.best_direction);
+    writeVec7(out, row.sigma.nullspace_velocity);
+    writeVec7(out, row.sigma.tau_sigma);
+    for (int i = 0; i < 7; ++i) {
+      out << row.external_joint_torque_delta(i);
+      if (i < 6) {
+        out << ",";
+      }
+    }
+    out << "\n";
+
+    if (is_sample) {
+      previous_sample_segment = row.segment_id;
+      previous_sample_time = row.phase_time;
+      previous_sigma = row.sigma.sigma_current;
+      previous_sample_valid = true;
+    } else if (row.event == SigmaDebugEvent::kRecapture ||
+               row.event == SigmaDebugEvent::kHoldStart) {
+      previous_sample_valid = false;
+    }
+  }
+
+  out.flush();
+  if (!out) {
+    fprintf(stderr, "Could not finish writing sigma debug CSV: %s\n",
+            csv_file_name.c_str());
+    return false;
+  }
+  return true;
 }
 
 // ====================================================================
@@ -103,12 +374,12 @@ const char* nullspaceModeName(NullspaceMode mode) {
   switch (mode) {
     case NullspaceMode::kOff:
       return "off";
-    case NullspaceMode::kPostureOnly:
-      return "tau_nullspace_only";
+    case NullspaceMode::kDampingOnly:
+      return "nullspace_damping_only";
     case NullspaceMode::kSigmaOnly:
-      return "tau_sigma_only";
-    case NullspaceMode::kPostureAndSigma:
-      return "tau_nullspace_plus_tau_sigma";
+      return "sigma_optimization_only";
+    case NullspaceMode::kDampingAndSigma:
+      return "nullspace_damping_plus_sigma";
   }
   return "unknown";
 }
@@ -186,6 +457,19 @@ void printParameters(const Parameters& params) {
          params.use_phase_sequence ? "phase sequence" : "hold",
          params.use_approach_orient ? "on" : "off",
          nullspaceModeName(params.nullspace_mode));
+  const bool nullspace_damping_active =
+      params.nullspace_mode == NullspaceMode::kDampingOnly ||
+      params.nullspace_mode == NullspaceMode::kDampingAndSigma;
+  const bool nullspace_sigma_active =
+      params.nullspace_mode == NullspaceMode::kSigmaOnly ||
+      params.nullspace_mode == NullspaceMode::kDampingAndSigma;
+  printf("nullspace parameters: d_null=%.3f%s | k_sigma=%.3f Nm%s | "
+         "alpha=%.4f rad\n",
+         params.nullspace_damping,
+         nullspace_damping_active ? "" : " (inactive)",
+         params.nullspace_k_sigma,
+         nullspace_sigma_active ? "" : " (inactive)",
+         params.nullspace_alpha);
   printf("hold: Kp=%.1f N/m | KR=%.1f Nm/rad | damping=%s",
          params.hold_Kp, params.hold_KR,
          params.hold_auto_damping ? "auto translation+rotation" : "manual");
@@ -310,6 +594,98 @@ void printHoldDebug(double phase_time,
          phase_time, force_n, pos_error_mm, rot_error_deg);
 }
 
+void printSigmaDebug(double phase_time,
+                     const SigmaDiagnostics& sigma,
+                     double sigma_rate,
+                     bool sigma_rate_valid) {
+  if (!sigma.samples_valid) {
+    printf("sigma:      t=%5.1f s | samples unavailable | sigma_min=%.6f | "
+           "alpha=%.4f rad\n",
+           phase_time, sigma.sigma_current, sigma.alpha);
+  } else {
+    const double probe_difference = std::abs(sigma.sigma_difference);
+    const double gradient =
+        sigma.alpha > 0.0 ? probe_difference / (2.0 * sigma.alpha) : 0.0;
+    char rate_text[32];
+    char confidence_text[32];
+    if (sigma_rate_valid) {
+      snprintf(rate_text, sizeof(rate_text), "%+.2e/s", sigma_rate);
+    } else {
+      snprintf(rate_text, sizeof(rate_text), "n/a");
+    }
+    if (sigma.deadband > 0.0) {
+      snprintf(confidence_text, sizeof(confidence_text), "%.1fx",
+               probe_difference / sigma.deadband);
+    } else {
+      snprintf(confidence_text, sizeof(confidence_text), "n/a");
+    }
+
+    const char* torque_state =
+        !sigma.direction_valid ? "deadband"
+                               : sigma.push_active ? "push" : "zero-torque";
+    printf("sigma:      t=%5.1f s | a=%.3f k=%.3f | min=%.6f d/dt=%s | "
+           "probe=%.2e C=%s |grad|=%.2e/rad | %s tau=%.4f Nm | "
+           "vN=%.4f vBest=%+.4f rad/s\n",
+           phase_time,
+           sigma.alpha,
+           sigma.k_sigma,
+           sigma.sigma_current,
+           rate_text,
+           probe_difference,
+           confidence_text,
+           gradient,
+           torque_state,
+           sigma.tau_sigma_norm,
+           sigma.nullspace_speed,
+           sigma.speed_toward_better);
+  }
+
+  if (sigma.direction_valid) {
+    printf("sigma-joint: nBest=[%+.3f %+.3f %+.3f %+.3f %+.3f %+.3f %+.3f] | "
+           "dominant=q%d (share %.1f%%) | ||J*nBest||=%.2e\n",
+           sigma.best_direction(0),
+           sigma.best_direction(1),
+           sigma.best_direction(2),
+           sigma.best_direction(3),
+           sigma.best_direction(4),
+           sigma.best_direction(5),
+           sigma.best_direction(6),
+           sigma.dominant_direction_joint,
+           100.0 * sigma.dominant_direction_fraction,
+           sigma.jacobian_null_residual);
+  } else if (sigma.samples_valid) {
+    printf("sigma-joint: nBest not selected (probe is inside the deadband)\n");
+  } else {
+    printf("sigma-joint: nBest unavailable (sigma probe is invalid)\n");
+  }
+
+  printf("sigma-joint: dqN  =[%+.4f %+.4f %+.4f %+.4f %+.4f %+.4f %+.4f] rad/s",
+         sigma.nullspace_velocity(0),
+         sigma.nullspace_velocity(1),
+         sigma.nullspace_velocity(2),
+         sigma.nullspace_velocity(3),
+         sigma.nullspace_velocity(4),
+         sigma.nullspace_velocity(5),
+         sigma.nullspace_velocity(6));
+  if (sigma.dominant_velocity_joint > 0) {
+    printf(" | moving=q%d (share %.1f%%)",
+           sigma.dominant_velocity_joint,
+           100.0 * sigma.dominant_velocity_fraction);
+  } else {
+    printf(" | moving=none");
+  }
+  printf("\n");
+
+  printf("sigma-joint: tauS =[%+.4f %+.4f %+.4f %+.4f %+.4f %+.4f %+.4f] Nm\n",
+         sigma.tau_sigma(0),
+         sigma.tau_sigma(1),
+         sigma.tau_sigma(2),
+         sigma.tau_sigma(3),
+         sigma.tau_sigma(4),
+         sigma.tau_sigma(5),
+         sigma.tau_sigma(6));
+}
+
 void printFinalSummary(const Vec3& final_p_d,
                        const Vec3& final_p_EE,
                        const Vec3& final_e_p,
@@ -359,31 +735,57 @@ bool matches(const std::string& choice, std::initializer_list<const char*> words
   return false;
 }
 
-NullspaceMode askHoldNullspaceMode(NullspaceMode configured) {
-  // The combined mode is meant for the sequence run; hold defaults to the
-  // posture spring unless the file already asked for something simpler.
-  const NullspaceMode fallback =
-      (configured == NullspaceMode::kPostureAndSigma) ? NullspaceMode::kPostureOnly
-                                                      : configured;
+NullspaceMode askHoldNullspaceMode(NullspaceMode configured,
+                                   bool* stop_selected = nullptr) {
+  if (stop_selected != nullptr) {
+    *stop_selected = false;
+  }
+  const NullspaceMode fallback = configured;
   printf("\nSelect hold nullspace mode:\n");
   printf("  0 = no nullspace torque\n");
-  printf("  1 = tau_nullspace only (posture spring + damping)\n");
-  printf("  2 = tau_sigma only (singular-value direction)\n");
-  printf("Choice [0/1/2, Enter = %s]: ",
+  printf("  1 = nullspace damping only (no return to q_start)\n");
+  printf("  2 = sigma optimization only (push toward larger sigma_min)\n");
+  printf("  3 = sigma optimization + nullspace damping (damped comeback)\n");
+  if (stop_selected != nullptr) {
+    printf("  e = stop\n");
+  }
+  printf("Choice [0/1/2/3, Enter = %s]: ",
          fallback == NullspaceMode::kOff ? "0"
-             : fallback == NullspaceMode::kSigmaOnly ? "2" : "1");
+             : fallback == NullspaceMode::kSigmaOnly ? "2"
+             : fallback == NullspaceMode::kDampingAndSigma ? "3" : "1");
 
   const std::string choice = readChoice();
   if (matches(choice, {"0", "off", "none"})) {
     return NullspaceMode::kOff;
   }
-  if (matches(choice, {"1", "tau_nullspace", "nullspace", "posture"})) {
-    return NullspaceMode::kPostureOnly;
+  if (matches(choice, {"1", "tau_nullspace", "nullspace", "damping",
+                       "posture"})) {
+    return NullspaceMode::kDampingOnly;
   }
   if (matches(choice, {"2", "tau_sigma", "sigma"})) {
     return NullspaceMode::kSigmaOnly;
   }
+  if (matches(choice, {"3", "both", "combined", "sigma+damping",
+                       "damping+sigma"})) {
+    return NullspaceMode::kDampingAndSigma;
+  }
+  if (stop_selected != nullptr && matches(choice, {"e", "stop", "exit"})) {
+    *stop_selected = true;
+  }
   return fallback;
+}
+
+bool selectHoldNullspaceMode(Parameters& params,
+                             bool* stop_selected = nullptr) {
+  const NullspaceMode selected =
+      askHoldNullspaceMode(params.nullspace_mode, stop_selected);
+  if (stop_selected != nullptr && *stop_selected) {
+    return false;
+  }
+  params.nullspace_mode = selected;
+  params.use_nullspace_optimization =
+      params.nullspace_mode != NullspaceMode::kOff;
+  return true;
 }
 
 }  // namespace
@@ -436,8 +838,8 @@ void askStartupRunMode(Parameters& params, Robot& robot) {
   while (true) {
     printf("\n=== Startup choice ===\n");
     printf("  q = go to q_init (from params/common.txt), then choose again\n");
-    printf("  g = guiding mode: go to q_init, then hand-guide to your pose,\n");
-    printf("      p+Enter to lock it as the start (e+Enter prints it as q_init)\n");
+    printf("  g = guiding mode: go to q_init, then hand-guide to your pose;\n");
+    printf("      use s+Enter for sequence or h+Enter for hold\n");
     printf("  o = open the Franka hand now (release/load tool), then choose again\n");
     printf("  c = close/grasp the tool now, then choose again\n");
     printf("  r = continue to run mode%s\n",
@@ -522,8 +924,7 @@ void askStartupRunMode(Parameters& params, Robot& robot) {
     return;
   }
 
-  params.nullspace_mode = askHoldNullspaceMode(params.nullspace_mode);
-  params.use_nullspace_optimization = (params.nullspace_mode != NullspaceMode::kOff);
+  (void)selectHoldNullspaceMode(params);
   printf("Selected: hold mode with %s.\n", nullspaceModeName(params.nullspace_mode));
 }
 
@@ -570,9 +971,30 @@ bool runManualGuidanceStart(Parameters& params,
                             Robot& robot,
                             const Model& model,
                             std::atomic<bool>& stop_requested,
-                            std::atomic<char>& guidance_menu_key) {
+                            std::atomic<char>& guidance_menu_key,
+                            std::atomic<bool>& guided_hold_selector_pending) {
+  struct PendingFlagReset {
+    std::atomic<bool>& flag;
+    ~PendingFlagReset() {
+      flag.store(false);
+    }
+  };
+
+  // This is also initialized before the keyboard thread starts in main, which
+  // closes the small interval before this function begins executing.
+  guided_hold_selector_pending.store(true);
+  PendingFlagReset pending_flag_reset{guided_hold_selector_pending};
+
   Gripper gripper(params.robot_ip);
   Vec7 stop_q = Vec7::Zero();
+  const auto print_stop_pose = [&stop_q]() {
+    printf("\n=== Manual guidance stop pose ===\n");
+    printf("q1..q7 [rad] (paste into a q_init_* case):\n");
+    for (int i = 0; i < 7; ++i) {
+      printf("  q_init_%d = %.6f\n", i + 1, stop_q(i));
+    }
+    printVec7Deg("q1..q7 [deg]", stop_q);
+  };
 
   while (true) {
     printf("\nphase: manual_guidance_start\n");
@@ -582,7 +1004,6 @@ bool runManualGuidanceStart(Parameters& params,
     printf("  s+Enter = start phase sequence from this pose\n");
     printf("  h+Enter = start hold from this pose\n");
     printf("  e+Enter = stop (prints this pose as a q_init_* case)\n");
-    guidance_menu_key.store(0);
 
     // Gravity compensation with a little joint damping, so the arm can be moved
     // by hand. Ends as soon as the keyboard thread reports a menu key.
@@ -603,12 +1024,7 @@ bool runManualGuidanceStart(Parameters& params,
     });
 
     if (stop_requested.load()) {
-      printf("\n=== Manual guidance stop pose ===\n");
-      printf("q1..q7 [rad] (paste into a q_init_* case):\n");
-      for (int i = 0; i < 7; ++i) {
-        printf("  q_init_%d = %.6f\n", i + 1, stop_q(i));
-      }
-      printVec7Deg("q1..q7 [deg]", stop_q);
+      print_stop_pose();
       return false;
     }
 
@@ -623,7 +1039,16 @@ bool runManualGuidanceStart(Parameters& params,
       return true;
     } else if (key == 'h') {
       params.use_phase_sequence = false;
-      printf("Selected: hold at the guided pose.\n");
+      bool stop_selected = false;
+      if (!selectHoldNullspaceMode(params, &stop_selected)) {
+        stop_requested.store(true);
+        const RobotState stop_state = robot.readOnce();
+        stop_q = Map<const Vec7>(stop_state.q.data());
+        print_stop_pose();
+        return false;
+      }
+      printf("Selected: hold at the guided pose with %s.\n",
+             nullspaceModeName(params.nullspace_mode));
       return true;
     }
   }

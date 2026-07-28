@@ -16,11 +16,22 @@ csv_file_name = surface_grinding_controller_log.csv
 log_every_n_cycles = 1
 max_log_rows = 120000
 
+# Compact sigma-enabled hold diagnostics. This separate 20 Hz file contains
+# guide/recapture events, raw q/dq, task contamination, external-load evidence,
+# and the sigma direction/response needed to distinguish hand motion from
+# autonomous comeback. It is buffered during control and written after stop.
+sigma_debug_csv_file_name = surface_grinding_controller_sigma_debug.csv
+sigma_debug_log_period = 0.05
+max_sigma_debug_rows = 20000
+
 # Terminal debug print period, shared by all phases [s]. 0 = no debug lines.
 debug_period = 0.20
 
 # 1 = print the per-cycle "hold:" debug line while holding at the start pose.
 print_hold_debug = 0
+
+# 1 = print the rate-limited sigma tuning line in hold mode 2 or 3.
+print_sigma_debug = 1
 
 # --------------------------------------------------------------------
 # Auto-damping
@@ -42,7 +53,7 @@ approach_auto_damping_factor = 1.9
 
 # Phases 2 and 3: set up + grind.
 setup_auto_damping = 1
-setup_auto_damping_factor = 0.8
+setup_auto_damping_factor = 1.0
 
 auto_damping_max = 8000.0
 
@@ -187,12 +198,19 @@ q_init_table_7 = 0.745537
 # --------------------------------------------------------------------
 # nullspace_mode:
 #   0/off     = no nullspace torque
-#   1/posture = posture spring + damping
-#   2/sigma   = singular-value direction
-#   3/both    = combined
+#   1/damping = damp only the nullspace velocity; no return-to-start spring
+#   2/sigma   = sigma_min improvement push only
+#   3/both    = nullspace damping + sigma_min improvement push
 use_nullspace_optimization = 1
 nullspace_mode = 3
 nullspace_damping = 2.0
-nullspace_k_start = 2.0
-nullspace_k_sigma = 0.1
-nullspace_alpha = 0.01
+# Direct sigma push torque magnitude [Nm]. Sigma-only mode is undamped, so
+# increase cautiously and use the sigma debug values below to compare trials.
+nullspace_k_sigma = 1.0
+# Finite-difference probe distance [rad] used only to compare q+alpha*n with
+# q-alpha*n. It does not multiply the commanded torque.
+nullspace_alpha = 0.08
+# Ignore sigma_plus - sigma_minus differences below this numerical deadband.
+nullspace_sigma_deadband = 0.000001
+# Relative singular-value cutoff for the SVD Moore-Penrose inverse.
+nullspace_svd_relative_tolerance = 0.0001
