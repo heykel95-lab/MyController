@@ -51,6 +51,18 @@ fi
 BACKUP="$(mktemp -d)"
 cp -a "$PARAMS/." "$BACKUP/"
 
+# Sampled here, BEFORE the overlay is applied. The overlay deliberately edits
+# tracked files in params/, so sampling after it would report every run with a
+# non-empty overlay as dirty -- i.e. nearly the whole campaign. The overlay is
+# already recorded verbatim in overlay.txt and params_effective/; what this
+# field is for is whether anything ELSE was uncommitted when the run happened.
+# Tracked changes only: untracked files are results/ piling up during a batch.
+if [ -n "$(cd "$REPO" && git status --porcelain --untracked-files=no)" ]; then
+  GIT_DIRTY=yes
+else
+  GIT_DIRTY=no
+fi
+
 restore_params() {
   cp -a "$BACKUP/." "$PARAMS/"
   rm -rf "$BACKUP"
@@ -74,11 +86,7 @@ mkdir -p "$OUT"
   echo "repeat:        $REPEAT"
   echo "timestamp:     $(date -Is)"
   echo "git_commit:    $(cd "$REPO" && git rev-parse HEAD)"
-  # Tracked modifications only. Untracked files are almost always results/
-  # from earlier runs in the same batch; counting them would mark every run
-  # after the first as dirty and drop the whole campaign from the figures.
-  # What matters for provenance is whether the *code* was committed.
-  echo "git_dirty:     $(cd "$REPO" && [ -n "$(git status --porcelain --untracked-files=no)" ] && echo yes || echo no)"
+  echo "git_dirty:     $GIT_DIRTY"
   echo "host:          $(hostname)"
 } > "$OUT/meta.txt"
 cp -a "$PARAMS" "$OUT/params_effective"
