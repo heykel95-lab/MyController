@@ -1,0 +1,7 @@
+run_id:        G1_decoupled_baseline
+repeat:        1
+timestamp:     2026-07-28T19:54:57+02:00
+git_commit:    21dbbd25b89281ea7052a39816cff6f6c027d9ff
+git_dirty:     no
+host:          Computer19
+controller_exit: 0

@@ -1,0 +1,7 @@
+run_id:        G2_equilibrium_t4
+repeat:        1
+timestamp:     2026-07-28T19:40:01+02:00
+git_commit:    16858630d26dd6f487715b13df92276a402b352c
+git_dirty:     no
+host:          Computer19
+controller_exit: 0

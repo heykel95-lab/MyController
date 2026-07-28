@@ -1,0 +1,5 @@
+# G1_coupled_block_diagonal
+# Applied on top of surface_grinding_controller/params/.
+# Only keys listed here differ from the nominal set.
+use_coupled_stiffness = 1
+coupled_use_block_diagonal = 1

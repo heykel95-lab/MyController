@@ -1,0 +1,7 @@
+run_id:        G3_repeatability
+repeat:        2
+timestamp:     2026-07-28T20:20:17+02:00
+git_commit:    46267a9ab4bab0be625c96321ee1bd709c78db0a
+git_dirty:     no
+host:          Computer19
+controller_exit: 0
