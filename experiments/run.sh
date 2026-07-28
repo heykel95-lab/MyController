@@ -74,7 +74,11 @@ mkdir -p "$OUT"
   echo "repeat:        $REPEAT"
   echo "timestamp:     $(date -Is)"
   echo "git_commit:    $(cd "$REPO" && git rev-parse HEAD)"
-  echo "git_dirty:     $(cd "$REPO" && [ -n "$(git status --porcelain)" ] && echo yes || echo no)"
+  # Tracked modifications only. Untracked files are almost always results/
+  # from earlier runs in the same batch; counting them would mark every run
+  # after the first as dirty and drop the whole campaign from the figures.
+  # What matters for provenance is whether the *code* was committed.
+  echo "git_dirty:     $(cd "$REPO" && [ -n "$(git status --porcelain --untracked-files=no)" ] && echo yes || echo no)"
   echo "host:          $(hostname)"
 } > "$OUT/meta.txt"
 cp -a "$PARAMS" "$OUT/params_effective"
