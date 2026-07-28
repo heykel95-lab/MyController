@@ -27,7 +27,7 @@ approach_orient_error_threshold = 0.035
 approach_Kp_normal = 150.0
 approach_Kp_tangent1 = 150.0
 approach_Kp_tangent2 = 150.0
-approach_KR_normal = 8.0
+approach_KR_normal = 90.0
 approach_KR_tangent1 = 90.0
 approach_KR_tangent2 = 90.0
 # Manual damping fallback [Ns/m | Nms/rad].
@@ -120,7 +120,7 @@ use_coupled_stiffness = 1
 # K/D source: block diagonal, manual pole, or saved matrices below.
 coupled_use_block_diagonal = 0
 coupled_pole_manual = 1
-coupled_pole_from_edge_x = -0.08
+coupled_pole_from_edge_x = -0.04
 coupled_pole_from_edge_y = 0.08
 coupled_pole_from_edge_z = 0.0
 
