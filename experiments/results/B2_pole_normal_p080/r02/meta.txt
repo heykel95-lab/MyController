@@ -1,0 +1,7 @@
+run_id:        B2_pole_normal_p080
+repeat:        2
+timestamp:     2026-07-28T20:39:10+02:00
+git_commit:    8a5c52c83322053e34aaaa4ed829c72588662b30
+git_dirty:     no
+host:          Computer19
+controller_exit: 0

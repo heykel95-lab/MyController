@@ -1,4 +1,4 @@
-65 setups, 213 total runs
+64 setups, 211 total runs
 
 G1_coupled_block_diagonal          x3  Coupled 6x6 path with block-diagonal gains must reproduce the decoupled wrench exactly.
 G1_decoupled_baseline              x5  Decoupled wrench, no coupling.
@@ -43,7 +43,6 @@ B3_pole_tangent_m040               x3  Pole swept along surface tangent t1, -0.0
 B3_pole_tangent_p000               x3  Pole swept along surface tangent t1, +0.00 m, at fixed normal offset +0.08 m.
 B3_pole_tangent_p040               x3  Pole swept along surface tangent t1, +0.04 m, at fixed normal offset +0.08 m.
 B5_pole_live_tracking              x3  Pole recomputed from the moving edge each cycle instead of frozen at first contact.
-B6_pole_on_measured_axis           x2  Pole commanded AT the measured Chasles axis from the best B2 run.
 C1_hold_drift_mode0                x2  Hold, null-space off, 60 s, arm untouched.
 C2_hold_mode0_off                  x5  Hold, push-and-release protocol, nullspace_mode = 0 (off).
 C2_hold_mode1_damping              x5  Hold, push-and-release protocol, nullspace_mode = 1 (damping).

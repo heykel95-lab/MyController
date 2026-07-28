@@ -1,8 +1,0 @@
-run_id:   B6_pole_on_measured_axis
-repeats:  2
-
-purpose:
-  Pole commanded AT the measured Chasles axis from the best B2 run. EDIT overlay.txt with the measured axis before running.
-
-pass criterion:
-  Expect near-total suppression (~0.6 deg, force up). Demonstrates that putting the compliance on the natural pivot removes the effort that would rotate the tool.

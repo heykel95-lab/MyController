@@ -10,12 +10,6 @@ result a plot is meant to support.
 Flagged runs are drawn hollow and excluded from the mean/error bars: a run that
 did not converge must not silently enter a thesis figure.
 
-Flags are scoped, though. AXIS_ONLY_FLAGS invalidate the screw-axis columns and
-nothing else, so they must not drop a run from a tip, force or alignment mean.
-At the ~1.5 deg working tip measured in G3 the axis is never trustworthy, so
-treating that flag as global would leave every B-series point hollow and every
-figure without a single mean or error bar. The axis figure guards on
-axis_trustworthy directly, so it loses nothing by this.
 """
 
 import os
@@ -56,15 +50,6 @@ def fnum(row, key):
         return float(v)
     except ValueError:
         return np.nan
-
-
-AXIS_ONLY_FLAGS = {"axis-untrustworthy"}
-
-
-def excluded(row):
-    """True if this run must stay out of the mean for a non-axis metric."""
-    flags = {f for f in row.get("flags", "").split(";") if f}
-    return bool(flags - AXIS_ONLY_FLAGS)
 
 
 def errorbar_from_buckets(ax, buckets, label, color, marker="o"):
@@ -122,7 +107,7 @@ def fig_a2_stiffness(rows):
             if np.isnan(y):
                 continue
             buckets.setdefault(r["_kr"], {"good": [], "bad": []})
-            buckets[r["_kr"]]["good" if not excluded(r) else "bad"].append(y)
+            buckets[r["_kr"]]["good" if not r["flags"] else "bad"].append(y)
         errorbar_from_buckets(ax, buckets, "measured", "C0")
         ax.set_xlabel(r"$K_{R,\mathrm{tangent}}$ [Nm/rad]")
         ax.set_ylabel(ylabel)
@@ -150,7 +135,7 @@ def fig_b2_pole(rows):
             if np.isnan(x) or np.isnan(y):
                 continue
             buckets.setdefault(x, {"good": [], "bad": []})
-            buckets[x]["good" if not excluded(r) else "bad"].append(y)
+            buckets[x]["good" if not r["flags"] else "bad"].append(y)
         errorbar_from_buckets(ax, buckets, "measured", "C0")
         ax.axvline(0.0, color="0.4", linestyle="--", linewidth=1)
         ax.set_xlabel("pole offset along surface normal [mm]")
@@ -159,46 +144,6 @@ def fig_b2_pole(rows):
                      textcoords="offset points", fontsize=7, color="0.4")
     fig.suptitle("B2: pole swept along the surface normal", fontsize=10)
     return save(fig, "B2_pole_normal_sweep.pdf")
-
-
-def fig_b7_effort_vs_axis(rows):
-    """The key claim: the pole sets the effort, the contact sets the axis."""
-    sub = [r for r in rows
-           if r["run_id"].startswith(("B2_pole_normal", "B3_pole_tangent"))]
-    if not sub:
-        return None
-
-    fig, ax = plt.subplots(figsize=(5.2, 3.6))
-    xs_ok, ys_ok, xs_bad, ys_bad = [], [], [], []
-    for r in sub:
-        x = fnum(r, "pole_normal_mm")
-        y = fnum(r, "axis_from_edge_mm")
-        if np.isnan(x) or np.isnan(y):
-            continue
-        if str(r.get("axis_trustworthy", "")) == "1" and not excluded(r):
-            xs_ok.append(x)
-            ys_ok.append(y)
-        else:
-            xs_bad.append(x)
-            ys_bad.append(y)
-
-    if not xs_ok and not xs_bad:
-        plt.close(fig)
-        return None
-
-    ax.plot(xs_ok, ys_ok, "o", color="C0", label="trustworthy axis")
-    if xs_bad:
-        ax.plot(xs_bad, ys_bad, "o", mfc="none", mec="0.6",
-                label=f"tip < {2.0:g} deg, axis meaningless")
-    lim = np.array([min(xs_ok + xs_bad + [0]), max(xs_ok + xs_bad + [0])])
-    ax.plot(lim, np.abs(lim), "--", color="0.5", linewidth=1,
-            label="if the axis followed the pole")
-    ax.axhline(0.0, color="0.3", linewidth=1)
-    ax.set_xlabel("commanded pole offset along normal [mm]")
-    ax.set_ylabel("measured screw axis distance from edge [mm]")
-    ax.set_title("B7: pole sets the effort, contact sets the axis", fontsize=10)
-    ax.legend(fontsize=7)
-    return save(fig, "B7_effort_vs_axis.pdf")
 
 
 def fig_c2_nullspace(rows):
@@ -225,7 +170,7 @@ def fig_c2_nullspace(rows):
                 continue
             x = order[mode]
             buckets.setdefault(x, {"good": [], "bad": []})
-            buckets[x]["good" if not excluded(r) else "bad"].append(y)
+            buckets[x]["good" if not r["flags"] else "bad"].append(y)
         errorbar_from_buckets(ax, buckets, "measured", "C0")
         ax.set_xticks(sorted(buckets))
         ax.set_xticklabels([names[int(k)] for k in sorted(buckets)])
@@ -251,7 +196,7 @@ def fig_g2_convergence(rows):
         if np.isnan(x) or np.isnan(y):
             continue
         buckets.setdefault(round(x), {"good": [], "bad": []})
-        buckets[round(x)]["good" if not excluded(r) else "bad"].append(y)
+        buckets[round(x)]["good" if not r["flags"] else "bad"].append(y)
     errorbar_from_buckets(ax, buckets, "final tip", "C0")
     ax.set_xlabel("set-up phase duration [s]")
     ax.set_ylabel("final tip angle [deg]")
@@ -268,7 +213,7 @@ def main():
 
     made = []
     for fn in (fig_g2_convergence, fig_a2_stiffness, fig_b2_pole,
-               fig_b7_effort_vs_axis, fig_c2_nullspace):
+               fig_c2_nullspace):
         try:
             p = fn(rows)
             if p:

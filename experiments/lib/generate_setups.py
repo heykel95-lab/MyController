@@ -259,22 +259,8 @@ add(
     + pole_keys(pole_offset_along(N, 0.08)),
 )
 
-add(
-    "B6_pole_on_measured_axis",
-    "Pole commanded AT the measured Chasles axis from the best B2 run. "
-    "EDIT overlay.txt with the measured axis before running.",
-    "Expect near-total suppression (~0.6 deg, force up). Demonstrates that "
-    "putting the compliance on the natural pivot removes the effort that "
-    "would rotate the tool.",
-    [
-        ("use_coupled_stiffness", "1"),
-        ("coupled_use_block_diagonal", "0"),
-        ("coupled_pole_manual", "1"),
-        ("coupled_pole_freeze_at_contact", "1"),
-    ]
-    + pole_keys([0.0, 0.0, 0.0]),
-    repeats=2,
-)
+# B6_pole_on_measured_axis is deliberately absent: it commanded the pole AT the
+# measured Chasles axis, and the finite-screw-axis line of work was dropped.
 
 # ---- Series C: hold mode, null-space --------------------------------------
 add(

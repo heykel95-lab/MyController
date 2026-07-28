@@ -37,8 +37,6 @@ FIELDS = [
     "edge_travel_mm", "tau_max_Nm", "tau_norm_max_Nm",
     "report_tip_deg", "report_force_N", "report_phase_time_s",
     "report_align_gain_deg",
-    "axis_valid", "axis_trustworthy", "axis_angle_deg",
-    "axis_from_edge_mm", "axis_pitch_mm_per_rad",
     "hold_present", "nullspace_mode",
     "sigma_start", "sigma_end", "sigma_gain",
     "tau_sigma_norm_mean", "nullspace_speed_mean", "speed_toward_better_mean",
@@ -175,9 +173,6 @@ def process_run(run_id, repeat_tag, run_dir):
                 flags.append(f"tip-mismatch(csv={a:.2f},report={b:.2f})")
     except (TypeError, ValueError):
         pass
-
-    if row.get("axis_valid") == 1 and row.get("axis_trustworthy") == 0:
-        flags.append("axis-untrustworthy")
 
     row["flags"] = ";".join(flags)
     return row
