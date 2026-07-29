@@ -1,0 +1,14 @@
+run_id: PILOT_COC_t1_rc_t2_m040
+repeat: r03
+observation_source: operator immediately after trial
+initial_contact: original leading edge
+final_contact: full face
+physical_alignment_result: success
+qualitative_speed: almost the same as r01 and r02, possibly slightly slower
+
+Interpretation:
+The third -40 mm confirmation again reached full-face contact. All three
+repeats therefore produced the same qualitative physical result. The measured
+90% alignment time was 1.534 s, consistent with 1.550 s and 1.520 s in the
+first two repeats. The small subjective speed difference is not resolved by
+the logged timing and should not be claimed as a separate effect.
