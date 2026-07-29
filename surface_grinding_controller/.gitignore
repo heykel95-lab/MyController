@@ -1,5 +1,6 @@
 surface_grinding_controller
 tools/check_tool_offset
 tools/measure_plane
+tools/home_gripper
 *.csv
 *.o
