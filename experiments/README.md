@@ -123,8 +123,10 @@ and reject a run if the marks move. A tool that can rotate by approximately
 uncertainty: motion during contact is invisible to the robot pose and would be
 mistaken for, or hide, alignment. Mechanically constrain that rotation before
 the MAIN campaign and recalibrate T1--T4 after the final regrasp. The runner
-requires the operator to type `rigid` before every calibrated trial; this
-confirmation must not be given while rotational play remains.
+asks for the mount state before every calibrated trial. Type `rigid` only for
+a fixed mount. If work must continue temporarily, type `play2` to record the
+known upper bound; the run is flagged `tool-play`, excluded from primary plot
+means, and retained for exploratory EE-response analysis.
 
 The separately calibrated `tilted` profile is used only for the compact
 frame-transfer validation after the horizontal primary campaign:
@@ -156,6 +158,7 @@ Flags currently emitted:
 |---|---|
 | `not-converged` | Tip still moving >10% of its final value over the last 20% of the phase. The number is a transient, not an equilibrium. |
 | `task-disturbed` | Cartesian position drifted >1 mm during a hold — the null-space projector is not task-invariant. |
+| `tool-play` | The operator declared up to 2° of unobserved tool motion relative to the EE. Exploratory only; excluded from primary physical-alignment means. |
 | `tip-mismatch` | CSV disagrees with the controller's printed report. One of them is wrong; do not use the run. |
 | `dirty-tree` | Recorded with uncommitted changes — provenance is incomplete. |
 

@@ -28,7 +28,8 @@ DERIVED = os.path.join(EXP, "derived")
 
 FIELDS = [
     "run_id", "repeat", "series", "test_case", "plane_profile",
-    "git_commit", "timestamp",
+    "git_commit", "timestamp", "tool_mount_status",
+    "tool_mount_play_bound_deg",
     "has_alignment_metric", "has_alignment_components",
     "setup_present", "setup_duration_s",
     "tip_final_deg", "tip_max_deg", "tip_drift_last20pct_deg",
@@ -159,8 +160,14 @@ def process_run(run_id, repeat_tag, run_dir):
     row["git_commit"] = meta.get("git_commit", "")[:10]
     row["timestamp"] = meta.get("timestamp", "")
     row["plane_profile"] = meta.get("plane_profile", "")
+    row["tool_mount_status"] = meta.get("tool_mount_status", "")
+    row["tool_mount_play_bound_deg"] = meta.get(
+        "tool_mount_play_bound_deg", ""
+    )
     if meta.get("git_dirty") == "yes":
         flags.append("dirty-tree")
+    if row["tool_mount_status"] == "known_play":
+        flags.append("tool-play")
 
     params_dir = os.path.join(run_dir, "params_effective")
     for key, value in study_params(params_dir).items():

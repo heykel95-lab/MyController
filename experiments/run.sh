@@ -43,6 +43,8 @@ TOOL_PROFILE=""
 TOOL_OVERLAY=""
 TOOL_REPORT=""
 USES_TOOL_CALIBRATION=0
+TOOL_MOUNT_STATUS=not_applicable
+TOOL_MOUNT_PLAY_BOUND_DEG=
 
 if [ ! -f "$OVERLAY" ]; then
   echo "ERROR: no setup '$RUN_ID' (missing $OVERLAY)" >&2
@@ -174,16 +176,27 @@ fi
 
 if [ "$USES_TOOL_CALIBRATION" -eq 1 ]; then
     echo ""
-    echo "--- rigid tool-mount check ---"
+    echo "--- tool-mount check ---"
     echo "The alignment metric assumes the physical tool cannot rotate relative"
-    echo "to the EE. With the robot stationary, verify the anti-rotation feature"
-    echo "and witness marks now. A movable tool invalidates this trial."
-    printf "Type  rigid  to confirm, anything else aborts: "
-    read -r TOOL_RIGID_CONFIRM
-    if [ "$TOOL_RIGID_CONFIRM" != "rigid" ]; then
-      echo "Aborted before robot control: rigid tool mounting was not confirmed."
-      exit 2
-    fi
+    echo "to the EE. A known movable mount may be recorded for an exploratory"
+    echo "run, but its alignment result is flagged and excluded from primary means."
+    printf "Type  rigid  for a fixed mount,  play2  for known <=2 deg play: "
+    read -r TOOL_MOUNT_CONFIRM
+    case "$TOOL_MOUNT_CONFIRM" in
+      rigid)
+        TOOL_MOUNT_STATUS=rigid
+        TOOL_MOUNT_PLAY_BOUND_DEG=0.0
+        ;;
+      play2)
+        TOOL_MOUNT_STATUS=known_play
+        TOOL_MOUNT_PLAY_BOUND_DEG=2.0
+        echo "WARNING: recording an exploratory run with <=2 deg unobserved tool play."
+        ;;
+      *)
+        echo "Aborted before robot control: tool-mount state was not confirmed."
+        exit 2
+        ;;
+    esac
 fi
 
 python3 "$HERE/lib/apply_overlay.py" "$OVERLAY" "$PARAMS" || exit 1
@@ -213,6 +226,8 @@ mkdir -p "$OUT"
   fi
   if [ "$USES_TOOL_CALIBRATION" -eq 1 ]; then
     echo "tool_profile:  $TOOL_PROFILE"
+    echo "tool_mount_status: $TOOL_MOUNT_STATUS"
+    echo "tool_mount_play_bound_deg: $TOOL_MOUNT_PLAY_BOUND_DEG"
   fi
 } > "$OUT/meta.txt"
 cp -a "$PARAMS" "$OUT/params_effective"

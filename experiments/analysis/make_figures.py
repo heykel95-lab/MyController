@@ -10,8 +10,9 @@ result a plot is meant to support.
 Flags come in two kinds and are treated differently.
 
 DATA flags (not-converged, no-setup-phase, no-general-log, tip-mismatch,
-task-disturbed) mean the numbers themselves are untrustworthy. Those runs are
-excluded from every mean and drawn hollow.
+task-disturbed, tool-play) mean the numbers themselves are untrustworthy for
+the primary physical-tool claim. Those runs are excluded from every mean and
+drawn hollow.
 
 PROVENANCE flags -- currently just dirty-tree -- mean the repository had an
 uncommitted change when the run was recorded. That says nothing about the

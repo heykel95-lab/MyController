@@ -21,7 +21,9 @@ with the `MAIN_*` results.
   and holder is checked before and after every repeat; any relative rotation
   rejects the run. A possible 2 degree slip is not folded into the alignment
   uncertainty because it can change during contact and is not observable from
-  the robot EE pose.
+  the robot EE pose. Temporary runs declared with the runner's `play2` option
+  are retained as exploratory EE-response data and excluded from primary
+  physical-alignment means.
 - The plane defines its point, normal and surface frame
   \(R_s=[t_1,t_2,n_s]\).
 - The commanded tool orientation is an independent signed offset about
