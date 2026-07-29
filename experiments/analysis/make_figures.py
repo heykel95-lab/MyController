@@ -94,6 +94,10 @@ def errorbar_from_buckets(ax, buckets, label, color, marker="o"):
 def save(fig, name):
     os.makedirs(FIGURES, exist_ok=True)
     path = os.path.join(FIGURES, name)
+    if fig._suptitle is None:
+        fig.tight_layout()
+    else:
+        fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.94))
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
     print(f"  wrote {os.path.relpath(path, EXP)}")
@@ -127,8 +131,7 @@ def fig_a2_stiffness(rows):
         errorbar_from_buckets(ax, buckets, "measured", "C0")
         ax.set_xlabel(r"$K_{R,t_1}=K_{R,t_2}$ [Nm/rad]")
         ax.set_ylabel(ylabel)
-    fig.suptitle("A2: rotational stiffness sweep (replaces thesis Table 5.1)",
-                 fontsize=10)
+    fig.suptitle("Rotational stiffness sweep", fontsize=10)
     return save(fig, "A2_stiffness_sweep.pdf")
 
 
@@ -162,10 +165,10 @@ def fig_d_axis_stiffness(rows):
         t2 = _axis_study_buckets(rows, "D2_KRt2_", "setup_KR_t2", key)
         errorbar_from_buckets(ax, t1, r"$t_1$ excitation", "C0", marker="o")
         errorbar_from_buckets(ax, t2, r"$t_2$ excitation", "C1", marker="s")
-        ax.set_xlabel(r"stiffness about excited axis [Nm/rad]")
+        ax.set_xlabel(r"excited-axis $K_R$ [Nm/rad]")
         ax.set_ylabel(ylabel)
     axes[0].legend(frameon=False)
-    fig.suptitle("D1--D2: axis-specific rotational stiffness", fontsize=10)
+    fig.suptitle("Axis-specific rotational stiffness", fontsize=10)
     return save(fig, "D_axis_stiffness.pdf")
 
 
@@ -279,10 +282,10 @@ def fig_main_rotational_stiffness(rows):
             errorbar_from_buckets(
                 ax, buckets, rf"$t_{axis}$ excitation", color, marker=marker
             )
-        ax.set_xlabel("rotational stiffness about excited axis [Nm/rad]")
+        ax.set_xlabel(r"excited-axis $K_R$ [Nm/rad]")
         ax.set_ylabel(ylabel)
     axes[0].legend(frameon=False)
-    fig.suptitle("Case B: axis-specific rotational stiffness", fontsize=10)
+    fig.suptitle("Case B: rotational stiffness", fontsize=10)
     return save(fig, "MAIN_B_KR.pdf")
 
 
@@ -318,10 +321,10 @@ def fig_main_translational_stiffness(rows):
                 ax, buckets, rf"$t_{axis}$ excitation", color, marker=marker
             )
         ax.set_xscale("log")
-        ax.set_xlabel("cross-direction translational stiffness [N/m]")
+        ax.set_xlabel(r"cross-direction $K_p$ [N/m]")
         ax.set_ylabel(ylabel)
     axes[0].legend(frameon=False)
-    fig.suptitle("Case C: surface-frame translational stiffness", fontsize=10)
+    fig.suptitle("Case C: translational stiffness", fontsize=10)
     return save(fig, "MAIN_C_KP.pdf")
 
 
