@@ -100,7 +100,9 @@ void reportSetUpResult(const Parameters& params,
 
   printSurfaceFrameBreakdown(R_alignment_target, r);
 
-  if (!params.print_coupled_diagnostics) {
+  // A decoupled set-up does not command a centre of compliance. Do not print
+  // the inactive legacy pole parameters as though they affected the run.
+  if (!params.print_coupled_diagnostics || !params.use_coupled_stiffness) {
     return;
   }
 
