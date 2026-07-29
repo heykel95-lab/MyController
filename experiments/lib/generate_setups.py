@@ -201,6 +201,11 @@ for case in ("tilted_tool", "tilted_close", "table"):
 MAIN_COMMON = [
     ("use_coupled_stiffness", "0"),
     ("setup_timeout", "5.0"),
+    # The A0 pilot reached 66.2 N at 0.180 m with Kp,n=360 N/m. Scaling the
+    # same measured equilibrium to 0.060 m targets about 22 N, while the 5 s
+    # phase retains ample settling time after the shorter preload ramp.
+    ("setup_push_end", "0.060"),
+    ("setup_push_speed", "0.050"),
     ("grind_sweep_enabled", "0"),
     ("nullspace_mode", "1"),
     ("setup_translation_surface_frame", "1"),
@@ -575,10 +580,13 @@ def write_setups():
         d = os.path.join(SETUPS, run_id)
         os.makedirs(d, exist_ok=True)
         plane_profile = None
+        tool_profile = None
         if run_id.startswith("MAIN_"):
             plane_profile = "horizontal"
+            tool_profile = "grinding_tool"
         elif run_id.startswith("VALID_T"):
             plane_profile = "tilted"
+            tool_profile = "grinding_tool"
 
         with open(os.path.join(d, "overlay.txt"), "w") as f:
             f.write(f"# {run_id}\n")
@@ -594,6 +602,8 @@ def write_setups():
             f.write(f"repeats:  {repeats}\n\n")
             if plane_profile:
                 f.write(f"plane profile: {plane_profile}\n\n")
+            if tool_profile:
+                f.write(f"tool profile: {tool_profile}\n\n")
             f.write("purpose:\n  " + purpose.replace("\n", "\n  ") + "\n\n")
             f.write("pass criterion:\n  " + criterion.replace("\n", "\n  ") + "\n")
 
@@ -603,6 +613,13 @@ def write_setups():
                 f.write(plane_profile + "\n")
         elif os.path.exists(profile_path):
             os.unlink(profile_path)
+
+        tool_profile_path = os.path.join(d, "tool_profile.txt")
+        if tool_profile:
+            with open(tool_profile_path, "w") as f:
+                f.write(tool_profile + "\n")
+        elif os.path.exists(tool_profile_path):
+            os.unlink(tool_profile_path)
 
         index.append((run_id, repeats, purpose))
 

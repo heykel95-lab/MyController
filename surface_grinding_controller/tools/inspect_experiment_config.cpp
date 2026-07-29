@@ -57,6 +57,9 @@ int main(int argc, char** argv) {
     printf("tool offsets [t1,t2] = [%+.1f, %+.1f] deg\n",
            params.tool_target_offset_tangent1_deg,
            params.tool_target_offset_tangent2_deg);
+    const Vec3 tool_axis_ee = params.tool_axis_ee.normalized();
+    printf("calibrated tool axis EE = [%+.8f, %+.8f, %+.8f]\n",
+           tool_axis_ee(0), tool_axis_ee(1), tool_axis_ee(2));
     printf("Kp frame = %s\n",
            params.setup_translation_surface_frame ? "surface [t1,t2,n]"
                                                   : "base [x,y,z]");

@@ -235,14 +235,21 @@ def process_run(run_id, repeat_tag, run_dir):
     except (TypeError, ValueError):
         pass
     try:
-        for axis in ("t1", "t2", "n"):
-            commanded = row[f"rc_{axis}_mm"]
-            reported = row[f"report_rc_{axis}_mm"]
-            if commanded != "" and reported != "" and \
-                    abs(float(commanded) - float(reported)) > 0.1:
-                flags.append(
-                    f"rc-{axis}-mismatch(param={float(commanded):.1f},"
-                    f"report={float(reported):.1f})")
+        # A decoupled run has no commanded compliance-centre lever. Its setup
+        # report may still print the inactive legacy pole geometry for
+        # diagnostics, but comparing that value with the default direct r_c=0
+        # would falsely reject an otherwise valid run.
+        coupled = row["use_coupled_stiffness"] != "" and \
+            float(row["use_coupled_stiffness"]) != 0.0
+        if coupled:
+            for axis in ("t1", "t2", "n"):
+                commanded = row[f"rc_{axis}_mm"]
+                reported = row[f"report_rc_{axis}_mm"]
+                if commanded != "" and reported != "" and \
+                        abs(float(commanded) - float(reported)) > 0.1:
+                    flags.append(
+                        f"rc-{axis}-mismatch(param={float(commanded):.1f},"
+                        f"report={float(reported):.1f})")
     except (TypeError, ValueError):
         pass
 

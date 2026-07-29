@@ -3,6 +3,8 @@ repeats:  3
 
 plane profile: horizontal
 
+tool profile: grinding_tool
+
 purpose:
   Case C: +10 deg about t2; vary only K_p,t1 to 800 N/m.
 

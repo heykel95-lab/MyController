@@ -3,6 +3,8 @@ repeats:  3
 
 plane profile: horizontal
 
+tool profile: grinding_tool
+
 purpose:
   Case C interaction corner for t2: K_R,t2=50 N m/rad and K_p,t1=300 N/m.
 

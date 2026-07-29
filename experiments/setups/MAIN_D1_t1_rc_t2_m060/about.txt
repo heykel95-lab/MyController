@@ -3,6 +3,8 @@ repeats:  3
 
 plane profile: horizontal
 
+tool profile: grinding_tool
+
 purpose:
   Case D coarse centre-of-compliance sweep: +10 deg about t1, direct r_c,t2=-60 mm.
 

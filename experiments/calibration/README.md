@@ -28,3 +28,30 @@ python3 experiments/calibration/prepare_plane_calibration.py horizontal
 Use `tilted` in both commands for the later validation plane. A setup chooses
 its plane through `experiments/setups/<run_id>/plane_profile.txt`; the runner
 does not use a global active-plane file.
+
+## Physical tool-axis calibration
+
+Plane-point calibration does not identify a mounting angle between the
+physical grinding face and the nominal `+Z_EE` axis. Calibrate that angle
+separately after every tool regrasp that can change its orientation.
+
+With the horizontal plane already validated, place the complete tool face flat
+at four positions. Keep it flat, but change its yaw about the plane normal
+between samples when this can be done safely. The capture is read-only:
+
+```bash
+cd surface_grinding_controller
+make capture_tool_axis
+./tools/capture_tool_axis grinding_tool horizontal T1
+./tools/capture_tool_axis grinding_tool horizontal T2
+./tools/capture_tool_axis grinding_tool horizontal T3
+./tools/capture_tool_axis grinding_tool horizontal T4
+cd ..
+python3 experiments/calibration/prepare_tool_axis_calibration.py grinding_tool
+```
+
+T1--T3 estimate the physical face normal in EE coordinates and T4 validates
+it. Both the fit-sample spread and the held-out error must be at most
+0.5 degrees. MAIN and validation setups declare `grinding_tool` in
+`tool_profile.txt`; the runner refuses to start without a passing report and
+archives the exact tool-axis overlay with every result.

@@ -14,6 +14,9 @@ with the `MAIN_*` results.
   frame-transfer validation and cannot overwrite the primary calibration.
 - The projected direction from \(P_1\) to \(P_2\) defines \(+t_1\);
   \(t_2=n_s\times t_1\). These directions should be marked on the workpiece.
+- The physical tool-face normal is calibrated independently from the plane
+  points using T1--T3 plus a held-out T4 sample. Every MAIN and validation run
+  requires and archives the `grinding_tool` calibration profile.
 - The plane defines its point, normal and surface frame
   \(R_s=[t_1,t_2,n_s]\).
 - The commanded tool orientation is an independent signed offset about
@@ -144,6 +147,17 @@ The runner currently exposes only Cases A--C:
 parameters, plane calibration, terminal transcript and Git provenance, then
 refreshes the derived metrics and figures. It stops after Case C so that the
 selected gains can be reviewed before Case D is enabled.
+
+All primary conditions use the same normal preload command:
+
+\[
+\delta_n=0.060\ \mathrm{m},\qquad
+K_{p,n}=360\ \mathrm{N/m},\qquad
+F_{n,\mathrm{qs}}\approx K_{p,n}\delta_n=21.6\ \mathrm{N}.
+\]
+
+The five-second set-up window is retained. Thus the preload reaches its final
+value early enough for the alignment and load to settle before evaluation.
 
 After horizontal Cases A--D, the compact tilted-plane baseline validation is:
 

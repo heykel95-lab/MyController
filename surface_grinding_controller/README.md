@@ -246,6 +246,7 @@ non-finite / non-positive result).
 | `setup_report.cpp` | The one-shot set-up report and commanded-pole diagnostics |
 | `tools/check_tool_offset.cpp` | Read-only TCP/stiffness-frame inspection tool |
 | `tools/capture_plane_point.cpp` | Read-only P1--P4 capture for a named physical plane |
+| `tools/capture_tool_axis.cpp` | Read-only T1--T4 physical tool-normal capture |
 | `tools/inspect_experiment_config.cpp` | Offline frame/gain/sign preflight |
 
 ## Build and run
@@ -262,6 +263,12 @@ any motion.
 `make capture_plane_point` builds the read-only named-plane capture tool. Use
 `tools/capture_plane_point horizontal P1` through `P4` for the primary plane,
 or replace `horizontal` with `tilted` for the validation plane.
+
+`make capture_tool_axis` builds the read-only physical tool-normal capture
+tool. With the complete face flat on a validated plane, record T1--T4 using
+`tools/capture_tool_axis grinding_tool horizontal T1` (and T2--T4). The
+experiment runner applies and archives the validated tool-axis overlay
+separately from the plane profile.
 
 Stop the controller at any time with `e + Enter`. A bare `Enter` continues past
 a phase gate.

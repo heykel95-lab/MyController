@@ -69,6 +69,23 @@ and writes a profile-local overlay and report. Every calibrated setup declares
 its profile in `plane_profile.txt`; `run.sh` refuses missing, mismatched or
 failed calibration and archives the profile with the result.
 
+The physical grinding-face normal must then be calibrated independently from
+the point geometry. Place the complete face flat and capture T1--T4:
+
+```bash
+cd surface_grinding_controller
+make capture_tool_axis
+./tools/capture_tool_axis grinding_tool horizontal T1
+./tools/capture_tool_axis grinding_tool horizontal T2
+./tools/capture_tool_axis grinding_tool horizontal T3
+./tools/capture_tool_axis grinding_tool horizontal T4
+cd ..
+python3 experiments/calibration/prepare_tool_axis_calibration.py grinding_tool
+```
+
+The runner requires the held-out tool-axis error to be at most 0.5 degrees.
+Recalibrate after any tool regrasp that may change the mounting orientation.
+
 Run the zero-offset control first:
 
 ```bash
@@ -81,6 +98,12 @@ to zero or if a held-out plane point lies more than 1 mm from the fitted plane.
 The guided runner executes one robot trial at a time, selects the next missing
 repeat, verifies the exact gain matrices without connecting to the robot,
 archives the trial through `run.sh`, and refreshes metrics and plots.
+
+The MAIN campaign uses a 60 mm virtual penetration with
+`setup_Kp_surface_normal = 360 N/m`. The resulting quasi-static target is
+approximately 21.6 N; the A0 pilot measured 66.2 N at 180 mm, so the scaled
+target is approximately 22 N. The set-up window remains 5 s, allowing the
+shorter preload ramp to settle before evaluation.
 
 The separately calibrated `tilted` profile is used only for the compact
 frame-transfer validation after the horizontal primary campaign:

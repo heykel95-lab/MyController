@@ -34,10 +34,15 @@ REPEAT="${2:-1}"
 SETUP_DIR="$HERE/setups/$RUN_ID"
 OVERLAY="$SETUP_DIR/overlay.txt"
 PLANE_PROFILE_FILE="$SETUP_DIR/plane_profile.txt"
+TOOL_PROFILE_FILE="$SETUP_DIR/tool_profile.txt"
 PLANE_PROFILE=""
 PLANE_OVERLAY=""
 PLANE_REPORT=""
 USES_PLANE_CALIBRATION=0
+TOOL_PROFILE=""
+TOOL_OVERLAY=""
+TOOL_REPORT=""
+USES_TOOL_CALIBRATION=0
 
 if [ ! -f "$OVERLAY" ]; then
   echo "ERROR: no setup '$RUN_ID' (missing $OVERLAY)" >&2
@@ -90,6 +95,11 @@ case "$RUN_ID" in
       echo "Regenerate the setup or declare tilted/horizontal before running it."
       exit 1
     fi
+    if [ ! -f "$TOOL_PROFILE_FILE" ]; then
+      echo "ERROR: calibrated setup '$RUN_ID' has no explicit tool_profile.txt."
+      echo "Regenerate the setup or declare its calibrated physical tool."
+      exit 1
+    fi
     ;;
 esac
 if [ -f "$PLANE_PROFILE_FILE" ]; then
@@ -128,6 +138,32 @@ if [ -f "$PLANE_PROFILE_FILE" ]; then
     fi
     python3 "$HERE/lib/apply_overlay.py" "$PLANE_OVERLAY" "$PARAMS" || exit 1
 fi
+if [ -f "$TOOL_PROFILE_FILE" ]; then
+    TOOL_PROFILE="$(tr -d '[:space:]' < "$TOOL_PROFILE_FILE")"
+    case "$TOOL_PROFILE" in
+      grinding_tool) ;;
+      *)
+        echo "ERROR: invalid tool profile '$TOOL_PROFILE' in $TOOL_PROFILE_FILE"
+        exit 1
+        ;;
+    esac
+    TOOL_OVERLAY="$HERE/calibration/tools/$TOOL_PROFILE/tool_axis_overlay.txt"
+    TOOL_REPORT="$HERE/calibration/tools/$TOOL_PROFILE/tool_axis_calibration_report.txt"
+    USES_TOOL_CALIBRATION=1
+    if [ ! -f "$TOOL_OVERLAY" ] || [ ! -f "$TOOL_REPORT" ]; then
+      echo "ERROR: setup '$RUN_ID' requires calibrated tool profile '$TOOL_PROFILE'."
+      echo "Capture T1--T4 with the face flat, then run:"
+      echo "  python3 experiments/calibration/prepare_tool_axis_calibration.py $TOOL_PROFILE"
+      exit 1
+    fi
+    if ! grep -q "^tool profile: $TOOL_PROFILE$" "$TOOL_REPORT" ||
+       ! grep -q "^status: PASS$" "$TOOL_REPORT"; then
+      echo "ERROR: tool-axis calibration '$TOOL_PROFILE' is missing, mismatched, or failed."
+      cat "$TOOL_REPORT"
+      exit 1
+    fi
+    python3 "$HERE/lib/apply_overlay.py" "$TOOL_OVERLAY" "$PARAMS" || exit 1
+fi
 python3 "$HERE/lib/apply_overlay.py" "$OVERLAY" "$PARAMS" || exit 1
 echo ""
 
@@ -153,6 +189,9 @@ mkdir -p "$OUT"
   if [ "$USES_PLANE_CALIBRATION" -eq 1 ]; then
     echo "plane_profile: $PLANE_PROFILE"
   fi
+  if [ "$USES_TOOL_CALIBRATION" -eq 1 ]; then
+    echo "tool_profile:  $TOOL_PROFILE"
+  fi
 } > "$OUT/meta.txt"
 cp -a "$PARAMS" "$OUT/params_effective"
 cp "$OVERLAY" "$OUT/overlay.txt"
@@ -160,6 +199,11 @@ if [ "$USES_PLANE_CALIBRATION" -eq 1 ]; then
   cp "$PLANE_PROFILE_FILE" "$OUT/"
   cp "$PLANE_OVERLAY" "$OUT/plane_calibration_overlay.txt"
   cp "$PLANE_REPORT" "$OUT/plane_calibration_report.txt"
+fi
+if [ "$USES_TOOL_CALIBRATION" -eq 1 ]; then
+  cp "$TOOL_PROFILE_FILE" "$OUT/"
+  cp "$TOOL_OVERLAY" "$OUT/tool_axis_calibration_overlay.txt"
+  cp "$TOOL_REPORT" "$OUT/tool_axis_calibration_report.txt"
 fi
 
 echo "--- starting controller (drive it as usual; 'e'+Enter to stop) ---"
