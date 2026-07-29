@@ -1,4 +1,4 @@
-70 setups, 219 total runs
+79 setups, 264 total runs
 
 G1_coupled_block_diagonal          x3  Coupled 6x6 path with block-diagonal gains must reproduce the decoupled wrench exactly.
 G1_decoupled_baseline              x5  Decoupled wrench, no coupling.
@@ -28,6 +28,15 @@ A6_clearance_30mm                  x3  Handoff height, descend_surface_clearance
 A7_qinit_tilted_tool               x3  Arm posture, q_init_case = tilted_tool.
 A7_qinit_tilted_close              x3  Arm posture, q_init_case = tilted_close.
 A7_qinit_table                     x3  Arm posture, q_init_case = table.
+D0_flat_00deg                      x5  Calibrated-plane zero-offset control with no intentional tool-plane mismatch.
+D1_KRt1_05                         x5  Axis-specific t1 stiffness: +10 deg command offset about t1, K_R,t1 = 5.0 N m/rad, K_R,t2 fixed at 5 N m/rad.
+D1_KRt1_15                         x5  Axis-specific t1 stiffness: +10 deg command offset about t1, K_R,t1 = 15.0 N m/rad, K_R,t2 fixed at 5 N m/rad.
+D1_KRt1_50                         x5  Axis-specific t1 stiffness: +10 deg command offset about t1, K_R,t1 = 50.0 N m/rad, K_R,t2 fixed at 5 N m/rad.
+D2_KRt2_05                         x5  Axis-specific t2 stiffness: +10 deg command offset about t2, K_R,t2 = 5.0 N m/rad, K_R,t1 fixed at 5 N m/rad.
+D2_KRt2_15                         x5  Axis-specific t2 stiffness: +10 deg command offset about t2, K_R,t2 = 15.0 N m/rad, K_R,t1 fixed at 5 N m/rad.
+D2_KRt2_50                         x5  Axis-specific t2 stiffness: +10 deg command offset about t2, K_R,t2 = 50.0 N m/rad, K_R,t1 fixed at 5 N m/rad.
+D3_angle_t1_05deg                  x5  Initial-angle response: +5 deg command offset about t1, both tangent-axis stiffnesses fixed at 5 N m/rad.
+D3_angle_t2_05deg                  x5  Initial-angle response: +5 deg command offset about t2, both tangent-axis stiffnesses fixed at 5 N m/rad.
 B1_pole_on_contact_edge            x3  Coupled law with the pole on the contact edge (coupled_pole_from_edge = 0).
 B1b_pole_at_tcp                    x3  Coupled law with the pole AT the TCP: the offset cancels the measured TCP-to-edge lever, giving r_c ~ 0.
 B2_pole_normal_m120                x3  Pole swept ALONG THE SURFACE NORMAL, s = -0.12 m from the contact edge.

@@ -194,6 +194,83 @@ for case in ("tilted_tool", "tilted_close", "table"):
         [("q_init_case", case)],
     )
 
+# ---- Series D: calibrated-plane, axis-specific stiffness ------------------
+# The D series is run only after experiments/calibration/active_plane_overlay
+# has been generated from three physical probe points. Plane geometry remains
+# fixed; the two command-offset keys create the controlled tool-plane mismatch.
+COMMON_AXIS_STUDY = [
+    ("use_coupled_stiffness", "0"),
+    ("setup_timeout", "5.0"),
+    ("setup_KR_normal", "50.0"),
+]
+
+add(
+    "D0_flat_00deg",
+    "Calibrated-plane zero-offset control with no intentional tool-plane "
+    "mismatch.",
+    "The measured alignment angle at first contact should be near zero. This "
+    "must pass before interpreting either axis-specific sweep.",
+    COMMON_AXIS_STUDY
+    + [
+        ("tool_target_offset_tangent1_deg", "0.0"),
+        ("tool_target_offset_tangent2_deg", "0.0"),
+        ("setup_KR_tangent1", "5.0"),
+        ("setup_KR_tangent2", "5.0"),
+    ],
+    repeats=5,
+)
+
+for kr in (5.0, 15.0, 50.0):
+    add(
+        f"D1_KRt1_{int(kr):02d}",
+        f"Axis-specific t1 stiffness: +10 deg command offset about t1, "
+        f"K_R,t1 = {kr} N m/rad, K_R,t2 fixed at 5 N m/rad.",
+        "Quantifies the t1 stiffness effect without changing t2. Alignment "
+        "improvement should decrease as K_R,t1 increases.",
+        COMMON_AXIS_STUDY
+        + [
+            ("tool_target_offset_tangent1_deg", "10.0"),
+            ("tool_target_offset_tangent2_deg", "0.0"),
+            ("setup_KR_tangent1", f"{kr}"),
+            ("setup_KR_tangent2", "5.0"),
+        ],
+        repeats=5,
+    )
+
+for kr in (5.0, 15.0, 50.0):
+    add(
+        f"D2_KRt2_{int(kr):02d}",
+        f"Axis-specific t2 stiffness: +10 deg command offset about t2, "
+        f"K_R,t2 = {kr} N m/rad, K_R,t1 fixed at 5 N m/rad.",
+        "Quantifies the t2 stiffness effect without changing t1. Alignment "
+        "improvement should decrease as K_R,t2 increases.",
+        COMMON_AXIS_STUDY
+        + [
+            ("tool_target_offset_tangent1_deg", "0.0"),
+            ("tool_target_offset_tangent2_deg", "10.0"),
+            ("setup_KR_tangent1", "5.0"),
+            ("setup_KR_tangent2", f"{kr}"),
+        ],
+        repeats=5,
+    )
+
+for axis in (1, 2):
+    add(
+        f"D3_angle_t{axis}_05deg",
+        f"Initial-angle response: +5 deg command offset about t{axis}, both "
+        "tangent-axis stiffnesses fixed at 5 N m/rad.",
+        "Together with D0 and the 10 deg, 5 N m/rad arm of D1 or D2, this "
+        "tests whether available alignment motion scales with initial angle.",
+        COMMON_AXIS_STUDY
+        + [
+            ("tool_target_offset_tangent1_deg", "5.0" if axis == 1 else "0.0"),
+            ("tool_target_offset_tangent2_deg", "5.0" if axis == 2 else "0.0"),
+            ("setup_KR_tangent1", "5.0"),
+            ("setup_KR_tangent2", "5.0"),
+        ],
+        repeats=5,
+    )
+
 # ---- Series B: centre of compliance / pole ---------------------------------
 # NOTE ON THE NAME. This setup was originally called B1_pole_at_tcp and claimed
 # a zero lever. It does not have one: main.cpp computes

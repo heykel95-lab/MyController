@@ -1263,8 +1263,10 @@ int main() {
         row.tool_contact_offset_ee = tool_contact_offset_ee;
         row.e_p = e_p;
         row.e_R = e_R;
-        row.alignment_angle =
-            toolSurfaceMisalignmentAngle(params, R_EE, R_alignment_target);
+        row.alignment_error_surface =
+            R_alignment_target.transpose() *
+            toolSurfaceAlignmentErrorInBase(params, R_EE, R_alignment_target);
+        row.alignment_angle = row.alignment_error_surface.norm();
         row.pdot = pdot;
         row.pdot_d = desired.pdot_d;
         row.omega = omega;

@@ -33,6 +33,52 @@ archives both CSVs plus the effective parameters, git commit and terminal
 transcript into `results/B2_pole_normal_p080/r01/`, then restores `params/`.
 Drive the controller exactly as usual; stop with `e`+Enter.
 
+## Calibrated-plane axis study
+
+The new D-series experiments keep the physical plane and the commanded tool
+orientation separate. First measure at least three non-collinear physical
+probe points in base coordinates. Use points at least 50 mm apart. Mark the
+\(+X_{\mathrm{EE}},+Y_{\mathrm{EE}}\) corner of the rectangular tool face and
+touch that same corner to every point. With the robot stationary at each
+point, run:
+
+```bash
+cd surface_grinding_controller
+make capture_plane_point
+./tools/capture_plane_point P1
+./tools/capture_plane_point P2
+./tools/capture_plane_point P3
+./tools/capture_plane_point P4  # recommended held-out check
+cd ..
+python3 experiments/calibration/prepare_plane_calibration.py
+```
+
+`capture_plane_point` is read-only and commands no robot motion. It converts
+the EE pose to the configured tool-corner position and appends it to
+`plane_points.csv`. If a different physical probe is used, enter its calibrated
+base-frame coordinates in a copy of `plane_points.example.csv` instead.
+
+The script fits the plane from P1--P3, checks any additional points such as P4,
+and writes `active_plane_overlay.txt`. Every D-series run applies this
+calibration before its own setup overlay and archives both the effective
+parameters and calibration report.
+
+Run the zero-offset control first:
+
+```bash
+./experiments/run_axis_study.sh status
+./experiments/run_axis_study.sh next
+```
+
+Do not continue if its first-contact alignment angle is not near zero or if a
+held-out plane point lies more than 1 mm from the fitted plane. Then run D1
+(\(t_1\)-specific stiffness), D2 (\(t_2\)-specific stiffness), and D3
+(5-degree angle checks). D1 and D2 use a 10-degree command offset and vary only
+the stiffness about the excited tangent; the orthogonal tangent remains at
+5 Nm/rad. The guided runner executes one robot trial at a time, selects the
+next missing repeat, archives it through `run.sh`, and refreshes metrics and
+plots after every successful run.
+
 **The backup is not optional.** After a set-up phase the controller rewrites
 `coupled_K_tcp` / `coupled_D_tcp` into `params/sequence.txt`. Without the
 backup/restore, every run would inherit the previous run's auto-written

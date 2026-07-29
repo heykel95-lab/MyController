@@ -282,6 +282,12 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
   p.alignment_target_normal.normalize();
   p.alignment_target_tangent1 =
       getVec3Xyz("alignment_target_tangent1", p.alignment_target_tangent1);
+  p.tool_target_offset_tangent1_deg =
+      getDouble("tool_target_offset_tangent1_deg",
+                p.tool_target_offset_tangent1_deg);
+  p.tool_target_offset_tangent2_deg =
+      getDouble("tool_target_offset_tangent2_deg",
+                p.tool_target_offset_tangent2_deg);
   p.tool_axis_ee = getVec3Xyz("tool_axis_ee", p.tool_axis_ee);
   p.tool_axis_target_sign = getDouble("tool_axis_target_sign", p.tool_axis_target_sign);
   p.use_tool_contact_point_control =

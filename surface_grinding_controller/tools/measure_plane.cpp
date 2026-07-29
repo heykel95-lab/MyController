@@ -2,13 +2,10 @@
 
 // Read-only measurement of the physical surface tilt. Commands no motion.
 //
-// The controller measures alignment against the CONFIGURED normal, built in
-// config.cpp from alignment_target_tilt_angle_deg (a, about base x) and
-// alignment_target_tilt_angle_y_deg (b, about base y). Those two numbers are
-// deliberately left slightly off the real plane, which is the point of the
-// experiment -- but it means align_after at equilibrium is a residual against
-// an assumption, not against the surface the tool actually sat on. Interpreting
-// the B-series sweep needs the real normal as a separate, measured constant.
+// This is a quick orientation cross-check obtained by seating the tool face.
+// The calibrated-plane D-series instead uses three non-collinear probe points
+// and experiments/calibration/prepare_plane_calibration.py, because plane
+// geometry requires both a normal and a point.
 //
 // Procedure:
 //   1. Start the controller, choose g (guiding mode), and hand-place the tool
@@ -18,8 +15,8 @@
 //   3. Run this. It reads the pose once and prints the tilt angles the surface
 //      would need for the tool axis to be its normal.
 //
-// The number it prints is only as good as how flat you seated the face. Repeat
-// it a few times and take the spread as the uncertainty.
+// The number it prints is only as good as how flat you seated the face. It can
+// validate the three-point result but must not replace that calibration.
 
 namespace {
 
@@ -98,10 +95,10 @@ int main() {
 
     printf("total mismatch between measured and configured normal: %.2f deg\n",
            mismatch_deg);
-    printf("\nThis is the number align_after is measured against. A perfectly\n"
-           "seated tool reports align_after ~= %.2f deg, not zero.\n",
-           mismatch_deg);
-    printf("\nDo NOT paste these into params/ -- the mismatch is the experiment.\n");
+    printf("\nA correctly calibrated plane gives a mismatch near zero when the\n"
+           "tool is seated flat. For D-series experiments, create the active\n"
+           "plane overlay from three probe points; command-angle offsets are\n"
+           "specified separately in each experiment setup.\n");
 
     return 0;
   } catch (const franka::Exception& e) {

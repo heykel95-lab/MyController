@@ -1,0 +1,8 @@
+run_id:   D1_KRt1_50
+repeats:  5
+
+purpose:
+  Axis-specific t1 stiffness: +10 deg command offset about t1, K_R,t1 = 50.0 N m/rad, K_R,t2 fixed at 5 N m/rad.
+
+pass criterion:
+  Quantifies the t1 stiffness effect without changing t2. Alignment improvement should decrease as K_R,t1 increases.

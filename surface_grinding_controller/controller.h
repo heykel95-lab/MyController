@@ -125,6 +125,11 @@ struct Parameters {
   double alignment_target_tilt_angle_deg = 0.0;    // a, about base x
   double alignment_target_tilt_angle_y_deg = 0.0;  // b, about base y
   Vec3 alignment_target_tangent1 = Vec3(0.0, 1.0, 0.0);
+  // Commanded tool-axis offset relative to the calibrated surface normal.
+  // These offsets create a controlled contact mismatch without changing the
+  // plane used for clearance, contact geometry, gains, or alignment scoring.
+  double tool_target_offset_tangent1_deg = 0.0;
+  double tool_target_offset_tangent2_deg = 0.0;
   Vec3 tool_axis_ee = Vec3(0.0, 0.0, 1.0);
   double tool_axis_target_sign = -1.0;
   bool use_tool_contact_point_control = true;
@@ -325,8 +330,11 @@ struct LogData {
 
   Vec3 e_p;
   Vec3 e_R;
+  // Minimal current-to-flat-surface tool-axis rotation, resolved in the
+  // surface frame [tangent1, tangent2, normal], [rad].
+  Vec3 alignment_error_surface;
   // Residual tool-axis-to-surface angle [rad]. Unlike e_R this is referenced to
-  // the configured surface, so it measures alignment quality directly.
+  // the calibrated plane normal, so it measures alignment quality directly.
   double alignment_angle;
 
   Vec3 pdot;
@@ -471,9 +479,18 @@ Mat3 makeAlignmentTargetFrame(const Parameters& params);
 
 Mat3 rotationBetweenUnitVectors(const Vec3& from_unit, const Vec3& to_unit);
 
+Vec3 surfaceToolAxisInBase(const Parameters& params, const Mat3& R_alignment_target);
+
 Vec3 desiredToolAxisInBase(const Parameters& params, const Mat3& R_alignment_target);
 
 Vec3 currentToolAxisInBase(const Parameters& params, const Mat3& R_EE);
+
+// Minimal rotation vector carrying the current physical tool axis onto the
+// signed surface normal. The vector is expressed in the base frame.
+Vec3 toolSurfaceAlignmentErrorInBase(
+    const Parameters& params,
+    const Mat3& R_EE,
+    const Mat3& R_alignment_target);
 
 // Residual tool-axis-to-surface angle [rad], non-negative. Distinct from e_R,
 // which is referenced to the orientation frozen at the clearance transition.

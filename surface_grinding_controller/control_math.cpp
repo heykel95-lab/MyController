@@ -337,13 +337,42 @@ Mat3 rotationBetweenUnitVectors(const Vec3& from_unit, const Vec3& to_unit) {
   return Eigen::AngleAxisd(std::acos(dot), axis).toRotationMatrix();
 }
 
-Vec3 desiredToolAxisInBase(const Parameters& params, const Mat3& R_alignment_target) {
+Vec3 surfaceToolAxisInBase(const Parameters& params, const Mat3& R_alignment_target) {
   const double sign = (params.tool_axis_target_sign >= 0.0) ? 1.0 : -1.0;
   return sign * R_alignment_target.col(2);  // normal = 3rd column
 }
 
+Vec3 desiredToolAxisInBase(const Parameters& params, const Mat3& R_alignment_target) {
+  const Vec3 flat_axis = surfaceToolAxisInBase(params, R_alignment_target);
+  const double deg_to_rad = M_PI / 180.0;
+  const Vec3 rotation_vector =
+      deg_to_rad *
+      (params.tool_target_offset_tangent1_deg * R_alignment_target.col(0) +
+       params.tool_target_offset_tangent2_deg * R_alignment_target.col(1));
+  const double angle = rotation_vector.norm();
+  if (angle <= 1e-12) {
+    return flat_axis;
+  }
+  return Eigen::AngleAxisd(angle, rotation_vector / angle) * flat_axis;
+}
+
 Vec3 currentToolAxisInBase(const Parameters& params, const Mat3& R_EE) {
   return R_EE * normalizedOrFallback(params.tool_axis_ee, Vec3(0.0, 0.0, 1.0));
+}
+
+Vec3 toolSurfaceAlignmentErrorInBase(
+    const Parameters& params,
+    const Mat3& R_EE,
+    const Mat3& R_alignment_target) {
+  const Vec3 tool_axis = currentToolAxisInBase(params, R_EE).normalized();
+  const Vec3 flat_axis =
+      surfaceToolAxisInBase(params, R_alignment_target).normalized();
+  const Eigen::AngleAxisd error(
+      rotationBetweenUnitVectors(tool_axis, flat_axis));
+  if (std::abs(error.angle()) < 1e-12) {
+    return Vec3::Zero();
+  }
+  return error.axis() * error.angle();
 }
 
 double toolSurfaceMisalignmentAngle(
@@ -357,11 +386,7 @@ double toolSurfaceMisalignmentAngle(
   // transition and therefore reports how far the tool turned, not how flat it
   // ended up. Always non-negative, so a drop across the phase is the useful
   // alignment gain.
-  const Vec3 tool_axis = currentToolAxisInBase(params, R_EE).normalized();
-  const Vec3 target_axis =
-      desiredToolAxisInBase(params, R_alignment_target).normalized();
-  const double dot = std::max(-1.0, std::min(1.0, tool_axis.dot(target_axis)));
-  return std::acos(dot);
+  return toolSurfaceAlignmentErrorInBase(params, R_EE, R_alignment_target).norm();
 }
 
 Mat3 makeToolOrientationForAlignmentTarget(
@@ -373,8 +398,9 @@ Mat3 makeToolOrientationForAlignmentTarget(
   const Vec3 tool_axis_target =
       desiredToolAxisInBase(params, R_alignment_target).normalized();
 
-  // Rotate the current physical tool axis onto +-alignment_target_normal while
-  // keeping the remaining orientation twist as close as possible to the start.
+  // Rotate the current physical tool axis onto the deliberately offset command
+  // axis while keeping the remaining orientation twist as close as possible
+  // to the start.
   return rotationBetweenUnitVectors(tool_axis_start, tool_axis_target) * R_start;
 }
 

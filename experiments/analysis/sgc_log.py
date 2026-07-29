@@ -5,10 +5,8 @@ Deliberately depends only on numpy: pandas and scipy are not installed on the
 robot PC and pip is unavailable, so anything heavier could not be run where the
 data actually lives.
 
-Handles both log schemas:
-  - current (113 columns, includes alignment_angle_deg)
-  - pre-alignment-metric (112 columns); alignment metrics are then reported as
-    NaN rather than silently faked.
+Handles old logs without alignment data, scalar-alignment logs, and the current
+schema with signed surface-frame alignment components.
 """
 
 import math
@@ -34,10 +32,10 @@ PHASE_NAMES = {
 }
 
 # ---------------------------------------------------------------------------
-# Surface geometry. The controller scores alignment against the CONFIGURED
-# normal, which is deliberately left off the physical plane, so `align_gain`
-# reads backwards: it goes more negative the closer the tool gets to the real
-# surface. Everything below exists to rescore against the measured plane.
+# Legacy surface geometry. The old A/B campaign scored alignment against a
+# deliberately offset configured normal, so it must be rescored here against
+# the separately measured plane. The calibrated D series logs the physical
+# plane metric directly and does not use this legacy correction.
 # ---------------------------------------------------------------------------
 
 # alignment_target_tilt_angle_deg / _y_deg, i.e. (a about base x, b about y).
@@ -141,6 +139,17 @@ def has_alignment_metric(header):
     return "alignment_angle_deg" in header
 
 
+def has_alignment_components(header):
+    return all(
+        name in header
+        for name in (
+            "alignment_error_t1_deg",
+            "alignment_error_t2_deg",
+            "alignment_error_normal_deg",
+        )
+    )
+
+
 def phase_mask(phase, wanted):
     return phase == wanted
 
@@ -172,6 +181,14 @@ def setup_metrics(path):
         header = [h.strip() for h in f.readline().strip().split(",")]
     if has_alignment_metric(header):
         wanted.append("alignment_angle_deg")
+    if has_alignment_components(header):
+        wanted.extend(
+            [
+                "alignment_error_t1_deg",
+                "alignment_error_t2_deg",
+                "alignment_error_normal_deg",
+            ]
+        )
 
     d, header = read_csv(path, wanted)
 
@@ -179,6 +196,7 @@ def setup_metrics(path):
         "n_rows": len(d["time"]),
         "duration_s": float(d["time"][-1] - d["time"][0]) if len(d["time"]) else np.nan,
         "has_alignment_metric": has_alignment_metric(header),
+        "has_alignment_components": has_alignment_components(header),
     }
 
     setup = phase_mask(d["phase"], PHASE_SET_UP)
@@ -206,10 +224,34 @@ def setup_metrics(path):
         out["align_before_deg"] = float(a[0])
         out["align_after_deg"] = float(a[-1])
         out["align_gain_deg"] = float(a[0] - a[-1])
+        total_change = float(a[0] - a[-1])
+        if total_change > 0.0:
+            target = float(a[0] - 0.9 * total_change)
+            reached = np.where(a <= target)[0]
+            out["alignment_time90_s"] = (
+                float(t[reached[0]] - t[0]) if reached.size else np.nan
+            )
+        else:
+            out["alignment_time90_s"] = np.nan
     else:
         out["align_before_deg"] = np.nan
         out["align_after_deg"] = np.nan
         out["align_gain_deg"] = np.nan
+        out["alignment_time90_s"] = np.nan
+
+    if out["has_alignment_components"]:
+        for axis in ("t1", "t2"):
+            values = d[f"alignment_error_{axis}_deg"][setup]
+            out[f"align_{axis}_before_deg"] = float(values[0])
+            out[f"align_{axis}_after_deg"] = float(values[-1])
+            out[f"align_{axis}_improve_deg"] = float(
+                abs(values[0]) - abs(values[-1])
+            )
+    else:
+        for axis in ("t1", "t2"):
+            out[f"align_{axis}_before_deg"] = np.nan
+            out[f"align_{axis}_after_deg"] = np.nan
+            out[f"align_{axis}_improve_deg"] = np.nan
 
     # Contact force relative to the bias captured at the clearance transition.
     fx = d["external_force_x"][setup] - d["contact_force_bias_x"][setup]

@@ -1,0 +1,8 @@
+run_id:   D0_flat_00deg
+repeats:  5
+
+purpose:
+  Calibrated-plane zero-offset control with no intentional tool-plane mismatch.
+
+pass criterion:
+  The measured alignment angle at first contact should be near zero. This must pass before interpreting either axis-specific sweep.

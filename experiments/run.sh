@@ -34,6 +34,8 @@ RUN_ID="$1"
 REPEAT="${2:-1}"
 SETUP_DIR="$HERE/setups/$RUN_ID"
 OVERLAY="$SETUP_DIR/overlay.txt"
+PLANE_OVERLAY="$HERE/calibration/active_plane_overlay.txt"
+USES_PLANE_CALIBRATION=0
 
 if [ ! -f "$OVERLAY" ]; then
   echo "ERROR: no setup '$RUN_ID' (missing $OVERLAY)" >&2
@@ -79,6 +81,18 @@ echo "=== $RUN_ID / $REPEAT_TAG ==="
 sed -n '1,200p' "$SETUP_DIR/about.txt"
 echo ""
 echo "--- applying overlay ---"
+case "$RUN_ID" in
+  D*)
+    USES_PLANE_CALIBRATION=1
+    if [ ! -f "$PLANE_OVERLAY" ]; then
+      echo "ERROR: D-series experiments require a three-point plane calibration."
+      echo "Create experiments/calibration/plane_points.csv and run:"
+      echo "  python3 experiments/calibration/prepare_plane_calibration.py"
+      exit 1
+    fi
+    python3 "$HERE/lib/apply_overlay.py" "$PLANE_OVERLAY" "$PARAMS" || exit 1
+    ;;
+esac
 python3 "$HERE/lib/apply_overlay.py" "$OVERLAY" "$PARAMS" || exit 1
 echo ""
 
@@ -95,6 +109,12 @@ mkdir -p "$OUT"
 } > "$OUT/meta.txt"
 cp -a "$PARAMS" "$OUT/params_effective"
 cp "$OVERLAY" "$OUT/overlay.txt"
+if [ "$USES_PLANE_CALIBRATION" -eq 1 ]; then
+  cp "$PLANE_OVERLAY" "$OUT/plane_calibration_overlay.txt"
+  if [ -f "$HERE/calibration/plane_calibration_report.txt" ]; then
+    cp "$HERE/calibration/plane_calibration_report.txt" "$OUT/"
+  fi
+fi
 
 echo "--- starting controller (drive it as usual; 'e'+Enter to stop) ---"
 echo ""

@@ -1,0 +1,10 @@
+# D2_KRt2_15
+# Applied on top of surface_grinding_controller/params/.
+# Only keys listed here differ from the nominal set.
+use_coupled_stiffness = 0
+setup_timeout = 5.0
+setup_KR_normal = 50.0
+tool_target_offset_tangent1_deg = 0.0
+tool_target_offset_tangent2_deg = 10.0
+setup_KR_tangent1 = 5.0
+setup_KR_tangent2 = 15.0

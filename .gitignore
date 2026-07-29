@@ -1,2 +1,9 @@
 
 .claude/settings.local.json
+
+# Robot-specific three-point plane calibration. Keep the example and scripts,
+# but do not publish the measured workpiece coordinates.
+experiments/calibration/plane_points.csv
+experiments/calibration/active_plane_overlay.txt
+experiments/calibration/plane_calibration_report.txt
+surface_grinding_controller/tools/capture_plane_point

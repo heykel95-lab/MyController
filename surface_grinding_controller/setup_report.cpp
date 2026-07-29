@@ -75,7 +75,7 @@ void reportSetUpResult(const Parameters& params,
          tcp_from_contact_mm(0), tcp_from_contact_mm(1), tcp_from_contact_mm(2),
          tcp_from_contact_mm.norm());
 
-  // Alignment quality against the configured surface. tip (above) says how far
+  // Alignment quality against the calibrated surface. tip (above) says how far
   // the tool turned; this says how flat it ended up. They are different
   // questions and only this one answers "did the alignment work".
   const double align_before_deg =
@@ -86,6 +86,18 @@ void reportSetUpResult(const Parameters& params,
       toolSurfaceMisalignmentAngle(params, r.R_EE, R_alignment_target);
   printf("alignment: before=%.2f deg | after=%.2f deg | gain=%+.2f deg\n",
          align_before_deg, align_after_deg, align_before_deg - align_after_deg);
+  const Vec3 align_before_surface_deg =
+      (180.0 / M_PI) * R_alignment_target.transpose() *
+      toolSurfaceAlignmentErrorInBase(
+          params, r.R_contact_start, R_alignment_target);
+  const Vec3 align_after_surface_deg =
+      (180.0 / M_PI) * R_alignment_target.transpose() *
+      toolSurfaceAlignmentErrorInBase(params, r.R_EE, R_alignment_target);
+  printf("alignment components [t1,t2,n] deg: before=[%+.2f,%+.2f,%+.2f] | "
+         "after=[%+.2f,%+.2f,%+.2f]\n",
+         align_before_surface_deg(0), align_before_surface_deg(1),
+         align_before_surface_deg(2), align_after_surface_deg(0),
+         align_after_surface_deg(1), align_after_surface_deg(2));
 
   printSurfaceFrameBreakdown(R_alignment_target, r);
 

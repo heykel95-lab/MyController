@@ -65,6 +65,7 @@ void writeLogToCsv(
            << "tool_contact_offset_ee_x,tool_contact_offset_ee_y,tool_contact_offset_ee_z,"
            << "e_p_x,e_p_y,e_p_z,"
            << "e_R_x,e_R_y,e_R_z,"
+           << "alignment_error_t1_deg,alignment_error_t2_deg,alignment_error_normal_deg,"
            << "alignment_angle_deg,"
            << "pdot_x,pdot_y,pdot_z,"
            << "pdot_d_x,pdot_d_y,pdot_d_z,"
@@ -109,6 +110,7 @@ void writeLogToCsv(
     writeVec3(log_file, row.tool_contact_offset_ee);
     writeVec3(log_file, row.e_p);
     writeVec3(log_file, row.e_R);
+    writeVec3(log_file, (180.0 / M_PI) * row.alignment_error_surface);
     log_file << (180.0 / M_PI) * row.alignment_angle << ",";
     writeVec3(log_file, row.pdot);
     writeVec3(log_file, row.pdot_d);
@@ -527,12 +529,15 @@ void printParameters(const Parameters& params) {
          params.pause_hold_auto_damping ? "on" : "off",
          params.pause_before_grind ? "on" : "off",
          params.debug_period);
-  printf("alignment-target normal=[%+.3f, %+.3f, %+.3f] | tilt a(x)=%.1f deg, b(y)=%.1f deg (from angles)\n",
+  printf("surface-plane normal=[%+.3f, %+.3f, %+.3f] | tilt a(x)=%.1f deg, b(y)=%.1f deg (from angles)\n",
          params.alignment_target_normal(0),
          params.alignment_target_normal(1),
          params.alignment_target_normal(2),
          params.alignment_target_tilt_angle_deg,
          params.alignment_target_tilt_angle_y_deg);
+  printf("tool-axis command offset: tangent1=%+.1f deg | tangent2=%+.1f deg\n",
+         params.tool_target_offset_tangent1_deg,
+         params.tool_target_offset_tangent2_deg);
   printf("tool face: %.0f x %.0f mm | center offset EE=[%+.1f, %+.1f, %+.1f] mm\n",
          2000.0 * params.tool_contact_half_width_ee.norm(),
          2000.0 * params.tool_contact_half_length_ee.norm(),

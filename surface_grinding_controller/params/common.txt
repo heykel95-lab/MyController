@@ -102,6 +102,12 @@ alignment_target_tangent1_x = 1.0
 alignment_target_tangent1_y = 0.0
 alignment_target_tangent1_z = 0.0
 
+# Tool-axis command relative to the calibrated surface normal. These values
+# create the experimental mismatch without changing the plane used for
+# clearance, point projection, gain axes, or alignment scoring.
+tool_target_offset_tangent1_deg = 0.0
+tool_target_offset_tangent2_deg = 0.0
+
 # Rotational spring mask in the surface frame. 0 removes stiffness on that axis.
 constrain_rotation_about_alignment_normal = 1
 constrain_rotation_about_alignment_tangent1 = 1

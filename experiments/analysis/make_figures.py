@@ -118,11 +118,88 @@ def fig_a2_stiffness(rows):
             buckets.setdefault(r["_kr"], {"good": [], "bad": []})
             buckets[r["_kr"]]["good" if not data_suspect(r) else "bad"].append(y)
         errorbar_from_buckets(ax, buckets, "measured", "C0")
-        ax.set_xlabel(r"$K_{R,\mathrm{tangent}}$ [Nm/rad]")
+        ax.set_xlabel(r"$K_{R,t_1}=K_{R,t_2}$ [Nm/rad]")
         ax.set_ylabel(ylabel)
     fig.suptitle("A2: rotational stiffness sweep (replaces thesis Table 5.1)",
                  fontsize=10)
     return save(fig, "A2_stiffness_sweep.pdf")
+
+
+def _axis_study_buckets(rows, prefix, xkey, ykey):
+    buckets = {}
+    for row in rows:
+        if not row["run_id"].startswith(prefix):
+            continue
+        x, y = fnum(row, xkey), fnum(row, ykey)
+        if np.isnan(x) or np.isnan(y):
+            continue
+        buckets.setdefault(x, {"good": [], "bad": []})
+        bucket = "bad" if data_suspect(row) else "good"
+        buckets[x][bucket].append(y)
+    return buckets
+
+
+def fig_d_axis_stiffness(rows):
+    """Independent t1/t2 stiffness effects at a fixed 10-degree mismatch."""
+    if not any(r["run_id"].startswith(("D1_", "D2_")) for r in rows):
+        return None
+
+    fig, axes = plt.subplots(1, 3, figsize=(9.5, 3.1))
+    panels = (
+        ("align_gain_deg", "physical-plane improvement [deg]"),
+        ("alignment_time90_s", "90% alignment time [s]"),
+        ("force_steady_N", "steady estimated normal load [N]"),
+    )
+    for ax, (key, ylabel) in zip(axes, panels):
+        t1 = _axis_study_buckets(rows, "D1_KRt1_", "setup_KR_t1", key)
+        t2 = _axis_study_buckets(rows, "D2_KRt2_", "setup_KR_t2", key)
+        errorbar_from_buckets(ax, t1, r"$t_1$ excitation", "C0", marker="o")
+        errorbar_from_buckets(ax, t2, r"$t_2$ excitation", "C1", marker="s")
+        ax.set_xlabel(r"stiffness about excited axis [Nm/rad]")
+        ax.set_ylabel(ylabel)
+    axes[0].legend(frameon=False)
+    fig.suptitle("D1--D2: axis-specific rotational stiffness", fontsize=10)
+    return save(fig, "D_axis_stiffness.pdf")
+
+
+def fig_d_initial_angle(rows):
+    """Alignment response at 0, 5 and 10 degrees for each tangent axis."""
+    selected = [
+        row
+        for row in rows
+        if row["run_id"] == "D0_flat_00deg"
+        or row["run_id"].startswith("D3_angle_")
+        or row["run_id"] in ("D1_KRt1_05", "D2_KRt2_05")
+    ]
+    if not selected:
+        return None
+
+    fig, ax = plt.subplots(figsize=(5.4, 3.5))
+    for axis, prefixes, xkey, color, marker in (
+        (r"$t_1$", ("D0_", "D3_angle_t1_", "D1_KRt1_05"),
+         "tool_offset_t1_deg", "C0", "o"),
+        (r"$t_2$", ("D0_", "D3_angle_t2_", "D2_KRt2_05"),
+         "tool_offset_t2_deg", "C1", "s"),
+    ):
+        buckets = {}
+        for row in selected:
+            if not row["run_id"].startswith(prefixes):
+                continue
+            x = abs(fnum(row, xkey))
+            y = fnum(row, "align_gain_deg")
+            if np.isnan(x) or np.isnan(y):
+                continue
+            buckets.setdefault(x, {"good": [], "bad": []})
+            bucket = "bad" if data_suspect(row) else "good"
+            buckets[x][bucket].append(y)
+        errorbar_from_buckets(
+            ax, buckets, f"offset about {axis}", color, marker=marker
+        )
+    ax.set_xlabel("initial tool-plane angle [deg]")
+    ax.set_ylabel("physical-plane improvement [deg]")
+    ax.legend(frameon=False)
+    ax.set_title("D0/D3: initial-angle response", fontsize=10)
+    return save(fig, "D_initial_angle.pdf")
 
 
 # Categorical slots 1 and 2 of the validated default palette. Two series only:
@@ -347,8 +424,15 @@ def main():
     print(f"{len(rows)} runs in metrics.csv")
 
     made = []
-    for fn in (fig_g2_convergence, fig_a2_stiffness, fig_b_pole_axis, fig_b_pole_surface,
-               fig_c2_nullspace):
+    for fn in (
+        fig_g2_convergence,
+        fig_a2_stiffness,
+        fig_d_axis_stiffness,
+        fig_d_initial_angle,
+        fig_b_pole_axis,
+        fig_b_pole_surface,
+        fig_c2_nullspace,
+    ):
         try:
             p = fn(rows)
             if p:

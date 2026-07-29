@@ -29,10 +29,13 @@ DERIVED = os.path.join(EXP, "derived")
 FIELDS = [
     "run_id", "repeat", "series",
     "git_commit", "timestamp",
-    "has_alignment_metric",
+    "has_alignment_metric", "has_alignment_components",
     "setup_present", "setup_duration_s",
     "tip_final_deg", "tip_max_deg", "tip_drift_last20pct_deg",
     "align_before_deg", "align_after_deg", "align_gain_deg",
+    "align_t1_before_deg", "align_t1_after_deg", "align_t1_improve_deg",
+    "align_t2_before_deg", "align_t2_after_deg", "align_t2_improve_deg",
+    "alignment_time90_s",
     "force_final_N", "force_max_N", "force_steady_N",
     "edge_travel_mm", "tau_max_Nm", "tau_norm_max_Nm",
     "report_tip_deg", "report_force_N", "report_phase_time_s",
@@ -45,6 +48,8 @@ FIELDS = [
     "jacobian_null_residual_max",
     "pole_x", "pole_y", "pole_z", "pole_normal_mm",
     "pole_cmd_x_mm", "pole_cmd_y_mm", "pole_cmd_z_mm",
+    "setup_KR_t1", "setup_KR_t2",
+    "tool_offset_t1_deg", "tool_offset_t2_deg",
     "align_improve_real_deg",
     "flags",
 ]
@@ -102,6 +107,29 @@ def pole_from_params(params_dir):
     return (vals["x"], vals["y"], vals["z"])
 
 
+def study_params(params_dir):
+    wanted = {
+        "setup_KR_tangent1": "setup_KR_t1",
+        "setup_KR_tangent2": "setup_KR_t2",
+        "tool_target_offset_tangent1_deg": "tool_offset_t1_deg",
+        "tool_target_offset_tangent2_deg": "tool_offset_t2_deg",
+    }
+    out = {}
+    for filename in ("common.txt", "sequence.txt"):
+        path = os.path.join(params_dir, filename)
+        if not os.path.exists(path):
+            continue
+        with open(path) as handle:
+            for raw in handle:
+                line = raw.split("#")[0].strip()
+                if "=" not in line:
+                    continue
+                key, value = [part.strip() for part in line.split("=", 1)]
+                if key in wanted:
+                    out[wanted[key]] = float(value)
+    return out
+
+
 def process_run(run_id, repeat_tag, run_dir):
     row = {k: "" for k in FIELDS}
     row["run_id"] = run_id
@@ -116,6 +144,8 @@ def process_run(run_id, repeat_tag, run_dir):
         flags.append("dirty-tree")
 
     params_dir = os.path.join(run_dir, "params_effective")
+    for key, value in study_params(params_dir).items():
+        row[key] = f"{value:.6f}"
     pole = pole_from_params(params_dir)
     normal = surface_normal_from_params(params_dir)
     if pole:
@@ -138,7 +168,10 @@ def process_run(run_id, repeat_tag, run_dir):
             for k, v in m.items():
                 if k in row:
                     row[k] = v
-            imp = sgc_log.alignment_improvement_deg(general)
+            if run_id.startswith("D") and m.get("has_alignment_metric"):
+                imp = m.get("align_gain_deg")
+            else:
+                imp = sgc_log.alignment_improvement_deg(general)
             if imp is not None:
                 row["align_improve_real_deg"] = f"{imp:.4f}"
 

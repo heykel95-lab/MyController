@@ -60,11 +60,17 @@ K_base = R_alignment_target * K_task * R_alignment_target^T
 
 The rotational constraint flags mask angle-axis error components in the same
 frame (not yaw/pitch/roll). The physical tool axis is configured in the EE
-frame, and alignment enforces:
+frame. With zero command offsets, alignment enforces:
 
 ```text
 R_desired * tool_axis_ee = tool_axis_target_sign * alignment_target_normal
 ```
+
+For controlled contact-misalignment experiments,
+`tool_target_offset_tangent1_deg` and
+`tool_target_offset_tangent2_deg` rotate this commanded tool axis relative to
+the plane. They do not change the plane point, plane normal, clearance
+geometry, surface-frame gains, or physical-plane alignment metric.
 
 ## Decoupled vs coupled stiffness
 
