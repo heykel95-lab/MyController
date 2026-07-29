@@ -1,0 +1,13 @@
+run_id: PILOT_COC_t1_rc_t2_m040
+repeat: r02
+observation_source: operator immediately after trial
+initial_contact: original leading edge
+final_contact: full face
+physical_alignment_result: success
+qualitative_speed: similar to r01
+
+Interpretation:
+The second -40 mm confirmation again reached full-face contact. The operator
+reported a speed similar to r01, consistent with the measured 90% alignment
+times of 1.52 s and 1.55 s. The controller metrics and physical observation
+therefore repeat, subject to the known approximately 2 deg mount play.
