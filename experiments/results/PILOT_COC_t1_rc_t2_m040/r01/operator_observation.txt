@@ -1,0 +1,18 @@
+run_id: PILOT_COC_t1_rc_t2_m040
+repeat: r01
+observation_source: operator immediately after trial
+initial_contact: original leading edge
+final_contact: full face
+physical_alignment_result: success
+qualitative_speed: slower than r_c,t2 = -60 mm
+qualitative_impedance: felt stiffer to operator
+
+Interpretation:
+The -40 mm lever retained the successful physical flattening observed at
+-60 mm. The slower impression agrees with the measured 90% alignment time:
+1.55 s at -40 mm versus 1.31 s at -60 mm. It is not caused by greater
+transformed stiffness. The smaller lever produces less coupling moment
+(m = -r_c x f), while its added rotational stiffness is lower because that
+term scales with r_c squared. The EE-inferred final error was 1.09 deg, lower
+than 1.32 deg at -60 mm. This makes -40 mm the current preferred compromise,
+subject to confirmation repeats and the known approximately 2 deg mount play.
