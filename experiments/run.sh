@@ -42,6 +42,7 @@ USES_PLANE_CALIBRATION=0
 TOOL_PROFILE=""
 TOOL_OVERLAY=""
 TOOL_REPORT=""
+TOOL_MOUNT_PROFILE=""
 USES_TOOL_CALIBRATION=0
 TOOL_MOUNT_STATUS=not_applicable
 TOOL_MOUNT_PLAY_BOUND_DEG=
@@ -158,6 +159,7 @@ if [ -f "$TOOL_PROFILE_FILE" ]; then
     esac
     TOOL_OVERLAY="$HERE/calibration/tools/$TOOL_PROFILE/tool_axis_overlay.txt"
     TOOL_REPORT="$HERE/calibration/tools/$TOOL_PROFILE/tool_axis_calibration_report.txt"
+    TOOL_MOUNT_PROFILE="$HERE/calibration/tools/$TOOL_PROFILE/mount_status.txt"
     USES_TOOL_CALIBRATION=1
     if [ ! -f "$TOOL_OVERLAY" ] || [ ! -f "$TOOL_REPORT" ]; then
       echo "ERROR: setup '$RUN_ID' requires calibrated tool profile '$TOOL_PROFILE'."
@@ -180,8 +182,13 @@ if [ "$USES_TOOL_CALIBRATION" -eq 1 ]; then
     echo "The alignment metric assumes the physical tool cannot rotate relative"
     echo "to the EE. A known movable mount may be recorded for an exploratory"
     echo "run, but its alignment result is flagged and excluded from primary means."
-    printf "Type  rigid  for a fixed mount,  play2  for known <=2 deg play: "
-    read -r TOOL_MOUNT_CONFIRM
+    if [ -f "$TOOL_MOUNT_PROFILE" ]; then
+        TOOL_MOUNT_CONFIRM="$(tr -d '[:space:]' < "$TOOL_MOUNT_PROFILE")"
+        echo "Using stored mount profile: $TOOL_MOUNT_CONFIRM"
+    else
+        printf "Type  rigid  for a fixed mount,  play2  for known <=2 deg play: "
+        read -r TOOL_MOUNT_CONFIRM
+    fi
     case "$TOOL_MOUNT_CONFIRM" in
       rigid)
         TOOL_MOUNT_STATUS=rigid
@@ -241,6 +248,9 @@ if [ "$USES_TOOL_CALIBRATION" -eq 1 ]; then
   cp "$TOOL_PROFILE_FILE" "$OUT/"
   cp "$TOOL_OVERLAY" "$OUT/tool_axis_calibration_overlay.txt"
   cp "$TOOL_REPORT" "$OUT/tool_axis_calibration_report.txt"
+  if [ -f "$TOOL_MOUNT_PROFILE" ]; then
+    cp "$TOOL_MOUNT_PROFILE" "$OUT/tool_mount_status.txt"
+  fi
 fi
 
 echo "--- starting controller (drive it as usual; 'e'+Enter to stop) ---"

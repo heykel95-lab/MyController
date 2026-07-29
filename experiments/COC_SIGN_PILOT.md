@@ -40,7 +40,8 @@ Run one trial at a time:
 ./experiments/run_coc_sign_pilot.sh next
 ```
 
-Select `play2` for the current mount. Do not manually straighten the tool
+The stored grinding-tool mount profile automatically selects `play2` and
+records the known 2 deg play bound. Do not manually straighten the tool
 between the two signs unless required for safety. After each trial, record:
 
 - initially loaded physical edge;
