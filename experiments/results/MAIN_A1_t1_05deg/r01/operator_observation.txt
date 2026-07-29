@@ -1,0 +1,14 @@
+run_id: MAIN_A1_t1_05deg
+repeat: r01
+observation_source: operator immediately after trial
+contact_state: one-sided
+contact_side: right side, positive y_EE direction
+final_face_state: not fully flat
+
+Interpretation:
+The case intentionally began with a 5 deg t1 tool-plane offset, so initial
+one-sided contact is expected. The EE-inferred error decreased from 2.83 deg
+to 2.05 deg during set-up, but the operator observed that full-face contact
+was not reached. Because the mount had known play of up to approximately
+2 deg, this run is retained as a reproducible controller response but is not
+used as an independent measurement of the physical tool-face angle.
