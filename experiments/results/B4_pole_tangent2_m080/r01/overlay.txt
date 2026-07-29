@@ -1,0 +1,10 @@
+# B4_pole_tangent2_m080
+# Applied on top of surface_grinding_controller/params/.
+# Only keys listed here differ from the nominal set.
+use_coupled_stiffness = 1
+coupled_use_block_diagonal = 0
+coupled_pole_manual = 1
+coupled_pole_freeze_at_contact = 1
+coupled_pole_from_edge_x = 0.006972
+coupled_pole_from_edge_y = -0.080000
+coupled_pole_from_edge_z = 0.079696

@@ -130,6 +130,7 @@ def fig_a2_stiffness(rows):
 # identity as well as hue so the figure survives greyscale printing.
 SERIES_B2 = "#2a78d6"
 SERIES_B3 = "#eb6834"
+SERIES_B4 = "#1baf7a"   # slot 3; first three slots validate all-pairs
 INK = "#0b0b0b"
 INK_MUTED = "#52514e"
 
@@ -165,15 +166,17 @@ def fig_b_pole_axis(rows):
     the same runs against the two pole components, which is why this is small
     multiples and not a second y-axis.
     """
-    series = (("B2_pole_normal", "B2: swept along the normal", SERIES_B2, "o"),
-              ("B3_pole_tangent", "B3: swept along the tangent", SERIES_B3, "^"))
+    series = (("B2_pole_normal", "B2: swept along normal n", SERIES_B2, "o"),
+              ("B3_pole_tangent_", "B3: swept along tangent $t_1$", SERIES_B3, "^"),
+              ("B4_pole_tangent2", "B4: swept along tangent $t_2$", SERIES_B4, "s"))
     if not any(_pole_points(rows, p, "pole_cmd_x_mm")[0].size for p, *_ in series):
         return None
 
-    fig, axes = plt.subplots(1, 2, figsize=(8.6, 3.4), sharey=True)
+    fig, axes = plt.subplots(1, 3, figsize=(11.0, 3.4), sharey=True)
     for ax, xkey, xlabel in (
-            (axes[0], "pole_cmd_x_mm", "pole offset along tangent x [mm]"),
-            (axes[1], "pole_cmd_z_mm", "pole offset along normal z [mm]")):
+            (axes[0], "pole_cmd_x_mm", "pole offset along $t_1$ [mm]"),
+            (axes[1], "pole_cmd_y_mm", "pole offset along $t_2$ [mm]"),
+            (axes[2], "pole_cmd_z_mm", "pole offset along normal [mm]")):
         allx, ally = [], []
         for prefix, label, color, marker in series:
             x, y = _pole_points(rows, prefix, xkey)
@@ -200,7 +203,7 @@ def fig_b_pole_axis(rows):
     axes[0].set_ylabel("alignment gained toward the real plane [deg]",
                        color=INK_MUTED)
     axes[0].legend(fontsize=8, loc="lower right", frameon=False)
-    fig.suptitle("B: the tangential pole component governs alignment; "
+    fig.suptitle("B: both in-plane pole components govern alignment; "
                  "the normal component does not", fontsize=10, color=INK)
     return save(fig, "B_pole_component.pdf")
 

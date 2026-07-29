@@ -173,3 +173,53 @@ strip pinches along each edge of the face.
 `python3 experiments/analysis/alignment_vs_real_plane.py` extended to the B4
 tags, and the two-panel figure regenerated with t2 as a third panel. Noise
 floor from G3: differences below ~0.4 deg are not claimable.
+
+### Outcome — refuted, and not monotonic
+
+| setup | pole_y [mm] | improvement | predicted rank | actual rank |
+|---|---|---|---|---|
+| `m080` | -91.5 | **-6.54 +/- 0.36** | BEST | worst |
+| `m040` | -41.0 | +1.78 +/- 0.03 | 2nd | 3rd |
+| `p040` | +39.4 | **+2.93 +/- 0.21** | 3rd | **best** |
+| `p080` | +79.5 | +2.66 +/- 0.06 | WORST | 2nd |
+
+Range 9.48 deg against a 0.59 deg noise floor, so t2 unambiguously matters --
+the flat-response outcome is excluded. The predicted ordering is inverted at
+the extremes, which makes this the second refutation of the placement rule, on
+a second axis, in the same direction: positive offsets win on both t1 and t2.
+
+Unlike t1, t2 is **not monotonic**. p040 beats p080, so there is an interior
+optimum. Fitting all 48 pole runs with a quadratic in t2 puts it at
+**+34 mm** and lifts the model to R^2 = 0.917.
+
+### What the three axes now say together
+
+    pole_x (t1) only          R^2 = 0.586   +0.115 deg/mm
+    pole_y (t2) only          R^2 = 0.157   +0.048 deg/mm
+    pole_z (n)  only          R^2 = 0.008   -0.005 deg/mm
+    x and y                   R^2 = 0.774
+    x, y and z                R^2 = 0.833   (z contributes -0.014 deg/mm)
+    x, y and y^2              R^2 = 0.917   t2 optimum at +34 mm
+
+Both in-plane components govern the alignment and the normal component does
+not. t1 is roughly 2.4x more influential per millimetre than t2 and was still
+rising at the end of its tested range; t2 has a located optimum. The earlier
+claim that t1 alone explains the outcome at R^2 = 0.907 held only while t2 was
+pinned at zero -- with t2 varied, t1 alone drops to 0.586.
+
+### Verdict on the placement rule
+
+The experimenter reports the contacting edge at **-y_EE**, and the EE y axis
+maps to base -y (offset_ee = [0, 60, 20] mm resolves to [-6.2, -59.8, -39.6] mm
+in base), so the contact is at **base +y**. The best pole is also at base +y.
+
+**The compliance centre belongs on the SAME side as the contacting edge, not
+opposite it.** Both sweeps agree.
+
+One caveat is unresolved and should be settled before this is written as a
+general rule: the reported contact was described as a long 120 mm side, but the
+long sides lie at x = +/-20 mm, not at +/-y. So either the contacting edge is a
+short 40 mm end at -y_EE, or it is a long side at -x_EE and the axis in the
+report is a slip. The measured relationship is unaffected either way -- positive
+offsets win on both axes -- but which edge contacts decides how the rule should
+be phrased.
