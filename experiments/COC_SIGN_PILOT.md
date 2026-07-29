@@ -13,7 +13,7 @@ surface-frame lever:
 |---|---:|---|
 | `PILOT_COC_t1_rc_t2_p060` | +60 mm | Same as `MAIN_A1_t1_05deg` |
 | `PILOT_COC_t1_rc_t2_m060` | -60 mm | Same as `MAIN_A1_t1_05deg` |
-| `PILOT_COC_t1_rc_t2_m040` | -40 mm | Post-sign refinement |
+| `PILOT_COC_t1_rc_t2_m040` | -40 mm | Post-sign refinement, 3 repeats |
 
 The controller convention is
 
@@ -63,6 +63,7 @@ Use the sign that:
 The first two trials are the sign check. The -60 mm case produced qualitative
 full-face contact but crossed zero in the EE-inferred t1 component. The -40 mm
 case is the interpolation-based refinement: it tests whether full-face contact
-is retained with less EE overshoot. This is still not the final
-centre-position optimization; repeat the selected magnitude in the main
-Case-D campaign.
+is retained with less EE overshoot. Its first repeat achieved full-face contact
+with a lower final EE-inferred error but a slightly slower response. Two
+confirmation repeats establish whether that compromise is repeatable before it
+is adopted in the main campaign.

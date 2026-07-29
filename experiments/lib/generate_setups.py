@@ -337,7 +337,7 @@ for rc_t2_mm in (-60, -40, 60):
         "sign that reduces the measured t1 error and moves the physical "
         "contact from the initially loaded edge toward full-face contact.",
         overrides,
-        repeats=1,
+        repeats=3 if rc_t2_mm == -40 else 1,
     )
 
 # Case D coarse centre-of-compliance sweep. These are generated now for
