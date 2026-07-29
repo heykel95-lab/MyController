@@ -1,0 +1,20 @@
+run_id: PILOT_COC_t1_rc_t2_m060
+repeat: r01
+observation_source: operator immediately after trial
+initial_contact: original leading edge
+final_contact: full face
+physical_alignment_result: success
+
+Observation:
+The original contact edge remained in contact while the opposite edge moved
+down and also contacted the plane. The tool appeared physically flat at the
+end of set-up.
+
+Interpretation:
+The active -60 mm r_c,t2 lever produced the helpful compliance-centre sign and
+achieved the intended qualitative full-face alignment. The EE-inferred t1
+component crossed from -2.72 deg to +1.15 deg, but this apparent overshoot
+cannot be interpreted as the physical face angle because the mount permits up
+to approximately 2 deg of unobserved tool rotation. Retain both the numerical
+EE response and this operator-observed contact state; do not replace either
+with the other.
