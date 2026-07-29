@@ -1,0 +1,15 @@
+run_id: PILOT_COC_t1_rc_t2_p060
+repeat: r01
+observation_source: operator immediately after trial
+contact_state: one-sided
+contact_side: left side
+final_face_state: not fully flat
+
+Interpretation:
+The active +60 mm r_c,t2 lever did not produce full-face alignment. Under the
+controller convention r_c = p_TCP - p_c, this lever places the virtual
+compliance centre on the negative-t2 side of the TCP. The measured t1
+component improved by 0.48 deg, less than the 0.77--0.85 deg observed in the
+two decoupled MAIN_A1 controls. Do not increase this lever magnitude before
+testing the prepared opposite sign. Physical face angle remains uncertain
+because the mount has known play of up to approximately 2 deg.
