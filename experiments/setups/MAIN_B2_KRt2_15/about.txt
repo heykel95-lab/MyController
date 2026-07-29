@@ -1,0 +1,8 @@
+run_id:   MAIN_B2_KRt2_15
+repeats:  3
+
+purpose:
+  Case B: +10 deg about t2; vary only K_R,t2 to 15 N m/rad.
+
+pass criterion:
+  Compare with the corresponding Case-A 10 deg reference at 5 N m/rad. The changed signed axis component must exceed the repeatability interval before it is attributed to K_R.

@@ -57,8 +57,7 @@ void printSurfaceFrameBreakdown(const Mat3& R_alignment_target,
 
 void reportSetUpResult(const Parameters& params,
                        const Mat3& R_alignment_target,
-                       const SetUpReport& r,
-                       std::vector<std::pair<std::string, std::string>>* parameter_updates) {
+                       const SetUpReport& r) {
   const double actual_tip_deg =
       (180.0 / M_PI) * orientationError(r.R_EE, r.R_contact_start).norm();
   const Vec3 edge_from_contact_mm = 1000.0 * (r.tool_contact_point - r.first_contact_point);
@@ -101,107 +100,43 @@ void reportSetUpResult(const Parameters& params,
 
   printSurfaceFrameBreakdown(R_alignment_target, r);
 
-  // One exact axis for the whole tipping motion, computed only from the start
-  // and end edge pose -- unlike a per-cycle instantaneous pole it is not an
-  // average of noisy samples and does not depend on which cycle looked cleanest.
-  const FiniteScrewAxis finite_axis = computeFiniteScrewAxis(
-      r.first_contact_point, r.R_contact_start, r.tool_contact_point, r.R_EE);
-  if (finite_axis.valid) {
-    printf("\nfinite_axis: angle=%.1f deg | axis_from_edge=[%+.1f, %+.1f, %+.1f] mm | dir=[%+.3f, %+.3f, %+.3f] | pitch=%+.1f mm/rad\n",
-           (180.0 / M_PI) * finite_axis.angle,
-           1000.0 * finite_axis.axis_point_from_start(0),
-           1000.0 * finite_axis.axis_point_from_start(1),
-           1000.0 * finite_axis.axis_point_from_start(2),
-           finite_axis.axis_dir(0), finite_axis.axis_dir(1), finite_axis.axis_dir(2),
-           1000.0 * finite_axis.pitch);
-  } else {
-    printf("\nfinite_axis: angle=%.1f deg, too small for a well-defined axis\n",
-           (180.0 / M_PI) * finite_axis.angle);
-  }
-
   if (!params.print_coupled_diagnostics) {
     return;
   }
 
-  // ================================================================
-  // Coupled (pole-based) stiffness
-  // ================================================================
-  // The same diagonal set-up spring is expressed at the tool tip for two poles
-  // via K_TCP = Ad(r_c)^T K_pole Ad(r_c), r_c = TCP - pole:
-  //   (A) the measured finite screw axis -> a diagnostic of the motion.
-  //   (B) the manually placed pole       -> the spring actually commanded in
-  //       manual-pole mode.
-  // Each result is ONE 6x6 (rows fx..mz = wrench, cols tx..rz = displacement);
-  // the off-diagonal quadrants are the coupling.
+  // Report only the deliberately commanded centre of compliance. No motion-
+  // inferred axis or gain is used to construct the controller.
   const Mat6x6 K_pole = blockDiagonal(r.Kp, r.KR);
   const Mat6x6 D_pole = blockDiagonal(r.Dp, r.DR);
-
-  // Pole (A): the point on the measured axis nearest the contact edge. Without
-  // a valid axis, fall back to the edge itself (r_c = TCP - edge).
-  const Vec3 pole_measured =
-      finite_axis.valid
-          ? nearestPointOnAxis(r.tool_contact_point,
-                               r.first_contact_point + finite_axis.axis_point_from_start,
-                               finite_axis.axis_dir)
-          : r.tool_contact_point;
-  const Vec3 r_c_measured = r.p_EE - pole_measured;
-  const Mat6x6 K_tcp_measured = adjointTransformedGain(K_pole, r_c_measured);
-  const Mat6x6 D_tcp_measured = adjointTransformedGain(D_pole, r_c_measured);
-
-  // Pole (B): the commanded manual pole, referenced either to the frozen
-  // first-contact pose or to the live edge, matching what the control loop does.
   const Vec3 edge_ref = params.coupled_pole_freeze_at_contact ? r.first_contact_point
                                                               : r.tool_contact_point;
   const Vec3 tcp_ref = params.coupled_pole_freeze_at_contact ? r.first_contact_tcp
                                                              : r.p_EE;
-  const Vec3 pole_manual = edge_ref + params.coupled_pole_from_edge;
-  const Vec3 r_c_manual = tcp_ref - pole_manual;
-  const Mat6x6 K_tcp_manual = adjointTransformedGain(K_pole, r_c_manual);
-  const Mat6x6 D_tcp_manual = adjointTransformedGain(D_pole, r_c_manual);
-
-  if (finite_axis.valid && parameter_updates != nullptr &&
-      !params.use_coupled_stiffness) {
-    parameter_updates->emplace_back("coupled_gains_saved", "1");
-    appendMat6ParameterUpdates(*parameter_updates, "coupled_K_tcp", K_tcp_measured);
-    appendMat6ParameterUpdates(*parameter_updates, "coupled_D_tcp", D_tcp_measured);
-    printf("(coupled_K_tcp/coupled_D_tcp queued for the next run)\n");
-  }
-
-  printf("\n=== Coupled stiffness from the measured pole ===\n");
-  printf("source spring K_pole/D_pole (diagonal, from parameters):\n");
-  printGainVec("  Kp [N/m]    ", params.setup_Kp_diag);
-  printGainVec("  KR [Nm/rad] ", params.setup_KR_diag);
-  printGainVec("  Dp [Ns/m]   ", params.setup_Dp_diag);
-  printGainVec("  DR [Nms/rad]", params.setup_DR_diag);
-
-  const bool manual_pole_commanded = params.use_coupled_stiffness &&
-                                     !params.coupled_use_block_diagonal &&
-                                     params.coupled_pole_manual;
-  printf("\npoles compared (lever r_c = TCP - pole):\n");
-  if (finite_axis.valid) {
-    printf("  (A) measured axis : angle=%.1f deg | pitch=%+.1f mm/rad\n",
-           (180.0 / M_PI) * finite_axis.angle, 1000.0 * finite_axis.pitch);
+  Vec3 r_c;
+  if (params.coupled_use_direct_rc_surface) {
+    r_c = R_alignment_target * params.coupled_rc_surface;
   } else {
-    printf("  (A) measured axis : not valid (rotation too small) -> pole at the edge\n");
+    r_c = tcp_ref - (edge_ref + params.coupled_pole_from_edge);
   }
-  printVec3Mm("      pole_from_edge", pole_measured - r.tool_contact_point);
-  printVec3Mm("      r_c           ", r_c_measured);
-  printf("  (B) manual pole   : %s, %s reference\n",
-         manual_pole_commanded ? "COMMANDED this run" : "comparison only",
-         params.coupled_pole_freeze_at_contact ? "contact" : "live");
-  printVec3Mm("      pole_from_edge", pole_manual - r.tool_contact_point);
-  printVec3Mm("      r_c           ", r_c_manual);
-  printVec3Mm("      r_c(B)-r_c(A) ", r_c_manual - r_c_measured);
+  const Vec3 pole = tcp_ref - r_c;
+  const Mat6x6 K_tcp = adjointTransformedGain(K_pole, r_c);
+  const Mat6x6 D_tcp = adjointTransformedGain(D_pole, r_c);
+
+  printf("\n=== Commanded centre of compliance ===\n");
+  printf("lever convention: r_c = p_TCP - p_c\n");
+  printf("parameterization: %s\n",
+         params.coupled_use_direct_rc_surface
+             ? "direct [tangent1,tangent2,normal]"
+             : "legacy base-frame pole-from-edge");
+  printVec3Mm("  r_c base", r_c);
+  printVec3Mm("  r_c [t1,t2,n]", R_alignment_target.transpose() * r_c);
+  printVec3Mm("  pole_from_edge", pole - edge_ref);
 
   printf("\nK_TCP = Ad^T K_pole Ad  [rows fx..mz | cols tx..rz]:\n");
-  printSpatialGain6("  (A) measured axis", K_tcp_measured);
-  printSpatialGainEigenvalues("  (A) K_TCP", K_tcp_measured);
-  printSpatialGain6("  (B) manual pole", K_tcp_manual);
-  printSpatialGainEigenvalues("  (B) K_TCP", K_tcp_manual);
+  printSpatialGain6("  commanded", K_tcp);
+  printSpatialGainEigenvalues("  K_TCP", K_tcp);
 
   printf("\nD_TCP = Ad^T D_pole Ad:\n");
-  printSpatialGain6("  (A) measured axis", D_tcp_measured);
-  printSpatialGainEigenvalues("  (A) D_TCP", D_tcp_measured);
-  printSpatialGain6("  (B) manual pole", D_tcp_manual);
-  printSpatialGainEigenvalues("  (B) D_TCP", D_tcp_manual);
+  printSpatialGain6("  commanded", D_tcp);
+  printSpatialGainEigenvalues("  D_TCP", D_tcp);
 }

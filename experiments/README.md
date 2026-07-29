@@ -33,11 +33,13 @@ archives both CSVs plus the effective parameters, git commit and terminal
 transcript into `results/B2_pole_normal_p080/r01/`, then restores `params/`.
 Drive the controller exactly as usual; stop with `e`+Enter.
 
-## Calibrated-plane axis study
+## Main calibrated-plane study
 
-The new D-series experiments keep the physical plane and the commanded tool
-orientation separate. First measure at least three non-collinear physical
-probe points in base coordinates. Use points at least 50 mm apart. Mark the
+The `MAIN_*` experiments keep the physical plane and commanded tool orientation
+separate. The full case matrix and conventions are in
+[`AXIS_STUDY.md`](AXIS_STUDY.md). Measure four physical probe points in base
+coordinates: P1--P3 fit the plane and P4 validates it. Use fit points at least
+50 mm apart. Mark the
 \(+X_{\mathrm{EE}},+Y_{\mathrm{EE}}\) corner of the rectangular tool face and
 touch that same corner to every point. With the robot stationary at each
 point, run:
@@ -58,8 +60,8 @@ the EE pose to the configured tool-corner position and appends it to
 `plane_points.csv`. If a different physical probe is used, enter its calibrated
 base-frame coordinates in a copy of `plane_points.example.csv` instead.
 
-The script fits the plane from P1--P3, checks any additional points such as P4,
-and writes `active_plane_overlay.txt`. Every D-series run applies this
+The script fits the plane from P1--P3, uses P1-to-P2 as \(+t_1\), checks P4,
+and writes `active_plane_overlay.txt`. Every `MAIN_*` run applies this
 calibration before its own setup overlay and archives both the effective
 parameters and calibration report.
 
@@ -70,20 +72,15 @@ Run the zero-offset control first:
 ./experiments/run_axis_study.sh next
 ```
 
-Do not continue if its first-contact alignment angle is not near zero or if a
-held-out plane point lies more than 1 mm from the fitted plane. Then run D1
-(\(t_1\)-specific stiffness), D2 (\(t_2\)-specific stiffness), and D3
-(5-degree angle checks). D1 and D2 use a 10-degree command offset and vary only
-the stiffness about the excited tangent; the orthogonal tangent remains at
-5 Nm/rad. The guided runner executes one robot trial at a time, selects the
-next missing repeat, archives it through `run.sh`, and refreshes metrics and
-plots after every successful run.
+Do not continue if the zero-offset first-contact alignment angle is not close
+to zero or if a held-out plane point lies more than 1 mm from the fitted plane.
+The guided runner executes one robot trial at a time, selects the next missing
+repeat, verifies the exact gain matrices without connecting to the robot,
+archives the trial through `run.sh`, and refreshes metrics and plots.
 
-**The backup is not optional.** After a set-up phase the controller rewrites
-`coupled_K_tcp` / `coupled_D_tcp` into `params/sequence.txt`. Without the
-backup/restore, every run would inherit the previous run's auto-written
-matrices and the sweep would be measuring its own history. The restore runs
-from a shell trap, so Ctrl-C and libfranka reflex exits are also covered.
+**The backup is not optional.** It guarantees that no setup overlay contaminates
+the next trial. Restoration runs from a shell trap, so Ctrl-C and libfranka
+reflex exits are also covered.
 
 ## After a batch
 
@@ -102,7 +99,6 @@ Flags currently emitted:
 | Flag | Meaning |
 |---|---|
 | `not-converged` | Tip still moving >10% of its final value over the last 20% of the phase. The number is a transient, not an equilibrium. |
-| `axis-untrustworthy` | Finite screw axis computed from a rotation below 2°, where the axis position divides by a near-zero angle. |
 | `task-disturbed` | Cartesian position drifted >1 mm during a hold — the null-space projector is not task-invariant. |
 | `tip-mismatch` | CSV disagrees with the controller's printed report. One of them is wrong; do not use the run. |
 | `dirty-tree` | Recorded with uncommitted changes — provenance is incomplete. |

@@ -1,0 +1,8 @@
+run_id:   MAIN_A1_t1_05deg
+repeats:  3
+
+purpose:
+  Case A: calibrated plane with independent tool command offsets (t1=+5 deg, t2=+0 deg).
+
+pass criterion:
+  A0 must start close to zero physical-plane alignment error. The nonzero cases establish the measured first-contact angle and the fraction removed within the 5 s set-up.

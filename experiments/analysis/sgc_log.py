@@ -103,14 +103,6 @@ def alignment_improvement_deg(csv_path, plane=None):
     return angle_between_deg(n_cfg, n_real) - angle_between_deg(final, n_real)
 
 
-# Below this rotation the finite screw axis is numerically meaningless: the
-# axis position divides a displacement by a near-zero angle. The controller's
-# own guard is 1e-3 rad (0.057 deg), which is far too permissive -- a 0.6 deg
-# suppressed run passes it and yields an axis hundreds of mm off. We use a
-# defensible reporting threshold instead.
-MIN_TRUSTWORTHY_ANGLE_DEG = 2.0
-
-
 def read_csv(path, columns=None):
     """Read a controller CSV into {name: 1-D array}.
 
@@ -379,35 +371,12 @@ def parse_setup_report(terminal_log_path):
                         out["report_align_after_deg"] = float(part[6:].split()[0])
                     elif part.startswith("gain="):
                         out["report_align_gain_deg"] = float(part[5:].split()[0])
-            elif line.startswith("finite_axis:"):
-                if "too small" in line:
-                    out["axis_valid"] = 0
-                    body = line.split("angle=")[1]
-                    out["axis_angle_deg"] = float(body.split()[0])
-                else:
-                    body = line.replace("finite_axis:", "")
-                    for part in body.split("|"):
-                        part = part.strip()
-                        if part.startswith("angle="):
-                            out["axis_angle_deg"] = float(part[6:].split()[0])
-                        elif part.startswith("axis_from_edge="):
-                            vec = part.split("[")[1].split("]")[0]
-                            v = [float(x) for x in vec.split(",")]
-                            out["axis_from_edge_mm"] = float(
-                                np.linalg.norm(v))
-                            out["axis_from_edge_x_mm"] = v[0]
-                            out["axis_from_edge_y_mm"] = v[1]
-                            out["axis_from_edge_z_mm"] = v[2]
-                        elif part.startswith("pitch="):
-                            out["axis_pitch_mm_per_rad"] = float(part[6:].split()[0])
-                    out["axis_valid"] = 1
-
-    # Apply the honest trustworthiness threshold on top of the controller's
-    # far more permissive internal guard.
-    if "axis_angle_deg" in out:
-        out["axis_trustworthy"] = int(
-            out.get("axis_valid", 0) == 1
-            and out["axis_angle_deg"] >= MIN_TRUSTWORTHY_ANGLE_DEG)
+            elif line.startswith("r_c [t1,t2,n]"):
+                vec = line.split("[", 2)[2].split("]")[0]
+                values = [float(value) for value in vec.split(",")]
+                (out["report_rc_t1_mm"],
+                 out["report_rc_t2_mm"],
+                 out["report_rc_n_mm"]) = values
     return out
 
 

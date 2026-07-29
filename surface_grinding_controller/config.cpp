@@ -57,61 +57,6 @@ double parseDoubleValue(const std::string& input) {
   return sign * numerator * M_PI / denominator;
 }
 
-void updateParameterValues(
-    const std::string& filename,
-    const std::vector<std::pair<std::string, std::string>>& updates) {
-  std::ifstream in(filename);
-  if (!in.is_open()) {
-    return;
-  }
-  std::vector<std::string> lines;
-  std::string line;
-  while (std::getline(in, line)) {
-    lines.push_back(line);
-  }
-  in.close();
-
-  for (auto& l : lines) {
-    const auto comment_pos = l.find('#');
-    const std::string code_part =
-        (comment_pos != std::string::npos) ? l.substr(0, comment_pos) : l;
-    const auto eq_pos = code_part.find('=');
-    if (eq_pos == std::string::npos) {
-      continue;
-    }
-    const std::string key = trim(code_part.substr(0, eq_pos));
-    for (const auto& update : updates) {
-      if (key == update.first) {
-        const std::string comment_part =
-            (comment_pos != std::string::npos) ? l.substr(comment_pos) : "";
-        l = code_part.substr(0, eq_pos) + "= " + update.second +
-            (comment_part.empty() ? "" : ("  " + comment_part));
-        break;
-      }
-    }
-  }
-
-  std::ofstream out(filename, std::ios::trunc);
-  for (const auto& out_line : lines) {
-    out << out_line << "\n";
-  }
-}
-
-void appendMat6ParameterUpdates(
-    std::vector<std::pair<std::string, std::string>>& updates,
-    const std::string& prefix,
-    const Mat6x6& matrix) {
-  char key[64];
-  char value[32];
-  for (int r = 0; r < 6; ++r) {
-    for (int c = 0; c < 6; ++c) {
-      snprintf(key, sizeof(key), "%s_%d%d", prefix.c_str(), r, c);
-      snprintf(value, sizeof(value), "%.9g", matrix(r, c));
-      updates.emplace_back(key, value);
-    }
-  }
-}
-
 NullspaceMode parseNullspaceMode(const std::string& input, NullspaceMode fallback) {
   std::string value = removeSpaces(input);
   std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
@@ -197,18 +142,6 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
                 getDouble(key + "_tangent2", def(1)),
                 getDouble(key + "_normal", def(2)));
   };
-  auto getMat6 = [&](const std::string& prefix, const Mat6x6& def) {
-    Mat6x6 matrix = def;
-    char key[64];
-    for (int r = 0; r < 6; ++r) {
-      for (int c = 0; c < 6; ++c) {
-        snprintf(key, sizeof(key), "%s_%d%d", prefix.c_str(), r, c);
-        matrix(r, c) = getDouble(key, matrix(r, c));
-      }
-    }
-    return matrix;
-  };
-
   // ---- robot, logging, debug ----
   p.robot_ip = getString("robot_ip", p.robot_ip);
   p.experiment_duration = getDouble("experiment_duration", p.experiment_duration);
@@ -338,6 +271,12 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
   p.setup_push_end = getDouble("setup_push_end", p.setup_push_end);
   p.setup_Kp_diag = getVec3Xyz("setup_Kp", p.setup_Kp_diag);
   p.setup_Dp_diag = getVec3Xyz("setup_Dp", p.setup_Dp_diag);
+  p.setup_translation_surface_frame =
+      getBool("setup_translation_surface_frame", p.setup_translation_surface_frame);
+  p.setup_Kp_surface_diag =
+      getVec3Task("setup_Kp_surface", p.setup_Kp_surface_diag);
+  p.setup_Dp_surface_diag =
+      getVec3Task("setup_Dp_surface", p.setup_Dp_surface_diag);
   p.setup_KR_diag = getVec3Task("setup_KR", p.setup_KR_diag);
   p.setup_DR_diag = getVec3Task("setup_DR", p.setup_DR_diag);
   p.setup_auto_damping = getBool("setup_auto_damping", p.setup_auto_damping);
@@ -363,12 +302,12 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
   p.coupled_use_block_diagonal =
       getBool("coupled_use_block_diagonal", p.coupled_use_block_diagonal);
   p.coupled_pole_manual = getBool("coupled_pole_manual", p.coupled_pole_manual);
+  p.coupled_use_direct_rc_surface =
+      getBool("coupled_use_direct_rc_surface", p.coupled_use_direct_rc_surface);
+  p.coupled_rc_surface = getVec3Task("coupled_rc", p.coupled_rc_surface);
   p.coupled_pole_from_edge = getVec3Xyz("coupled_pole_from_edge", p.coupled_pole_from_edge);
   p.coupled_pole_freeze_at_contact =
       getBool("coupled_pole_freeze_at_contact", p.coupled_pole_freeze_at_contact);
-  p.coupled_gains_saved = getBool("coupled_gains_saved", p.coupled_gains_saved);
-  p.coupled_K_tcp = getMat6("coupled_K_tcp", p.coupled_K_tcp);
-  p.coupled_D_tcp = getMat6("coupled_D_tcp", p.coupled_D_tcp);
 
   // ---- nullspace ----
   p.use_nullspace_optimization =

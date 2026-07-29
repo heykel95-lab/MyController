@@ -115,57 +115,6 @@ double setUpPush(const Parameters& params,
 }
 
 // ====================================================================
-// Screw-axis geometry
-// ====================================================================
-
-Vec3 nearestPointOnAxis(
-    const Vec3& point,
-    const Vec3& axis_point,
-    const Vec3& axis_direction) {
-  const double axis_norm = axis_direction.norm();
-  if (axis_norm <= 1e-8) {
-    return axis_point;
-  }
-  const Vec3 axis_unit = axis_direction / axis_norm;
-  return axis_point + (point - axis_point).dot(axis_unit) * axis_unit;
-}
-
-FiniteScrewAxis computeFiniteScrewAxis(
-    const Vec3& p_start,
-    const Mat3& R_start,
-    const Vec3& p_end,
-    const Mat3& R_end) {
-  FiniteScrewAxis result;
-  // R_rel maps a vector expressed in the start orientation to the same
-  // body-fixed vector expressed in the end orientation, in base coordinates:
-  // (p_end - axis_point) = R_rel * (p_start - axis_point).
-  const Mat3 R_rel = R_end * R_start.transpose();
-  const Eigen::AngleAxisd angle_axis(R_rel);
-  const double theta = angle_axis.angle();
-  result.angle = theta;
-  // Below this angle the net rotation is too small to fix an axis location: the
-  // displacement is dominated by translation, and the formula below divides by
-  // sin(theta/2).
-  constexpr double kMinUsefulAngle = 1e-3;
-  if (theta < kMinUsefulAngle) {
-    return result;
-  }
-  const Vec3 n_hat = angle_axis.axis();
-  const Vec3 d = p_end - p_start;
-  const double h_theta = n_hat.dot(d);
-  result.pitch = h_theta / theta;
-  // g is the component of the displacement perpendicular to the axis -- the
-  // part that has to come from rotating about an axis offset from p_start,
-  // not from translation along the axis itself.
-  const Vec3 g = d - h_theta * n_hat;
-  result.axis_point_from_start =
-      0.5 * g + 0.5 * (std::cos(0.5 * theta) / std::sin(0.5 * theta)) * n_hat.cross(g);
-  result.axis_dir = n_hat;
-  result.valid = true;
-  return result;
-}
-
-// ====================================================================
 // Spatial (6x6) gains
 // ====================================================================
 

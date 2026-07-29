@@ -35,6 +35,9 @@ METRICS = os.path.join(EXP, "derived", "metrics.csv")
 FIGURES = os.path.join(EXP, "figures")
 
 plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "Times", "Nimbus Roman No9 L", "DejaVu Serif"],
+    "mathtext.fontset": "stix",
     "font.size": 9,
     "axes.grid": True,
     "grid.alpha": 0.3,
@@ -200,6 +203,210 @@ def fig_d_initial_angle(rows):
     ax.legend(frameon=False)
     ax.set_title("D0/D3: initial-angle response", fontsize=10)
     return save(fig, "D_initial_angle.pdf")
+
+
+def _main_rows(rows, prefixes):
+    return [
+        row for row in rows
+        if row["run_id"].startswith(prefixes)
+    ]
+
+
+def fig_main_initial_angle(rows):
+    selected = _main_rows(rows, ("MAIN_A",))
+    if not selected:
+        return None
+    fig, ax = plt.subplots(figsize=(5.6, 3.5))
+    for axis, ids, color, marker in (
+        (1, ("MAIN_A0_", "MAIN_A1_", "MAIN_A2_"),
+         "C0", "o"),
+        (2, ("MAIN_A0_", "MAIN_A3_", "MAIN_A4_"),
+         "C1", "s"),
+    ):
+        buckets = {}
+        for row in selected:
+            if not row["run_id"].startswith(ids):
+                continue
+            x = abs(fnum(row, f"align_t{axis}_before_deg"))
+            y = fnum(row, f"align_t{axis}_improve_deg")
+            if np.isnan(x) or np.isnan(y):
+                continue
+            buckets.setdefault(x, {"good": [], "bad": []})
+            buckets[x]["bad" if data_suspect(row) else "good"].append(y)
+        errorbar_from_buckets(
+            ax, buckets, rf"$t_{axis}$ excitation", color, marker=marker
+        )
+    ax.axhline(0.0, color="0.45", linewidth=1)
+    ax.set_xlabel("measured initial tool-plane angle [deg]")
+    ax.set_ylabel("excited-axis error removed [deg]")
+    ax.legend(frameon=False)
+    ax.set_title("Case A: initial-angle response", fontsize=10)
+    return save(fig, "MAIN_A_angle.pdf")
+
+
+def fig_main_rotational_stiffness(rows):
+    selected = _main_rows(rows, ("MAIN_A2_", "MAIN_A4_", "MAIN_B"))
+    if not selected:
+        return None
+    fig, axes = plt.subplots(1, 3, figsize=(9.5, 3.1))
+    for ax, key, ylabel in (
+        (axes[0], "axis_improvement", "excited-axis error removed [deg]"),
+        (axes[1], "alignment_time90_s", "90% alignment time [s]"),
+        (axes[2], "force_steady_N", "steady estimated load [N]"),
+    ):
+        for axis, ids, xkey, color, marker in (
+            (1, ("MAIN_A2_", "MAIN_B1_"), "setup_KR_t1", "C0", "o"),
+            (2, ("MAIN_A4_", "MAIN_B2_"), "setup_KR_t2", "C1", "s"),
+        ):
+            buckets = {}
+            for row in selected:
+                if not row["run_id"].startswith(ids):
+                    continue
+                x = fnum(row, xkey)
+                y = fnum(
+                    row,
+                    f"align_t{axis}_improve_deg"
+                    if key == "axis_improvement" else key,
+                )
+                if np.isnan(x) or np.isnan(y):
+                    continue
+                buckets.setdefault(x, {"good": [], "bad": []})
+                buckets[x]["bad" if data_suspect(row) else "good"].append(y)
+            errorbar_from_buckets(
+                ax, buckets, rf"$t_{axis}$ excitation", color, marker=marker
+            )
+        ax.set_xlabel("rotational stiffness about excited axis [Nm/rad]")
+        ax.set_ylabel(ylabel)
+    axes[0].legend(frameon=False)
+    fig.suptitle("Case B: axis-specific rotational stiffness", fontsize=10)
+    return save(fig, "MAIN_B_KR.pdf")
+
+
+def fig_main_translational_stiffness(rows):
+    selected = _main_rows(rows, ("MAIN_A2_", "MAIN_A4_", "MAIN_C"))
+    if not selected:
+        return None
+    fig, axes = plt.subplots(1, 3, figsize=(9.5, 3.1))
+    for ax, key, ylabel in (
+        (axes[0], "axis_improvement", "excited-axis error removed [deg]"),
+        (axes[1], "edge_travel_mm", "selected-feature travel [mm]"),
+        (axes[2], "force_steady_N", "steady estimated load [N]"),
+    ):
+        for axis, ids, xkey, color, marker in (
+            (1, ("MAIN_A2_", "MAIN_C1_KPt2_"), "setup_Kp_t2", "C0", "o"),
+            (2, ("MAIN_A4_", "MAIN_C2_KPt1_"), "setup_Kp_t1", "C1", "s"),
+        ):
+            buckets = {}
+            for row in selected:
+                if not row["run_id"].startswith(ids):
+                    continue
+                x = fnum(row, xkey)
+                y = fnum(
+                    row,
+                    f"align_t{axis}_improve_deg"
+                    if key == "axis_improvement" else key,
+                )
+                if np.isnan(x) or np.isnan(y):
+                    continue
+                buckets.setdefault(x, {"good": [], "bad": []})
+                buckets[x]["bad" if data_suspect(row) else "good"].append(y)
+            errorbar_from_buckets(
+                ax, buckets, rf"$t_{axis}$ excitation", color, marker=marker
+            )
+        ax.set_xscale("log")
+        ax.set_xlabel("cross-direction translational stiffness [N/m]")
+        ax.set_ylabel(ylabel)
+    axes[0].legend(frameon=False)
+    fig.suptitle("Case C: surface-frame translational stiffness", fontsize=10)
+    return save(fig, "MAIN_C_KP.pdf")
+
+
+def fig_main_interaction(rows):
+    selected = _main_rows(
+        rows,
+        ("MAIN_A2_", "MAIN_A4_", "MAIN_B1_KRt1_50",
+         "MAIN_B2_KRt2_50", "MAIN_C1_KPt2_0300",
+         "MAIN_C2_KPt1_0300", "MAIN_C1_interaction",
+         "MAIN_C2_interaction"),
+    )
+    if not selected:
+        return None
+    fig, axes = plt.subplots(1, 2, figsize=(7.5, 3.2), sharey=True)
+    for axis, ax in enumerate(axes, start=1):
+        kr_key = f"setup_KR_t{axis}"
+        kp_key = "setup_Kp_t2" if axis == 1 else "setup_Kp_t1"
+        for kp, color, marker in ((300.0, "C2", "s"), (2000.0, "C0", "o")):
+            buckets = {}
+            for row in selected:
+                is_axis = (
+                    (axis == 1 and row["run_id"].startswith(
+                        ("MAIN_A2_", "MAIN_B1_", "MAIN_C1_")))
+                    or
+                    (axis == 2 and row["run_id"].startswith(
+                        ("MAIN_A4_", "MAIN_B2_", "MAIN_C2_")))
+                )
+                if not is_axis or abs(fnum(row, kp_key) - kp) > 1e-6:
+                    continue
+                x = fnum(row, kr_key)
+                y = fnum(row, f"align_t{axis}_improve_deg")
+                if np.isnan(x) or np.isnan(y):
+                    continue
+                buckets.setdefault(x, {"good": [], "bad": []})
+                buckets[x]["bad" if data_suspect(row) else "good"].append(y)
+            errorbar_from_buckets(
+                ax, buckets, rf"$K_p={kp:.0f}$ N/m", color, marker=marker
+            )
+        ax.set_xlabel(rf"$K_{{R,t_{axis}}}$ [Nm/rad]")
+        ax.set_title(rf"$t_{axis}$ excitation", fontsize=9)
+    axes[0].set_ylabel("excited-axis error removed [deg]")
+    axes[0].legend(frameon=False)
+    fig.suptitle(r"Case C: $K_R$--$K_p$ interaction", fontsize=10)
+    return save(fig, "MAIN_C_interaction.pdf")
+
+
+def fig_main_compliance_centre(rows):
+    selected = _main_rows(rows, ("MAIN_D",))
+    if not selected:
+        return None
+    fig, axes = plt.subplots(1, 3, figsize=(9.5, 3.1))
+    for ax, key, ylabel in (
+        (axes[0], "axis_improvement", "excited-axis error removed [deg]"),
+        (axes[1], "alignment_time90_s", "90% alignment time [s]"),
+        (axes[2], "force_steady_N", "steady estimated load [N]"),
+    ):
+        for axis, prefix, xkey, color, marker in (
+            (1, "MAIN_D1_", "rc_t2_mm", "C0", "o"),
+            (2, "MAIN_D2_", "rc_t1_mm", "C1", "s"),
+        ):
+            buckets = {}
+            for row in selected:
+                if not row["run_id"].startswith(prefix):
+                    continue
+                x = fnum(row, xkey)
+                y = fnum(
+                    row,
+                    f"align_t{axis}_improve_deg"
+                    if key == "axis_improvement" else key,
+                )
+                if np.isnan(x) or np.isnan(y):
+                    continue
+                buckets.setdefault(x, {"good": [], "bad": []})
+                buckets[x]["bad" if data_suspect(row) else "good"].append(y)
+            errorbar_from_buckets(
+                ax, buckets,
+                rf"$t_{axis}$ error; perpendicular lever",
+                color, marker=marker,
+            )
+        ax.axhline(0.0, color="0.45", linewidth=1)
+        ax.set_xlabel("commanded perpendicular lever component [mm]")
+        ax.set_ylabel(ylabel)
+    axes[0].legend(frameon=False)
+    fig.suptitle(
+        r"Case D: commanded centre of compliance, "
+        r"$r_c=p_{\mathrm{TCP}}-p_c$",
+        fontsize=10,
+    )
+    return save(fig, "MAIN_D_CoC.pdf")
 
 
 # Categorical slots 1 and 2 of the validated default palette. Two series only:
@@ -429,6 +636,11 @@ def main():
         fig_a2_stiffness,
         fig_d_axis_stiffness,
         fig_d_initial_angle,
+        fig_main_initial_angle,
+        fig_main_rotational_stiffness,
+        fig_main_translational_stiffness,
+        fig_main_interaction,
+        fig_main_compliance_centre,
         fig_b_pole_axis,
         fig_b_pole_surface,
         fig_c2_nullspace,

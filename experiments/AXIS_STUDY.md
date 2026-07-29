@@ -1,113 +1,142 @@
-# Calibrated-Plane Axis-Specific Alignment Study
+# Main Calibrated-Plane Alignment Study
 
-## Experimental decision
+This file is the operational specification for the new thesis campaign. The
+previous measurements and setup folders remain archived; they are not mixed
+with the `MAIN_*` results.
 
-The main campaign uses the existing tilted physical plane. Absolute plane
-inclination is held fixed; the controlled excitation is the relative
-tool-to-plane angle about surface tangent \(t_1\) or \(t_2\).
+## Fixed conventions
 
-A horizontal plane is not mixed into the primary matrix because changing the
-absolute plane orientation also changes robot posture, Jacobian, gravity
-loading, reachable workspace, and contact geometry. A matched horizontal-plane
-repeat can be added later as a transfer test after the primary effects are
-established.
+- The physical plane is fitted from three non-collinear points. A fourth,
+  held-out point must lie within 1 mm of the fit before any MAIN trial runs.
+- The projected direction from \(P_1\) to \(P_2\) defines \(+t_1\);
+  \(t_2=n_s\times t_1\). These directions should be marked on the workpiece.
+- The plane defines its point, normal and surface frame
+  \(R_s=[t_1,t_2,n_s]\).
+- The commanded tool orientation is an independent signed offset about
+  \(t_1\) and/or \(t_2\).
+- Alignment is always evaluated against the calibrated physical plane.
+- Translational experimental gains are diagonal in the surface frame:
 
-## Separation implemented in the controller
+  \[
+  K_{p,0}=R_s\operatorname{diag}(K_{p,t_1},K_{p,t_2},K_{p,n})R_s^\top .
+  \]
 
-The calibrated surface plane determines:
+- Centre-of-compliance experiments command the direct lever
 
-- plane point and normal;
-- geometric clearance and contact projection;
-- surface frame \([t_1,t_2,n_s]\);
-- translational and rotational gain directions; and
-- the physical-plane alignment metric.
+  \[
+  r_c=p_{\mathrm{TCP}}-p_c
+  =R_s[r_{c,t_1},r_{c,t_2},r_{c,n}]^\top .
+  \]
 
-The independent parameters
+- Centre-of-compliance results use only the directly commanded \(r_c\).
+- Cases A--E use null-space damping only. The sigma bias is reintroduced only
+  in the matched Case-F control.
+- The set-up observation is 5 seconds. Automatic damping is recomputed from
+  each changed stiffness and the phase-entry task inertia.
 
-```text
-tool_target_offset_tangent1_deg
-tool_target_offset_tangent2_deg
-```
+## Case A: calibration and initial angle
 
-rotate only the commanded tool axis. A nonzero value therefore creates a known
-contact mismatch without falsifying the plane used by the geometry.
+Three repeats of each configuration:
 
-## Calibration gate
+| Setup | Tool command |
+|---|---:|
+| `MAIN_A0_00deg` | \(0^\circ\) |
+| `MAIN_A1_t1_05deg` | \(+5^\circ\) about \(t_1\) |
+| `MAIN_A2_t1_10deg` | \(+10^\circ\) about \(t_1\) |
+| `MAIN_A3_t2_05deg` | \(+5^\circ\) about \(t_2\) |
+| `MAIN_A4_t2_10deg` | \(+10^\circ\) about \(t_2\) |
 
-1. Mark the \(+X_{\mathrm{EE}},+Y_{\mathrm{EE}}\) corner of the configured
-   rectangular tool face.
-2. Touch that same corner to three separated plane locations and capture P1,
-   P2, and P3 with `tools/capture_plane_point`.
-3. Capture P4 at a different location as a held-out check.
-4. Run `experiments/calibration/prepare_plane_calibration.py`.
-5. Require all triangle edges to exceed 50 mm and the absolute P4 distance to
-   the fitted plane to be at most 1 mm.
-6. Run the D0 zero-offset control. Its first-contact physical-plane alignment
-   angle should be close to zero. Stop and correct the calibration if it is
-   not.
+Case A contributes 15 trials. A0 is the calibration gate. The nonzero cases
+use the measured first-contact angle, not the nominal command, in the plots.
 
-The first three points define the plane; P4 is never used in the fit.
+## Case B: axis-specific rotational stiffness
 
-## Primary test matrix
+The \(5\,\mathrm{Nm/rad}\) references are the two 10-degree Case-A setups.
+Additional settings are:
 
-All runs use the decoupled stiffness command and a 5 s set-up. The normal
-rotational stiffness remains \(50\,\mathrm{Nm/rad}\).
+| Excitation | Changed gain |
+|---|---|
+| \(+10^\circ\) about \(t_1\) | \(K_{R,t_1}=15,50\,\mathrm{Nm/rad}\) |
+| \(+10^\circ\) about \(t_2\) | \(K_{R,t_2}=15,50\,\mathrm{Nm/rad}\) |
 
-| IDs | Commanded mismatch | Swept gain | Fixed orthogonal gain | Repeats |
-|---|---:|---:|---:|---:|
-| D0 | \(0^\circ\) | none | \(K_{R,t_1}=K_{R,t_2}=5\) | 5 |
-| D1 | \(+10^\circ\) about \(t_1\) | \(K_{R,t_1}=5,15,50\) | \(K_{R,t_2}=5\) | 5 per setting |
-| D2 | \(+10^\circ\) about \(t_2\) | \(K_{R,t_2}=5,15,50\) | \(K_{R,t_1}=5\) | 5 per setting |
-| D3 | \(+5^\circ\) about \(t_1\) or \(t_2\) | none | both tangent gains \(=5\) | 5 per axis |
+The orthogonal rotational gain remains \(5\,\mathrm{Nm/rad}\). Three repeats
+of the four additional settings contribute 12 trials.
 
-D0, D3, and the \(5\,\mathrm{Nm/rad}\) arms of D1/D2 provide the
-\(0^\circ\), \(5^\circ\), and \(10^\circ\) initial-angle comparison without
-duplicating runs.
+## Case C: translational stiffness and interaction
 
-## Evaluation quantities
+The geometrically cross-matched gain is varied:
 
-The controller logs both the scalar physical-plane residual and its signed
-surface-frame components:
+| Excitation | Changed gain |
+|---|---|
+| \(+10^\circ\) about \(t_1\) | \(K_{p,t_2}=300,800,2000\,\mathrm{N/m}\) |
+| \(+10^\circ\) about \(t_2\) | \(K_{p,t_1}=300,800,2000\,\mathrm{N/m}\) |
 
-```text
-alignment_angle_deg
-alignment_error_t1_deg
-alignment_error_t2_deg
-alignment_error_normal_deg
-```
+The \(2000\,\mathrm{N/m}\) references are already in Case A. One additional
+interaction corner per axis,
+\(K_R=50\,\mathrm{Nm/rad}, K_p=300\,\mathrm{N/m}\), completes the endpoint
+\(2\times2\) comparison. Case C contributes 18 additional trials.
 
-For each run, the analysis extracts:
+Cases A--C therefore contain 45 unique robot trials.
 
-- alignment angle before and after set-up;
-- physical-plane alignment improvement;
-- \(t_1\)- and \(t_2\)-component improvement;
-- time to reach 90% of the run's final alignment change;
-- steady and peak model-estimated contact load;
-- edge travel; and
-- peak commanded joint-torque norm.
+## Case D: centre of compliance
 
-The primary plot compares alignment improvement against the independently
-swept stiffness for \(t_1\) and \(t_2\). Supporting panels show 90% alignment
-time and steady estimated normal load. A second plot compares the
-\(0^\circ\), \(5^\circ\), and \(10^\circ\) initial-angle conditions.
+Case D is mandatory but is not run until Cases A--C have selected suitable
+gains. The generated coarse configurations currently use the baseline gains as
+placeholders.
+
+For a \(t_1\) angular error, sweep the perpendicular lever \(r_{c,t_2}\).
+For a \(t_2\) angular error, sweep \(r_{c,t_1}\). Initial levels are
+\(-60,0,+60\,\mathrm{mm}\), with three repeats per level and axis.
+
+The zero-lever coupled result must agree with its matched decoupled reference.
+The opposite signs test the predicted moment direction. Intermediate or
+farther points are generated only after the coarse response is reviewed.
+
+## Case E: virtual push and stored preload
+
+After selecting gains and a pole:
+
+1. compare virtual post-plane references \(0.10,0.14,0.18\,\mathrm{m}\);
+2. compare a controlled 5-second retained-preload observation with a
+   controlled 5-second released-preload observation.
+
+The reference is a virtual spring coordinate, not physical penetration.
+Report alignment at first contact, at the end of set-up and at the end of the
+post-set-up observation.
+
+## Case F: null-space attribution
+
+At one representative contact condition compare:
+
+- mode 1: projected null-space damping only;
+- mode 3: projected damping plus the smallest-singular-value bias.
+
+Use three repeats initially. Compare alignment, task drift, joint motion and
+smallest singular value. This case determines whether the active sigma torque
+changes the contact response.
+
+## Evaluation outputs
+
+- scalar physical-plane alignment before and after set-up;
+- signed \(t_1\) and \(t_2\) error before and after set-up;
+- absolute and percentage error removed;
+- 90% alignment time;
+- peak and steady model-estimated load;
+- TCP and selected-feature travel;
+- peak commanded torque;
+- post-set-up alignment change; and
+- provenance, convergence and safety flags.
 
 ## Guided execution
 
-From the MyController root:
+The runner currently exposes only Cases A--C:
 
 ```bash
 ./experiments/run_axis_study.sh status
 ./experiments/run_axis_study.sh next
 ```
 
-`next` runs exactly one robot trial. It selects the first missing repeat,
-archives the logs and effective parameters, then regenerates the metrics and
-plots. Review the terminal output and archived trial before calling `next`
-again.
-
-## Optional transfer study
-
-After the tilted-plane campaign is complete, recalibrate a horizontal physical
-plane and repeat only the \(5\) and \(50\,\mathrm{Nm/rad}\) endpoints for both
-axes. This is a robustness test of frame consistency and robot-configuration
-dependence, not part of the primary stiffness estimate.
+`next` performs exactly one robot trial, archives the raw logs, effective
+parameters, plane calibration, terminal transcript and Git provenance, then
+refreshes the derived metrics and figures. It stops after Case C so that the
+selected gains can be reviewed before Case D is enabled.

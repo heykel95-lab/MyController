@@ -87,25 +87,27 @@ Ad(r_c) = [[I, skew(r_c)], [0, I]]
 ```
 
 The off-diagonal quadrants of `K_TCP` are the lever coupling: rotation then
-produces force and translation produces moment. The pole is the only knob in the
-adjoint, so sweeping `coupled_pole_from_edge` moves the effective rotation
-center. The congruence preserves positive semi-definiteness, so the result is
-still a passive spring — the set-up report prints the eigenvalues to confirm it.
+produces force and translation produces moment. The direct experiment knob is
+`coupled_rc_[tangent1|tangent2|normal]`, with
+`r_c = p_TCP - p_c`. The congruence preserves positive semi-definiteness, so
+the result remains a valid symmetric spring; the offline preflight and set-up
+report print its eigenvalues.
 
-Three sources for the 6×6 gains, in priority order:
+The calibrated campaign also sets `setup_translation_surface_frame = 1`.
+Then `setup_Kp_surface_*` and `setup_Dp_surface_*` are interpreted in
+`[tangent1,tangent2,normal]` and rotated to the base frame. Leaving the flag at
+zero preserves the archived base-XYZ parameterization.
+
+Two sources for the 6×6 gains are available:
 
 1. `coupled_use_block_diagonal = 1` — plain block-diagonal set-up gains, no
    coupling. Through the 6×6 path this reproduces the decoupled wrench exactly,
    so it is the sanity check that the path itself is correct.
-2. `coupled_pole_manual = 1` — rebuild from `pole = contact edge +
-   coupled_pole_from_edge`.
-3. otherwise — the saved `coupled_K_tcp` / `coupled_D_tcp` matrices.
-
-After a set-up phase with a valid finite screw axis, the controller measures the
-axis the whole tipping motion actually followed (Chasles' theorem, computed from
-the start and end pose, so it is not sensitive to per-cycle velocity noise) and
-writes the implied `coupled_K_tcp` / `coupled_D_tcp` back into
-`params/sequence.txt` for the next run.
+2. `coupled_pole_manual = 1` — rebuild from a deliberately commanded lever.
+   New experiments set `coupled_use_direct_rc_surface = 1` and specify
+   `coupled_rc_tangent1`, `coupled_rc_tangent2`, and `coupled_rc_normal` using
+   the convention `r_c = p_TCP - p_c`. Archived setup files may still use the
+   legacy base-frame `coupled_pole_from_edge` parameters.
 
 ## Nullspace
 
@@ -233,10 +235,10 @@ non-finite / non-positive result).
 |------|----------|
 | `main.cpp` | Setup, the phase machine, the control law |
 | `controller.h` | Shared types plus all module declarations |
-| `config.cpp` | Parameters, parsing, and parameter-file write-back |
-| `control_math.cpp` | Math, task frames, screw axis, spatial gains, nullspace |
+| `config.cpp` | Parameters and parsing |
+| `control_math.cpp` | Math, task frames, spatial gains, nullspace |
 | `runtime_io.cpp` | Startup menus, gripper actions, debug printing, CSV output |
-| `setup_report.cpp` | The one-shot set-up report and coupled-gain write-back |
+| `setup_report.cpp` | The one-shot set-up report and commanded-pole diagnostics |
 | `tools/check_tool_offset.cpp` | Read-only TCP/stiffness-frame inspection tool |
 
 ## Build and run

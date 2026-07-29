@@ -5,9 +5,8 @@
 #   experiments/run.sh B2_pole_normal_p080 1
 #
 # What it does, in order:
-#   1. Saves the current params/ directory (the controller REWRITES
-#      sequence.txt after a set-up phase, so without this every run would
-#      silently contaminate the next one).
+#   1. Saves the current params/ directory so experimental overlays never
+#      contaminate the next run.
 #   2. Applies the setup's overlay onto params/.
 #   3. Runs the controller. You drive it interactively as usual.
 #   4. Copies both CSV logs plus the effective parameters, the git commit and
@@ -35,6 +34,7 @@ REPEAT="${2:-1}"
 SETUP_DIR="$HERE/setups/$RUN_ID"
 OVERLAY="$SETUP_DIR/overlay.txt"
 PLANE_OVERLAY="$HERE/calibration/active_plane_overlay.txt"
+PLANE_REPORT="$HERE/calibration/plane_calibration_report.txt"
 USES_PLANE_CALIBRATION=0
 
 if [ ! -f "$OVERLAY" ]; then
@@ -82,18 +82,39 @@ sed -n '1,200p' "$SETUP_DIR/about.txt"
 echo ""
 echo "--- applying overlay ---"
 case "$RUN_ID" in
-  D*)
+  D*|MAIN_*)
     USES_PLANE_CALIBRATION=1
-    if [ ! -f "$PLANE_OVERLAY" ]; then
-      echo "ERROR: D-series experiments require a three-point plane calibration."
+    if [ ! -f "$PLANE_OVERLAY" ] || [ ! -f "$PLANE_REPORT" ]; then
+      echo "ERROR: calibrated-plane experiments require a validated plane calibration."
       echo "Create experiments/calibration/plane_points.csv and run:"
       echo "  python3 experiments/calibration/prepare_plane_calibration.py"
+      exit 1
+    fi
+    if ! grep -q "^surface tangent t1 (P1->P2)" "$PLANE_REPORT" ||
+       ! grep -q "^held-out signed distances" "$PLANE_REPORT"; then
+      echo "ERROR: calibration is missing the P1--P2 tangent or held-out P4 check."
+      echo "Regenerate it with:"
+      echo "  python3 experiments/calibration/prepare_plane_calibration.py"
+      exit 1
+    fi
+    if grep -q "^WARNING:" "$PLANE_REPORT"; then
+      echo "ERROR: the held-out calibration point is more than 1 mm from the plane."
+      cat "$PLANE_REPORT"
       exit 1
     fi
     python3 "$HERE/lib/apply_overlay.py" "$PLANE_OVERLAY" "$PARAMS" || exit 1
     ;;
 esac
 python3 "$HERE/lib/apply_overlay.py" "$OVERLAY" "$PARAMS" || exit 1
+echo ""
+
+PREFLIGHT="$SGC/tools/inspect_experiment_config"
+if [ ! -x "$PREFLIGHT" ]; then
+  echo "ERROR: missing experiment preflight tool. Build it with:" >&2
+  echo "  make -C $SGC inspect_experiment_config" >&2
+  exit 1
+fi
+"$PREFLIGHT" "$PARAMS" || exit 1
 echo ""
 
 mkdir -p "$OUT"

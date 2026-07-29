@@ -165,9 +165,14 @@ struct Parameters {
   // Position preload ramped into the surface; grind inherits the final value.
   double setup_push_speed = 0.0;
   double setup_push_end = 0.0;
-  // Translational spring, base frame [x, y, z].
+  // Translational spring. The legacy/default form is diagonal in base [x,y,z].
+  // New experiments set setup_translation_surface_frame=1 and use the
+  // [tangent1,tangent2,normal] vectors below.
   Vec3 setup_Kp_diag = Vec3(40.0, 40.0, 5500.0);
   Vec3 setup_Dp_diag = Vec3(10.0, 10.0, 175.0);
+  bool setup_translation_surface_frame = false;
+  Vec3 setup_Kp_surface_diag = Vec3(2000.0, 2000.0, 360.0);
+  Vec3 setup_Dp_surface_diag = Vec3(50.0, 50.0, 25.0);
   // Rotational spring, alignment-target frame [tangent1, tangent2, normal].
   Vec3 setup_KR_diag = Vec3(0.0, 0.0, 8.0);
   Vec3 setup_DR_diag = Vec3(0.01, 0.01, 4.0);
@@ -191,16 +196,18 @@ struct Parameters {
 
   // Coupled (pole-based) stiffness for the set-up phase.
   bool use_coupled_stiffness = false;
-  // K/D source: block diagonal, manual pole, or saved matrices.
+  // K/D source: block diagonal or a deliberately commanded pole.
   bool coupled_use_block_diagonal = false;
   bool coupled_pole_manual = false;
+  // Direct lever convention used by the new experiments:
+  // r_c = p_TCP - p_c, resolved in [tangent1,tangent2,normal].
+  bool coupled_use_direct_rc_surface = false;
+  Vec3 coupled_rc_surface = Vec3::Zero();
+  // Legacy base-frame pole-from-edge convention retained only so archived
+  // setup files remain reproducible.
   Vec3 coupled_pole_from_edge = Vec3::Zero();
   // 1 = freeze pole at first contact, 0 = track the live moving edge.
   bool coupled_pole_freeze_at_contact = true;
-  // Auto-written after a set-up phase with a valid finite screw axis.
-  bool coupled_gains_saved = false;
-  Mat6x6 coupled_K_tcp = Mat6x6::Zero();
-  Mat6x6 coupled_D_tcp = Mat6x6::Zero();
 
   // Nullspace optimization.
   bool use_nullspace_optimization = true;
@@ -359,14 +366,6 @@ struct DesiredMotion {
   Vec3 pdot_d;
 };
 
-struct FiniteScrewAxis {
-  Vec3 axis_point_from_start = Vec3::Zero();
-  Vec3 axis_dir = Vec3::Zero();
-  double pitch = 0.0;
-  double angle = 0.0;
-  bool valid = false;
-};
-
 struct CartesianInertiaEstimate {
   Vec3 translational = Vec3::Ones();
   Vec3 rotational = Vec3::Ones();
@@ -404,15 +403,6 @@ struct SetUpReport {
 
 Parameters readParameters(const std::vector<std::string>& filenames);
 
-void updateParameterValues(
-    const std::string& filename,
-    const std::vector<std::pair<std::string, std::string>>& updates);
-
-void appendMat6ParameterUpdates(
-    std::vector<std::pair<std::string, std::string>>& updates,
-    const std::string& prefix,
-    const Mat6x6& matrix);
-
 Array7 vec7ToArray(const Vec7& v);
 
 Array7 filledArray7(double value);
@@ -438,17 +428,6 @@ double setUpPush(const Parameters& params,
                  double phase_time,
                  double start_push,
                  double& push_speed);
-
-Vec3 nearestPointOnAxis(
-    const Vec3& point,
-    const Vec3& axis_point,
-    const Vec3& axis_direction);
-
-FiniteScrewAxis computeFiniteScrewAxis(
-    const Vec3& p_start,
-    const Mat3& R_start,
-    const Vec3& p_end,
-    const Mat3& R_end);
 
 Mat6x6 blockDiagonal(const Mat3& translational, const Mat3& rotational);
 
@@ -612,5 +591,4 @@ bool writeSigmaDebugToCsv(
 
 void reportSetUpResult(const Parameters& params,
                        const Mat3& R_alignment_target,
-                       const SetUpReport& report,
-                       std::vector<std::pair<std::string, std::string>>* parameter_updates);
+                       const SetUpReport& report);

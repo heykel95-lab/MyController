@@ -1,0 +1,8 @@
+run_id:   MAIN_D2_t2_rc_t1_m060
+repeats:  3
+
+purpose:
+  Case D coarse centre-of-compliance sweep: +10 deg about t2, direct r_c,t1=-60 mm.
+
+pass criterion:
+  The zero lever must agree with the decoupled reference. Opposite lever signs test the predicted moment direction. Refine only after this coarse sweep is analysed.

@@ -1,4 +1,4 @@
-79 setups, 264 total runs
+91 setups, 282 total runs
 
 G1_coupled_block_diagonal          x3  Coupled 6x6 path with block-diagonal gains must reproduce the decoupled wrench exactly.
 G1_decoupled_baseline              x5  Decoupled wrench, no coupling.
@@ -28,15 +28,27 @@ A6_clearance_30mm                  x3  Handoff height, descend_surface_clearance
 A7_qinit_tilted_tool               x3  Arm posture, q_init_case = tilted_tool.
 A7_qinit_tilted_close              x3  Arm posture, q_init_case = tilted_close.
 A7_qinit_table                     x3  Arm posture, q_init_case = table.
-D0_flat_00deg                      x5  Calibrated-plane zero-offset control with no intentional tool-plane mismatch.
-D1_KRt1_05                         x5  Axis-specific t1 stiffness: +10 deg command offset about t1, K_R,t1 = 5.0 N m/rad, K_R,t2 fixed at 5 N m/rad.
-D1_KRt1_15                         x5  Axis-specific t1 stiffness: +10 deg command offset about t1, K_R,t1 = 15.0 N m/rad, K_R,t2 fixed at 5 N m/rad.
-D1_KRt1_50                         x5  Axis-specific t1 stiffness: +10 deg command offset about t1, K_R,t1 = 50.0 N m/rad, K_R,t2 fixed at 5 N m/rad.
-D2_KRt2_05                         x5  Axis-specific t2 stiffness: +10 deg command offset about t2, K_R,t2 = 5.0 N m/rad, K_R,t1 fixed at 5 N m/rad.
-D2_KRt2_15                         x5  Axis-specific t2 stiffness: +10 deg command offset about t2, K_R,t2 = 15.0 N m/rad, K_R,t1 fixed at 5 N m/rad.
-D2_KRt2_50                         x5  Axis-specific t2 stiffness: +10 deg command offset about t2, K_R,t2 = 50.0 N m/rad, K_R,t1 fixed at 5 N m/rad.
-D3_angle_t1_05deg                  x5  Initial-angle response: +5 deg command offset about t1, both tangent-axis stiffnesses fixed at 5 N m/rad.
-D3_angle_t2_05deg                  x5  Initial-angle response: +5 deg command offset about t2, both tangent-axis stiffnesses fixed at 5 N m/rad.
+MAIN_A0_00deg                      x3  Case A: calibrated plane with independent tool command offsets (t1=+0 deg, t2=+0 deg).
+MAIN_A1_t1_05deg                   x3  Case A: calibrated plane with independent tool command offsets (t1=+5 deg, t2=+0 deg).
+MAIN_A2_t1_10deg                   x3  Case A: calibrated plane with independent tool command offsets (t1=+10 deg, t2=+0 deg).
+MAIN_A3_t2_05deg                   x3  Case A: calibrated plane with independent tool command offsets (t1=+0 deg, t2=+5 deg).
+MAIN_A4_t2_10deg                   x3  Case A: calibrated plane with independent tool command offsets (t1=+0 deg, t2=+10 deg).
+MAIN_B1_KRt1_15                    x3  Case B: +10 deg about t1; vary only K_R,t1 to 15 N m/rad.
+MAIN_B1_KRt1_50                    x3  Case B: +10 deg about t1; vary only K_R,t1 to 50 N m/rad.
+MAIN_B2_KRt2_15                    x3  Case B: +10 deg about t2; vary only K_R,t2 to 15 N m/rad.
+MAIN_B2_KRt2_50                    x3  Case B: +10 deg about t2; vary only K_R,t2 to 50 N m/rad.
+MAIN_C1_KPt2_0300                  x3  Case C: +10 deg about t1; vary only K_p,t2 to 300 N/m.
+MAIN_C1_KPt2_0800                  x3  Case C: +10 deg about t1; vary only K_p,t2 to 800 N/m.
+MAIN_C1_interaction_KR50_KP300     x3  Case C interaction corner for t1: K_R,t1=50 N m/rad and K_p,t2=300 N/m.
+MAIN_C2_KPt1_0300                  x3  Case C: +10 deg about t2; vary only K_p,t1 to 300 N/m.
+MAIN_C2_KPt1_0800                  x3  Case C: +10 deg about t2; vary only K_p,t1 to 800 N/m.
+MAIN_C2_interaction_KR50_KP300     x3  Case C interaction corner for t2: K_R,t2=50 N m/rad and K_p,t1=300 N/m.
+MAIN_D1_t1_rc_t2_m060              x3  Case D coarse centre-of-compliance sweep: +10 deg about t1, direct r_c,t2=-60 mm.
+MAIN_D1_t1_rc_t2_p000              x3  Case D coarse centre-of-compliance sweep: +10 deg about t1, direct r_c,t2=+0 mm.
+MAIN_D1_t1_rc_t2_p060              x3  Case D coarse centre-of-compliance sweep: +10 deg about t1, direct r_c,t2=+60 mm.
+MAIN_D2_t2_rc_t1_m060              x3  Case D coarse centre-of-compliance sweep: +10 deg about t2, direct r_c,t1=-60 mm.
+MAIN_D2_t2_rc_t1_p000              x3  Case D coarse centre-of-compliance sweep: +10 deg about t2, direct r_c,t1=+0 mm.
+MAIN_D2_t2_rc_t1_p060              x3  Case D coarse centre-of-compliance sweep: +10 deg about t2, direct r_c,t1=+60 mm.
 B1_pole_on_contact_edge            x3  Coupled law with the pole on the contact edge (coupled_pole_from_edge = 0).
 B1b_pole_at_tcp                    x3  Coupled law with the pole AT the TCP: the offset cancels the measured TCP-to-edge lever, giving r_c ~ 0.
 B2_pole_normal_m120                x3  Pole swept ALONG THE SURFACE NORMAL, s = -0.12 m from the contact edge.

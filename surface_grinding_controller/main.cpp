@@ -35,14 +35,11 @@ int main() {
     askStartupRunMode(params, robot);
     printParameters(params);
 
-    // Saved coupled matrices are needed only when they are the selected source.
-    const bool needs_saved_coupled_gains =
-        params.use_phase_sequence &&
-        params.use_coupled_stiffness && !params.coupled_use_block_diagonal &&
-        !params.coupled_pole_manual;
-    if (needs_saved_coupled_gains && !params.coupled_gains_saved) {
-      fprintf(stderr, "Coupled stiffness needs saved K_TCP/D_TCP, but none was found.\n");
-      fprintf(stderr, "Run once with use_coupled_stiffness = 0 so the set-up report can save them.\n");
+    if (params.use_phase_sequence && params.use_coupled_stiffness &&
+        !params.coupled_use_block_diagonal && !params.coupled_pole_manual) {
+      fprintf(stderr,
+              "Coupled stiffness requires either block-diagonal mode or a "
+              "deliberately commanded pole.\n");
       return -1;
     }
 
@@ -145,8 +142,22 @@ int main() {
     const Mat3 KR_approach = taskGain(params.approach_KR_diag);
     const Mat3 DR_approach = taskGain(params.approach_DR_diag);
     // Set up + grind share one impedance.
-    const Mat3 Kp_setup = params.setup_Kp_diag.asDiagonal();
-    const Mat3 Dp_setup = params.setup_Dp_diag.asDiagonal();
+    const Vec3& setup_Kp_active_diag =
+        params.setup_translation_surface_frame
+            ? params.setup_Kp_surface_diag
+            : params.setup_Kp_diag;
+    const Vec3& setup_Dp_active_diag =
+        params.setup_translation_surface_frame
+            ? params.setup_Dp_surface_diag
+            : params.setup_Dp_diag;
+    const Mat3 Kp_setup =
+        params.setup_translation_surface_frame
+            ? taskGain(params.setup_Kp_surface_diag)
+            : params.setup_Kp_diag.asDiagonal();
+    const Mat3 Dp_setup =
+        params.setup_translation_surface_frame
+            ? taskGain(params.setup_Dp_surface_diag)
+            : params.setup_Dp_diag.asDiagonal();
     const Mat3 KR_setup = taskGain(params.setup_KR_diag);
     const Mat3 DR_setup = taskGain(params.setup_DR_diag);
     // Hold: isotropic in the base frame.
@@ -209,8 +220,6 @@ int main() {
     Mat3 Dp_pause_cached = Dp_pause;
     Mat3 DR_pause_cached = DR_approach;
 
-    std::vector<std::pair<std::string, std::string>> pending_parameter_updates;
-    pending_parameter_updates.reserve(96);
 
     printf("\n=== Start pose ===\n");
     printVec7Deg("q_start", q_start);
@@ -757,7 +766,7 @@ int main() {
           report.Dp = params.setup_auto_damping ? Dp_setup_cached : Dp_setup;
           report.KR = KR_setup;
           report.DR = params.setup_auto_damping ? DR_setup_cached : DR_setup;
-          reportSetUpResult(params, R_alignment_target, report, &pending_parameter_updates);
+          reportSetUpResult(params, R_alignment_target, report);
 
           // Grind keeps the final set-up preload.
           grind_push = push;
@@ -942,22 +951,32 @@ int main() {
             approach_damp_computed = true;
           }
         } else if (after_contact) {
-          // Position is base frame; rotation is surface frame.
+          // Translation uses its selected parameter frame; rotation uses the
+          // surface frame.
           const CartesianInertiaEstimate inertia_base =
               computeCartesianInertiaEstimate(joint_mass, J, Mat3::Identity());
           const CartesianInertiaEstimate inertia_task =
               computeCartesianInertiaEstimate(joint_mass, J, R_alignment_target);
-          if (inertia_base.valid && inertia_task.valid) {
+          const CartesianInertiaEstimate& inertia_translation =
+              params.setup_translation_surface_frame ? inertia_task : inertia_base;
+          if (inertia_translation.valid && inertia_task.valid) {
             const double zeta = params.setup_auto_damping_factor;
             const Vec3 Dp_diag = criticalDampingFromStiffness(
-                inertia_base.translational, params.setup_Kp_diag, zeta,
-                dampingFloor(params.setup_Dp_diag), params.auto_damping_max);
+                inertia_translation.translational, setup_Kp_active_diag, zeta,
+                dampingFloor(setup_Dp_active_diag), params.auto_damping_max);
             const Vec3 DR_diag = criticalDampingFromStiffness(
                 inertia_task.rotational, params.setup_KR_diag, zeta,
                 dampingFloor(params.setup_DR_diag), params.auto_damping_max);
-            Dp_setup_cached = Dp_diag.asDiagonal();
+            Dp_setup_cached =
+                params.setup_translation_surface_frame
+                    ? makeSpatialGainMatrix(Dp_diag, R_alignment_target)
+                    : Dp_diag.asDiagonal();
             DR_setup_cached = makeSpatialGainMatrix(DR_diag, R_alignment_target);
-            reportDamping("set_up Dp [xyz]", "Ns/m", Dp_diag, params.setup_Dp_diag);
+            reportDamping(
+                params.setup_translation_surface_frame
+                    ? "set_up Dp [t1t2n]"
+                    : "set_up Dp [xyz]",
+                "Ns/m", Dp_diag, setup_Dp_active_diag);
             reportDamping("set_up DR [t1t2n]", "Nms/rad", DR_diag, params.setup_DR_diag);
             setup_damp_computed = true;
           }
@@ -1072,17 +1091,25 @@ int main() {
           K_tcp = blockDiagonal(Kp_used, KR_used);
           D_tcp = blockDiagonal(Dp_used, DR_used);
         } else if (params.coupled_pole_manual) {
-          // Frozen = first-contact reference; live = current edge reference.
-          const Vec3 edge_ref = params.coupled_pole_freeze_at_contact ? first_contact_point
-                                                                     : tool_contact_point;
-          const Vec3 tcp_ref = params.coupled_pole_freeze_at_contact ? first_contact_tcp
-                                                                    : p_EE;
-          const Vec3 r_c = tcp_ref - (edge_ref + params.coupled_pole_from_edge);
+          Vec3 r_c;
+          if (params.coupled_use_direct_rc_surface) {
+            r_c = R_alignment_target * params.coupled_rc_surface;
+          } else {
+            // Legacy convention retained only for archived setup files.
+            const Vec3 edge_ref =
+                params.coupled_pole_freeze_at_contact
+                    ? first_contact_point
+                    : tool_contact_point;
+            const Vec3 tcp_ref =
+                params.coupled_pole_freeze_at_contact ? first_contact_tcp : p_EE;
+            r_c = tcp_ref - (edge_ref + params.coupled_pole_from_edge);
+          }
           K_tcp = adjointTransformedGain(blockDiagonal(Kp_used, KR_used), r_c);
           D_tcp = adjointTransformedGain(blockDiagonal(Dp_used, DR_used), r_c);
         } else {
-          K_tcp = params.coupled_K_tcp;
-          D_tcp = params.coupled_D_tcp;
+          // This invalid selection is rejected before the control loop.
+          K_tcp = blockDiagonal(Kp_used, KR_used);
+          D_tcp = blockDiagonal(Dp_used, DR_used);
         }
         wrench = K_tcp * dx + D_tcp * dv;
       } else {
@@ -1385,16 +1412,8 @@ int main() {
     (void)persistSigmaDebugBuffer();
 
     // ================================================================
-    // 4. Post-run: persist queued parameters, write the CSV, print results
+    // 4. Post-run: write the CSV and print results
     // ================================================================
-    if (!pending_parameter_updates.empty()) {
-      // The auto-written keys all live in params/sequence.txt, and
-      // updateParameterValues only rewrites keys already present there.
-      updateParameterValues("params/sequence.txt", pending_parameter_updates);
-      printf("params/sequence.txt updated after control loop (%zu queued values).\n",
-             pending_parameter_updates.size());
-    }
-
     if (descend_failed) {
       printf("\nDescend stopped: maximum distance reached before the clearance height.\n");
     }

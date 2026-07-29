@@ -27,7 +27,7 @@ RESULTS = os.path.join(EXP, "results")
 DERIVED = os.path.join(EXP, "derived")
 
 FIELDS = [
-    "run_id", "repeat", "series",
+    "run_id", "repeat", "series", "test_case",
     "git_commit", "timestamp",
     "has_alignment_metric", "has_alignment_components",
     "setup_present", "setup_duration_s",
@@ -48,7 +48,10 @@ FIELDS = [
     "jacobian_null_residual_max",
     "pole_x", "pole_y", "pole_z", "pole_normal_mm",
     "pole_cmd_x_mm", "pole_cmd_y_mm", "pole_cmd_z_mm",
-    "setup_KR_t1", "setup_KR_t2",
+    "setup_Kp_t1", "setup_Kp_t2", "setup_Kp_n",
+    "setup_KR_t1", "setup_KR_t2", "setup_KR_n",
+    "use_coupled_stiffness", "rc_t1_mm", "rc_t2_mm", "rc_n_mm",
+    "report_rc_t1_mm", "report_rc_t2_mm", "report_rc_n_mm",
     "tool_offset_t1_deg", "tool_offset_t2_deg",
     "align_improve_real_deg",
     "flags",
@@ -109,8 +112,16 @@ def pole_from_params(params_dir):
 
 def study_params(params_dir):
     wanted = {
+        "setup_Kp_surface_tangent1": ("setup_Kp_t1", 1.0),
+        "setup_Kp_surface_tangent2": ("setup_Kp_t2", 1.0),
+        "setup_Kp_surface_normal": ("setup_Kp_n", 1.0),
         "setup_KR_tangent1": "setup_KR_t1",
         "setup_KR_tangent2": "setup_KR_t2",
+        "setup_KR_normal": "setup_KR_n",
+        "use_coupled_stiffness": "use_coupled_stiffness",
+        "coupled_rc_tangent1": ("rc_t1_mm", 1000.0),
+        "coupled_rc_tangent2": ("rc_t2_mm", 1000.0),
+        "coupled_rc_normal": ("rc_n_mm", 1000.0),
         "tool_target_offset_tangent1_deg": "tool_offset_t1_deg",
         "tool_target_offset_tangent2_deg": "tool_offset_t2_deg",
     }
@@ -126,7 +137,12 @@ def study_params(params_dir):
                     continue
                 key, value = [part.strip() for part in line.split("=", 1)]
                 if key in wanted:
-                    out[wanted[key]] = float(value)
+                    destination = wanted[key]
+                    if isinstance(destination, tuple):
+                        name, scale = destination
+                    else:
+                        name, scale = destination, 1.0
+                    out[name] = scale * float(value)
     return out
 
 
@@ -135,6 +151,8 @@ def process_run(run_id, repeat_tag, run_dir):
     row["run_id"] = run_id
     row["repeat"] = repeat_tag
     row["series"] = run_id.split("_")[0]
+    if run_id.startswith("MAIN_"):
+        row["test_case"] = run_id.split("_")[1][0]
     flags = []
 
     meta = read_meta(os.path.join(run_dir, "meta.txt"))
@@ -168,7 +186,7 @@ def process_run(run_id, repeat_tag, run_dir):
             for k, v in m.items():
                 if k in row:
                     row[k] = v
-            if run_id.startswith("D") and m.get("has_alignment_metric"):
+            if run_id.startswith(("D", "MAIN_")) and m.get("has_alignment_metric"):
                 imp = m.get("align_gain_deg")
             else:
                 imp = sgc_log.alignment_improvement_deg(general)
@@ -213,6 +231,17 @@ def process_run(run_id, repeat_tag, run_dir):
             a, b = float(row["tip_final_deg"]), float(row["report_tip_deg"])
             if abs(a - b) > max(0.15, 0.05 * max(abs(a), abs(b))):
                 flags.append(f"tip-mismatch(csv={a:.2f},report={b:.2f})")
+    except (TypeError, ValueError):
+        pass
+    try:
+        for axis in ("t1", "t2", "n"):
+            commanded = row[f"rc_{axis}_mm"]
+            reported = row[f"report_rc_{axis}_mm"]
+            if commanded != "" and reported != "" and \
+                    abs(float(commanded) - float(reported)) > 0.1:
+                flags.append(
+                    f"rc-{axis}-mismatch(param={float(commanded):.1f},"
+                    f"report={float(reported):.1f})")
     except (TypeError, ValueError):
         pass
 

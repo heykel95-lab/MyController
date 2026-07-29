@@ -194,82 +194,139 @@ for case in ("tilted_tool", "tilted_close", "table"):
         [("q_init_case", case)],
     )
 
-# ---- Series D: calibrated-plane, axis-specific stiffness ------------------
-# The D series is run only after experiments/calibration/active_plane_overlay
-# has been generated from three physical probe points. Plane geometry remains
-# fixed; the two command-offset keys create the controlled tool-plane mismatch.
-COMMON_AXIS_STUDY = [
+# ---- MAIN campaign: calibrated plane, independent command and gains --------
+# These runs use surface-frame translational gains and null-space damping only.
+# The sigma bias is reintroduced later as its own matched control rather than
+# being allowed to influence every contact-alignment trial.
+MAIN_COMMON = [
     ("use_coupled_stiffness", "0"),
     ("setup_timeout", "5.0"),
+    ("grind_sweep_enabled", "0"),
+    ("nullspace_mode", "1"),
+    ("setup_translation_surface_frame", "1"),
+    ("setup_Kp_surface_normal", "360.0"),
     ("setup_KR_normal", "50.0"),
 ]
 
-add(
-    "D0_flat_00deg",
-    "Calibrated-plane zero-offset control with no intentional tool-plane "
-    "mismatch.",
-    "The measured alignment angle at first contact should be near zero. This "
-    "must pass before interpreting either axis-specific sweep.",
-    COMMON_AXIS_STUDY
-    + [
-        ("tool_target_offset_tangent1_deg", "0.0"),
-        ("tool_target_offset_tangent2_deg", "0.0"),
-        ("setup_KR_tangent1", "5.0"),
-        ("setup_KR_tangent2", "5.0"),
-    ],
-    repeats=5,
-)
 
-for kr in (5.0, 15.0, 50.0):
+def main_gain_overrides(angle_t1=0.0, angle_t2=0.0, kr_t1=5.0,
+                        kr_t2=5.0, kp_t1=2000.0, kp_t2=2000.0):
+    return MAIN_COMMON + [
+        ("tool_target_offset_tangent1_deg", f"{angle_t1:.1f}"),
+        ("tool_target_offset_tangent2_deg", f"{angle_t2:.1f}"),
+        ("setup_KR_tangent1", f"{kr_t1:.1f}"),
+        ("setup_KR_tangent2", f"{kr_t2:.1f}"),
+        ("setup_Kp_surface_tangent1", f"{kp_t1:.1f}"),
+        ("setup_Kp_surface_tangent2", f"{kp_t2:.1f}"),
+    ]
+
+
+# Case A: calibration and initial relative angle.
+for run_id, a1, a2 in (
+    ("MAIN_A0_00deg", 0.0, 0.0),
+    ("MAIN_A1_t1_05deg", 5.0, 0.0),
+    ("MAIN_A2_t1_10deg", 10.0, 0.0),
+    ("MAIN_A3_t2_05deg", 0.0, 5.0),
+    ("MAIN_A4_t2_10deg", 0.0, 10.0),
+):
     add(
-        f"D1_KRt1_{int(kr):02d}",
-        f"Axis-specific t1 stiffness: +10 deg command offset about t1, "
-        f"K_R,t1 = {kr} N m/rad, K_R,t2 fixed at 5 N m/rad.",
-        "Quantifies the t1 stiffness effect without changing t2. Alignment "
-        "improvement should decrease as K_R,t1 increases.",
-        COMMON_AXIS_STUDY
-        + [
-            ("tool_target_offset_tangent1_deg", "10.0"),
-            ("tool_target_offset_tangent2_deg", "0.0"),
-            ("setup_KR_tangent1", f"{kr}"),
-            ("setup_KR_tangent2", "5.0"),
-        ],
-        repeats=5,
+        run_id,
+        f"Case A: calibrated plane with independent tool command offsets "
+        f"(t1={a1:+.0f} deg, t2={a2:+.0f} deg).",
+        "A0 must start close to zero physical-plane alignment error. The "
+        "nonzero cases establish the measured first-contact angle and the "
+        "fraction removed within the 5 s set-up.",
+        main_gain_overrides(a1, a2),
+        repeats=3,
     )
 
-for kr in (5.0, 15.0, 50.0):
-    add(
-        f"D2_KRt2_{int(kr):02d}",
-        f"Axis-specific t2 stiffness: +10 deg command offset about t2, "
-        f"K_R,t2 = {kr} N m/rad, K_R,t1 fixed at 5 N m/rad.",
-        "Quantifies the t2 stiffness effect without changing t1. Alignment "
-        "improvement should decrease as K_R,t2 increases.",
-        COMMON_AXIS_STUDY
-        + [
-            ("tool_target_offset_tangent1_deg", "0.0"),
-            ("tool_target_offset_tangent2_deg", "10.0"),
-            ("setup_KR_tangent1", "5.0"),
-            ("setup_KR_tangent2", f"{kr}"),
-        ],
-        repeats=5,
-    )
-
+# Case B: axis-specific rotational stiffness. The 5 N m/rad references are
+# MAIN_A2 and MAIN_A4, so only the additional levels are generated here.
 for axis in (1, 2):
+    for kr in (15.0, 50.0):
+        add(
+            f"MAIN_B{axis}_KRt{axis}_{int(kr):02d}",
+            f"Case B: +10 deg about t{axis}; vary only K_R,t{axis} to "
+            f"{kr:.0f} N m/rad.",
+            "Compare with the corresponding Case-A 10 deg reference at "
+            "5 N m/rad. The changed signed axis component must exceed the "
+            "repeatability interval before it is attributed to K_R.",
+            main_gain_overrides(
+                10.0 if axis == 1 else 0.0,
+                10.0 if axis == 2 else 0.0,
+                kr_t1=kr if axis == 1 else 5.0,
+                kr_t2=kr if axis == 2 else 5.0,
+            ),
+            repeats=3,
+        )
+
+# Case C: cross-direction translational stiffness. A t1 angular mismatch is
+# paired with Kp,t2; a t2 mismatch is paired with Kp,t1.
+for axis in (1, 2):
+    kp_axis = 2 if axis == 1 else 1
+    for kp in (300.0, 800.0):
+        add(
+            f"MAIN_C{axis}_KPt{kp_axis}_{int(kp):04d}",
+            f"Case C: +10 deg about t{axis}; vary only K_p,t{kp_axis} to "
+            f"{kp:.0f} N/m.",
+            "Compare with the corresponding 2000 N/m Case-A reference. "
+            "Evaluate alignment, edge travel, normal load and 90% time.",
+            main_gain_overrides(
+                10.0 if axis == 1 else 0.0,
+                10.0 if axis == 2 else 0.0,
+                kp_t1=kp if kp_axis == 1 else 2000.0,
+                kp_t2=kp if kp_axis == 2 else 2000.0,
+            ),
+            repeats=3,
+        )
     add(
-        f"D3_angle_t{axis}_05deg",
-        f"Initial-angle response: +5 deg command offset about t{axis}, both "
-        "tangent-axis stiffnesses fixed at 5 N m/rad.",
-        "Together with D0 and the 10 deg, 5 N m/rad arm of D1 or D2, this "
-        "tests whether available alignment motion scales with initial angle.",
-        COMMON_AXIS_STUDY
-        + [
-            ("tool_target_offset_tangent1_deg", "5.0" if axis == 1 else "0.0"),
-            ("tool_target_offset_tangent2_deg", "5.0" if axis == 2 else "0.0"),
-            ("setup_KR_tangent1", "5.0"),
-            ("setup_KR_tangent2", "5.0"),
-        ],
-        repeats=5,
+        f"MAIN_C{axis}_interaction_KR50_KP300",
+        f"Case C interaction corner for t{axis}: K_R,t{axis}=50 N m/rad "
+        f"and K_p,t{kp_axis}=300 N/m.",
+        "Completes the low/high 2x2 interaction using the three already "
+        "shared endpoint settings.",
+        main_gain_overrides(
+            10.0 if axis == 1 else 0.0,
+            10.0 if axis == 2 else 0.0,
+            kr_t1=50.0 if axis == 1 else 5.0,
+            kr_t2=50.0 if axis == 2 else 5.0,
+            kp_t1=300.0 if kp_axis == 1 else 2000.0,
+            kp_t2=300.0 if kp_axis == 2 else 2000.0,
+        ),
+        repeats=3,
     )
+
+# Case D coarse centre-of-compliance sweep. These are generated now for
+# traceability but must not be run until Cases A--C select the gains.
+for axis in (1, 2):
+    rc_axis = 2 if axis == 1 else 1
+    for rc_mm in (-60, 0, 60):
+        tag = f"{'m' if rc_mm < 0 else 'p'}{abs(rc_mm):03d}"
+        overrides = [
+            pair for pair in main_gain_overrides(
+                10.0 if axis == 1 else 0.0,
+                10.0 if axis == 2 else 0.0,
+            )
+            if pair[0] != "use_coupled_stiffness"
+        ] + [
+            ("use_coupled_stiffness", "1"),
+            ("coupled_use_block_diagonal", "0"),
+            ("coupled_pole_manual", "1"),
+            ("coupled_use_direct_rc_surface", "1"),
+            ("coupled_rc_tangent1", f"{rc_mm / 1000.0:.3f}" if rc_axis == 1 else "0.0"),
+            ("coupled_rc_tangent2", f"{rc_mm / 1000.0:.3f}" if rc_axis == 2 else "0.0"),
+            ("coupled_rc_normal", "0.0"),
+        ]
+        add(
+            f"MAIN_D{axis}_t{axis}_rc_t{rc_axis}_{tag}",
+            f"Case D coarse centre-of-compliance sweep: +10 deg about t{axis}, "
+            f"direct r_c,t{rc_axis}={rc_mm:+d} mm.",
+            "The zero lever must agree with the decoupled reference. Opposite "
+            "lever signs test the predicted moment direction. Refine only "
+            "after this coarse sweep is analysed.",
+            overrides,
+            repeats=3,
+        )
 
 # ---- Series B: centre of compliance / pole ---------------------------------
 # NOTE ON THE NAME. This setup was originally called B1_pole_at_tcp and claimed
@@ -372,9 +429,6 @@ add(
     ]
     + pole_keys(pole_offset_along(N, 0.08)),
 )
-
-# B6_pole_on_measured_axis is deliberately absent: it commanded the pole AT the
-# measured Chasles axis, and the finite-screw-axis line of work was dropped.
 
 for s in (-0.08, -0.04, 0.04, 0.08):
     tag = f"{'m' if s < 0 else 'p'}{abs(int(round(s * 1000))):03d}"

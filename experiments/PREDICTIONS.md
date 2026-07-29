@@ -257,6 +257,7 @@ in-plane components:
 The alignment response is a quadratic surface in the two in-plane pole
 components with an interior maximum. The normal component remains irrelevant.
 
-This confirms the mechanism the historical Difference-Chasles-Pole campaign
-proposed -- an optimum beyond which the quadratic lever term re-stiffens the
-rotation -- while relocating it from the surface normal to the surface plane.
+The measured turnover is consistent with the point-shifted stiffness term:
+beyond the beneficial region, increasing the lever can re-stiffen the
+rotational response. The experiment therefore treats the deliberately
+commanded surface-frame lever as the independent variable.

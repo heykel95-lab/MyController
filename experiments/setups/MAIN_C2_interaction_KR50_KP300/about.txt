@@ -1,0 +1,8 @@
+run_id:   MAIN_C2_interaction_KR50_KP300
+repeats:  3
+
+purpose:
+  Case C interaction corner for t2: K_R,t2=50 N m/rad and K_p,t1=300 N/m.
+
+pass criterion:
+  Completes the low/high 2x2 interaction using the three already shared endpoint settings.

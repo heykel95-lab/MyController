@@ -517,12 +517,25 @@ void printParameters(const Parameters& params) {
          params.grind_axis == 2 ? 2 : 1,
          1000.0 * params.grind_amplitude_m,
          params.grind_frequency_hz);
-  printf("coupled stiffness: apply=%s | saved=%s | pole=%s\n",
+  printf("set-up translation: frame=%s | Kp=[%.1f, %.1f, %.1f] N/m\n",
+         params.setup_translation_surface_frame ? "surface [t1,t2,n]" : "base [x,y,z]",
+         params.setup_translation_surface_frame ? params.setup_Kp_surface_diag(0)
+                                                : params.setup_Kp_diag(0),
+         params.setup_translation_surface_frame ? params.setup_Kp_surface_diag(1)
+                                                : params.setup_Kp_diag(1),
+         params.setup_translation_surface_frame ? params.setup_Kp_surface_diag(2)
+                                                : params.setup_Kp_diag(2));
+  printf("coupled stiffness: apply=%s | pole=%s\n",
          params.use_coupled_stiffness ? "on" : "off",
-         params.coupled_gains_saved ? "yes" : "no",
          params.coupled_use_block_diagonal
              ? "block-diagonal (no coupling)"
-             : (params.coupled_pole_manual ? "manual" : "saved matrices"));
+             : (params.coupled_pole_manual ? "commanded" : "invalid"));
+  if (params.coupled_pole_manual && params.coupled_use_direct_rc_surface) {
+    printf("  r_c=p_TCP-p_c [t1,t2,n] = [%+.1f, %+.1f, %+.1f] mm\n",
+           1000.0 * params.coupled_rc_surface(0),
+           1000.0 * params.coupled_rc_surface(1),
+           1000.0 * params.coupled_rc_surface(2));
+  }
   printf("gates: pause_before_set_up=%s | pause_auto_damping=%s | "
          "pause_before_grind=%s | debug_period=%.2f s\n",
          params.pause_before_set_up ? "on" : "off",
