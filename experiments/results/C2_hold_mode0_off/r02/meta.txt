@@ -1,0 +1,7 @@
+run_id:        C2_hold_mode0_off
+repeat:        2
+timestamp:     2026-07-28T21:46:06+02:00
+git_commit:    693d395b8e3ce52b77d2c9b353edaa4d7abfbaac
+git_dirty:     no
+host:          Computer19
+controller_exit: 130

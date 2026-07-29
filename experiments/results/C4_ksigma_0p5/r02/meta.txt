@@ -1,0 +1,7 @@
+run_id:        C4_ksigma_0p5
+repeat:        2
+timestamp:     2026-07-28T21:56:27+02:00
+git_commit:    0256e87e17f014038e6b89f6d2d8cdcb29534c42
+git_dirty:     no
+host:          Computer19
+controller_exit: 130

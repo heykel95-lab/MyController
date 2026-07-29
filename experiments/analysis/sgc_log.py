@@ -11,6 +11,7 @@ Handles both log schemas:
     NaN rather than silently faked.
 """
 
+import math
 import os
 
 import numpy as np
@@ -31,6 +32,78 @@ PHASE_NAMES = {
     4: "hold",
     5: "manual_guide",
 }
+
+# ---------------------------------------------------------------------------
+# Surface geometry. The controller scores alignment against the CONFIGURED
+# normal, which is deliberately left off the physical plane, so `align_gain`
+# reads backwards: it goes more negative the closer the tool gets to the real
+# surface. Everything below exists to rescore against the measured plane.
+# ---------------------------------------------------------------------------
+
+# alignment_target_tilt_angle_deg / _y_deg, i.e. (a about base x, b about y).
+CONFIGURED_PLANE = (0.0, 5.0)
+
+# tools/measure_plane readings, three hand-seatings on 2026-07-28. The spread
+# is partly seating technique and partly the workpiece moving between
+# attempts. The absolute residual depends on which of these you pick; the
+# improvement does not, moving under 0.1 deg across all three.
+MEASURED_PLANE = [(-1.01, 12.98), (-0.40, 16.79), (-0.76, 15.19)]
+
+
+def measured_plane_mean():
+    return (sum(p[0] for p in MEASURED_PLANE) / len(MEASURED_PLANE),
+            sum(p[1] for p in MEASURED_PLANE) / len(MEASURED_PLANE))
+
+
+def normal_from_tilt(a_deg, b_deg):
+    """n = R_y(b) * R_x(a) * [0,0,1], matching config.cpp."""
+    a, b = math.radians(a_deg), math.radians(b_deg)
+    return np.array([math.sin(b) * math.cos(a),
+                     -math.sin(a),
+                     math.cos(b) * math.cos(a)])
+
+
+def rotate_vector(v, axis, angle):
+    n = np.linalg.norm(axis)
+    if n < 1e-12:
+        return v
+    k = axis / n
+    return (v * math.cos(angle)
+            + np.cross(k, v) * math.sin(angle)
+            + k * (k @ v) * (1.0 - math.cos(angle)))
+
+
+def angle_between_deg(u, v):
+    return math.degrees(math.acos(float(np.clip(u @ v, -1.0, 1.0))))
+
+
+def alignment_improvement_deg(csv_path, plane=None):
+    """How much closer to the REAL plane the tool got during set_up [deg].
+
+    Positive means it rotated toward the surface. Returns None if the run has
+    no set-up phase.
+
+    The tool's rotation is -e_R, not +e_R: orientationError(R_current,
+    R_desired) returns the rotation taking current -> desired, and during
+    set_up the desired is the orientation frozen at contact, so the logged e_R
+    points back to the start. Using +e_R inverts the conclusion.
+
+    The starting tool axis is taken to be the configured normal. The runs put
+    align_before at 0.41-0.49 deg, so that is good to about half a degree.
+    """
+    a_m, b_m = plane if plane is not None else measured_plane_mean()
+    n_cfg = normal_from_tilt(*CONFIGURED_PLANE)
+    n_real = normal_from_tilt(a_m, b_m)
+
+    d, _ = read_csv(csv_path, ["phase", "e_R_x", "e_R_y", "e_R_z"])
+    idx = np.where(phase_mask(d["phase"], PHASE_SET_UP))[0]
+    if idx.size == 0:
+        return None
+    i = idx[-1]
+    e_R = np.array([d["e_R_x"][i], d["e_R_y"][i], d["e_R_z"][i]])
+    final = rotate_vector(n_cfg.copy(), -e_R, float(np.linalg.norm(e_R)))
+    return angle_between_deg(n_cfg, n_real) - angle_between_deg(final, n_real)
+
 
 # Below this rotation the finite screw axis is numerically meaningless: the
 # axis position divides a displacement by a near-zero angle. The controller's
@@ -226,9 +299,24 @@ def parse_setup_report(terminal_log_path):
     out = {}
     if not os.path.exists(terminal_log_path):
         return out
+    # The pole the controller actually commanded, relative to the contact
+    # edge. This is NOT the coupled_pole_from_edge parameter: the printed value
+    # resolves the tool geometry as well. Its x component turns out to be the
+    # variable that governs alignment, so it has to come from the transcript
+    # rather than from params_effective.
+    want_pole = False
     with open(terminal_log_path, errors="replace") as f:
         for line in f:
             line = line.strip()
+            if "manual pole" in line and "COMMANDED" in line:
+                want_pole = True
+                continue
+            if want_pole and line.startswith("pole_from_edge"):
+                vec = line.split("[")[1].split("]")[0]
+                v = [float(x) for x in vec.split(",")]
+                out["pole_cmd_x_mm"], out["pole_cmd_y_mm"], out["pole_cmd_z_mm"] = v
+                want_pole = False
+                continue
             if line.startswith("stop:"):
                 for part in line.split("|"):
                     part = part.strip()

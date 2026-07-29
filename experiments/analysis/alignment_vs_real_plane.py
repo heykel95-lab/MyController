@@ -43,36 +43,15 @@ import sgc_log  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 EXP = os.path.normpath(os.path.join(HERE, ".."))
 
-# tools/measure_plane readings, (a about x, b about y) in degrees. Three
-# hand-seatings on 2026-07-28. The spread is partly seating technique and
-# partly the workpiece itself moving between attempts.
-MEASURED_PLANE = [(-1.01, 12.98), (-0.40, 16.79), (-0.76, 15.19)]
-
-CONFIGURED_PLANE = (0.0, 5.0)
+# The plane, the surface geometry helpers and the -e_R sign convention all live
+# in sgc_log so metrics.csv and this script cannot disagree about them.
+MEASURED_PLANE = sgc_log.MEASURED_PLANE
+CONFIGURED_PLANE = sgc_log.CONFIGURED_PLANE
+normal_from_tilt = sgc_log.normal_from_tilt
+rotate = sgc_log.rotate_vector
+angle_between = sgc_log.angle_between_deg
 
 POLE_ORDER = ["m120", "m080", "m040", "p000", "p040", "p080", "p120", "p160"]
-
-
-def normal_from_tilt(a_deg, b_deg):
-    """n = R_y(b) * R_x(a) * [0,0,1], matching config.cpp."""
-    a, b = math.radians(a_deg), math.radians(b_deg)
-    return np.array([math.sin(b) * math.cos(a),
-                     -math.sin(a),
-                     math.cos(b) * math.cos(a)])
-
-
-def rotate(v, axis, angle):
-    n = np.linalg.norm(axis)
-    if n < 1e-12:
-        return v
-    k = axis / n
-    return (v * math.cos(angle)
-            + np.cross(k, v) * math.sin(angle)
-            + k * (k @ v) * (1.0 - math.cos(angle)))
-
-
-def angle_between(u, v):
-    return math.degrees(math.acos(float(np.clip(u @ v, -1.0, 1.0))))
 
 
 def final_tool_axes():

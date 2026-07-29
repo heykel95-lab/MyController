@@ -1,0 +1,216 @@
+# ====================================================================
+# COMMON parameters (shared by every run mode)
+# ====================================================================
+# Loaded first. Mode-specific gains live in sequence.txt / hold.txt.
+
+# --------------------------------------------------------------------
+# General / run settings
+# --------------------------------------------------------------------
+robot_ip = 172.16.0.2
+
+# experiment_duration = 0.0 -> run indefinitely until e + Enter
+# experiment_duration > 0.0 -> automatic stop after this time [s]
+experiment_duration = 0.0
+
+csv_file_name = surface_grinding_controller_log.csv
+log_every_n_cycles = 1
+max_log_rows = 120000
+
+# Compact sigma-enabled hold diagnostics. This separate 20 Hz file contains
+# guide/recapture events, raw q/dq, task contamination, external-load evidence,
+# and the sigma direction/response needed to distinguish hand motion from
+# autonomous comeback. It is buffered during control and written after stop.
+sigma_debug_csv_file_name = surface_grinding_controller_sigma_debug.csv
+sigma_debug_log_period = 0.05
+max_sigma_debug_rows = 20000
+
+# Terminal debug print period, shared by all phases [s]. 0 = no debug lines.
+debug_period = 0.20
+
+# 1 = print the per-cycle "hold:" debug line while holding at the start pose.
+print_hold_debug = 0
+
+# 1 = print the rate-limited sigma tuning line in hold mode 2 or 3.
+print_sigma_debug = 1
+
+# --------------------------------------------------------------------
+# Auto-damping
+# --------------------------------------------------------------------
+# Online damping: D = factor*2*sqrt(M*K). Manual Dp/DR entries are fallbacks.
+# factor: 1.0 = critical, <1 lighter, >1 heavier.
+
+# Hold mode: compute translation and rotation once at hold entry.
+# With matching enabled, one factor is fitted online so the three translational
+# coefficients stay as close as possible to hold_Dp (currently 50 Ns/m).
+hold_auto_damping = 1
+hold_auto_match_manual_damping = 1
+# Used directly only when hold_auto_match_manual_damping = 0.
+hold_auto_damping_factor = 1.0
+
+# Phase 1: approach orient + descend.
+approach_auto_damping = 1
+approach_auto_damping_factor = 1.9
+
+# Phases 2 and 3: set up + grind.
+setup_auto_damping = 1
+setup_auto_damping_factor = 1.0
+
+auto_damping_max = 8000.0
+
+# 0 = manual D only as fallback. 1 = manual D is also a per-axis floor.
+auto_damping_min_from_manual = 0
+
+# Print computed damping next to manual fallback values.
+print_auto_damping = 1
+
+# --------------------------------------------------------------------
+# Gripper action (performed once after q_init)
+# --------------------------------------------------------------------
+# require_gripper_open = 1 stops the run if the gripper action fails.
+open_gripper_before_run = 1
+require_gripper_open = 0
+
+# 0 = open to gripper_open_width. 1 = grasp at gripper_grasp_width.
+gripper_grasp_on_tool = 1
+gripper_grasp_width = 0.07
+gripper_grasp_speed = 0.050
+gripper_grasp_force = 60.0
+gripper_grasp_epsilon_inner = 0.005
+gripper_grasp_epsilon_outer = 0.010
+
+gripper_open_width = 0.080
+gripper_open_speed = 0.050
+
+# --------------------------------------------------------------------
+# Surface plane (shared by every phase)
+# --------------------------------------------------------------------
+# Surface: n^T * (p - surface_point) = 0.
+use_start_as_surface_point = 0
+# Place surface_point near the working spot so tilt changes do not move the
+# height at the tool.
+surface_point_x = 0.55
+surface_point_y = -0.06
+surface_point_z = 0.025
+
+# Plane orientation from two tilt angles:
+# n = R_y(b) * R_x(a) * [0,0,1].
+alignment_target_tilt_angle_deg   = 0.0   # a, about base x
+alignment_target_tilt_angle_y_deg = 5.0   # b, about base y
+
+# Surface frame columns: [tangent1, tangent2, normal]. tangent2 is computed.
+alignment_target_tangent1_x = 1.0
+alignment_target_tangent1_y = 0.0
+alignment_target_tangent1_z = 0.0
+
+# Rotational spring mask in the surface frame. 0 removes stiffness on that axis.
+constrain_rotation_about_alignment_normal = 1
+constrain_rotation_about_alignment_tangent1 = 1
+constrain_rotation_about_alignment_tangent2 = 1
+
+# --------------------------------------------------------------------
+# Tool geometry
+# --------------------------------------------------------------------
+# Grinding-face normal is +Z_EE. The sign picks along/opposite the surface
+# normal; -1 points the +Z_EE face toward the surface.
+tool_axis_ee_x = 0.0
+tool_axis_ee_y = 0.0
+tool_axis_ee_z = 1.0
+tool_axis_target_sign = -1.0
+
+# Center of the rectangular grinding face, 20 mm along +Z_EE from the hand.
+use_tool_contact_point_control = 1
+auto_select_tool_contact_edge = 1
+tool_contact_face_center_ee_x = 0.0
+tool_contact_face_center_ee_y = 0.0
+tool_contact_face_center_ee_z = 0.020
+
+# Half-width: 40 mm total along X_EE.
+tool_contact_half_width_ee_x = 0.020
+tool_contact_half_width_ee_y = 0.0
+tool_contact_half_width_ee_z = 0.0
+
+# Half-length: 120 mm total along Y_EE (the old 80 mm face used 40 mm here).
+tool_contact_half_length_ee_x = 0.0
+tool_contact_half_length_ee_y = 0.060
+tool_contact_half_length_ee_z = 0.0
+
+# Corners within this normal-distance difference are treated as one physical
+# edge/face for the controlled contact point. Clearance still uses the closest
+# individual corner. [m]
+tool_contact_feature_tie_tolerance = 0.0001
+
+# --------------------------------------------------------------------
+# Initial joint configuration [rad]
+# --------------------------------------------------------------------
+# horizontal_tool          -> default tool orientation
+# tilted_tool              -> same, but q_init_5 is changed
+# tilted_close             -> measured close-to-table tilted start posture
+# horizontal_table_search  -> starts close above the horizontal table
+q_init_case = tilted_tool
+
+q_init_horizontal_1 = 0.0
+q_init_horizontal_2 = -pi/4
+q_init_horizontal_3 = 0.0
+q_init_horizontal_4 = -3*pi/4
+q_init_horizontal_5 = 0.0
+q_init_horizontal_6 = pi/2
+q_init_horizontal_7 = pi/4
+
+q_init_tilted_1 = -0.047771
+q_init_tilted_2 = 0.315777
+q_init_tilted_3 = -0.089546
+q_init_tilted_4 = -2.143518
+q_init_tilted_5 = 0.306679
+q_init_tilted_6 = 2.434032
+q_init_tilted_7 = 0.467459
+
+# From a measured close tilted start, listed in that run as
+# [-2.9, 8.5, -3.9, -131.5, 19.2, 140.2, 26.2] deg.
+q_init_tilted_close_1 = -0.050615
+q_init_tilted_close_2 = 0.148353
+q_init_tilted_close_3 = -0.068068
+q_init_tilted_close_4 = -2.295108
+q_init_tilted_close_5 = 0.335103
+q_init_tilted_close_6 = 2.446952
+q_init_tilted_close_7 = 0.457276
+
+# Good horizontal table start posture: keeps the tool close to the table while
+# leaving q4 far enough from its lower limit.
+q_init_table_1 = -0.016251
+q_init_table_2 = 0.174096
+q_init_table_3 = -0.018640
+q_init_table_4 = -2.273434
+q_init_table_5 = -0.000397
+q_init_table_6 = 2.533846
+q_init_table_7 = 0.745537
+
+# Optional direct override. Uncomment only to bypass q_init_case entirely.
+# q_init_1 = 0.0
+# q_init_2 = -pi/4
+# q_init_3 = 0.0
+# q_init_4 = -3*pi/4
+# q_init_5 = 0.0
+# q_init_6 = pi/2
+# q_init_7 = pi/4
+
+# --------------------------------------------------------------------
+# Nullspace sigma-min optimization
+# --------------------------------------------------------------------
+# nullspace_mode:
+#   0/off     = no nullspace torque
+#   1/damping = damp only the nullspace velocity; no return-to-start spring
+#   2/sigma   = sigma_min improvement push only
+#   3/both    = nullspace damping + sigma_min improvement push
+use_nullspace_optimization = 1
+nullspace_mode = 0
+nullspace_damping = 2.0
+# Direct sigma push torque magnitude [Nm]. Sigma-only mode is undamped, so
+# increase cautiously and use the sigma debug values below to compare trials.
+nullspace_k_sigma = 1.0
+# Finite-difference probe distance [rad] used only to compare q+alpha*n with
+# q-alpha*n. It does not multiply the commanded torque.
+nullspace_alpha = 0.08
+# Ignore sigma_plus - sigma_minus differences below this numerical deadband.
+nullspace_sigma_deadband = 0.000001
+# Relative singular-value cutoff for the SVD Moore-Penrose inverse.
+nullspace_svd_relative_tolerance = 0.0001

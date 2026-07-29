@@ -1,0 +1,92 @@
+
+Press Enter to recover and configure the robot.
+Robot recovered or already ready.
+Collision: custom thresholds.
+
+=== Startup choice ===
+  q = go to q_init (from params/common.txt), then choose again
+  g = guiding mode: go to q_init, then hand-guide to your pose;
+      use s+Enter for sequence or h+Enter for hold
+  o = open the Franka hand now (release/load tool), then choose again
+  c = close/grasp the tool now, then choose again
+  r = continue to run mode (available after q_init is reached)
+Choice [q/g/o/c/r, Enter = q]: Moving to q_init...
+q_init reached.
+
+=== Startup choice ===
+  q = go to q_init (from params/common.txt), then choose again
+  g = guiding mode: go to q_init, then hand-guide to your pose;
+      use s+Enter for sequence or h+Enter for hold
+  o = open the Franka hand now (release/load tool), then choose again
+  c = close/grasp the tool now, then choose again
+  r = continue to run mode
+Choice [q/g/o/c/r, Enter = q]: 
+=== Run mode ===
+  s = phase sequence (approach / set up / grind)
+  h = hold at the start pose
+Choice [s/h, Enter = s]: 
+Select hold nullspace mode:
+  0 = no nullspace torque
+  1 = nullspace damping only (no return to q_start)
+  2 = sigma optimization only (push toward larger sigma_min)
+  3 = sigma optimization + nullspace damping (damped comeback)
+Choice [0/1/2/3, Enter = 0]: Selected: hold mode with off.
+
+=== Setup ===
+run: hold | approach_orient: on | nullspace: off
+nullspace parameters: d_null=2.000 (inactive) | k_sigma=1.000 Nm (inactive) | alpha=0.0800 rad
+hold: Kp=300.0 N/m | KR=40.0 Nm/rad | damping=auto translation+rotation (factor fitted online toward Dp=50.0 Ns/m)
+manual_guidance_start: off | manual_damping=0.50
+descend: clearance=20.0 mm | speed=0.100 m/s | max_distance=640 mm
+alignment push: start=captured | end=+180 mm | speed=0.050 m/s | ramp_time~=4.0 s | timeout=12.0 s | moment_threshold=150.0 Nm
+grind: sweep | axis=tangent2 | amplitude=30 mm | frequency=0.20 Hz
+coupled stiffness: apply=on | saved=yes | pole=manual
+gates: pause_before_set_up=on | pause_auto_damping=on | pause_before_grind=off | debug_period=0.20 s
+alignment-target normal=[+0.087, -0.000, +0.996] | tilt a(x)=0.0 deg, b(y)=5.0 deg (from angles)
+tool face: 40 x 120 mm | center offset EE=[+0.0, +0.0, +20.0] mm
+Gripper already holding the tool (width 65.5 mm); keeping grasp.
+Press e+Enter to stop the controller before the duration expires.
+During hold: press g+Enter to hand-guide the tool, then p+Enter to recapture and resume hold.
+experiment_duration <= 0: running indefinitely until e + Enter.
+
+=== Start pose ===
+q_start = [-2.7, 18.1, -5.1, -122.8, 17.5, 139.5, 26.8] deg
+p_start = [565.1, -59.5, 151.1] mm
+
+=== Run ===
+phase: hold
+hold auto damping: fitted factor=0.561 toward Dp=50.0 Ns/m
+hold Dp            auto=[  54.23,   40.59,   52.89]  manual=[  50.00,   50.00,   50.00] Ns/m
+hold DR            auto=[   2.54,    3.22,    0.70]  manual=[   8.00,    8.00,    8.00] Nms/rad
+
+phase: manual_guide (move the tool by hand; p+Enter recaptures and resumes hold, e+Enter stops)
+
+=== Resuming hold from re-guided pose ===
+q_start = [-0.8, -6.0, -8.9, -138.5, 15.7, 139.9, 26.6] deg
+p_start = [500.3, -65.3, 261.7] mm
+phase: hold
+hold auto damping: fitted factor=0.538 toward Dp=50.0 Ns/m
+hold Dp            auto=[  57.98,   40.57,   48.34]  manual=[  50.00,   50.00,   50.00] Ns/m
+hold DR            auto=[   2.44,    3.19,    0.88]  manual=[   8.00,    8.00,    8.00] Nms/rad
+
+Stop requested with e + Enter. Finishing control loop...
+
+Joint motion [deg]:
+joint    start   final   delta
+------------------------------
+q1       -0.8    -0.8    -0.0
+q2       -6.0    -6.0     0.0
+q3       -8.9    -8.9    -0.0
+q4     -138.5  -138.5    -0.0
+q5       15.7    15.7     0.0
+q6      139.9   139.9    -0.0
+q7       26.6    26.6     0.0
+
+=== Final result ===
+p_d = [500.3, -65.3, 261.7] mm
+p_EE = [500.2, -65.4, 261.7] mm
+e_p = [0.0, 0.1, 0.1] mm
+position_error = 0.15 mm
+e_R = [-0.00, -0.01, 0.02] deg
+rotation_error = 0.02 deg
+csv: surface_grinding_controller_log.csv

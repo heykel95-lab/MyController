@@ -44,6 +44,8 @@ FIELDS = [
     "task_pos_error_drift_mm", "task_rot_error_drift_deg",
     "jacobian_null_residual_max",
     "pole_x", "pole_y", "pole_z", "pole_normal_mm",
+    "pole_cmd_x_mm", "pole_cmd_y_mm", "pole_cmd_z_mm",
+    "align_improve_real_deg",
     "flags",
 ]
 
@@ -136,16 +138,23 @@ def process_run(run_id, repeat_tag, run_dir):
             for k, v in m.items():
                 if k in row:
                     row[k] = v
+            imp = sgc_log.alignment_improvement_deg(general)
+            if imp is not None:
+                row["align_improve_real_deg"] = f"{imp:.4f}"
+
             if m.get("setup_present"):
                 drift = m.get("tip_drift_last20pct_deg", 0.0)
                 tip = m.get("tip_final_deg", 0.0)
                 if tip > 0 and drift > 0.1 * tip:
                     flags.append("not-converged")
-            else:
+            elif not sgc_log.hold_metrics(general).get("hold_present"):
                 # A CSV exists but the run never got as far as the set-up press
                 # -- aborted during approach, typically. Every set-up metric is
                 # blank, and without a flag the run counts as good and enters
                 # the means as a hole.
+                #
+                # Hold runs (C-series) have no set-up phase by design, so the
+                # absence of one is only a fault when there is no hold either.
                 flags.append("no-setup-phase")
         except Exception as exc:  # noqa: BLE001
             flags.append(f"setup-parse-error({type(exc).__name__})")

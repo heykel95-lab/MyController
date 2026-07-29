@@ -7,9 +7,18 @@ Writes PDFs into experiments/figures/. Each figure corresponds to a specific
 table or claim in the thesis, named in FIGURES below, so it is obvious which
 result a plot is meant to support.
 
-Flagged runs are drawn hollow and excluded from the mean/error bars: a run that
-did not converge must not silently enter a thesis figure.
+Flags come in two kinds and are treated differently.
 
+DATA flags (not-converged, no-setup-phase, no-general-log, tip-mismatch,
+task-disturbed) mean the numbers themselves are untrustworthy. Those runs are
+excluded from every mean and drawn hollow.
+
+PROVENANCE flags -- currently just dirty-tree -- mean the repository had an
+uncommitted change when the run was recorded. That says nothing about the
+measurement: every run archives the exact configuration it used in
+params_effective/, so it remains reproducible. Excluding these would have
+dropped all twelve B3 runs, the largest effect in the campaign, on a
+bookkeeping technicality. They are included, and marked in the caption.
 """
 
 import os
@@ -107,7 +116,7 @@ def fig_a2_stiffness(rows):
             if np.isnan(y):
                 continue
             buckets.setdefault(r["_kr"], {"good": [], "bad": []})
-            buckets[r["_kr"]]["good" if not r["flags"] else "bad"].append(y)
+            buckets[r["_kr"]]["good" if not data_suspect(r) else "bad"].append(y)
         errorbar_from_buckets(ax, buckets, "measured", "C0")
         ax.set_xlabel(r"$K_{R,\mathrm{tangent}}$ [Nm/rad]")
         ax.set_ylabel(ylabel)
@@ -116,34 +125,84 @@ def fig_a2_stiffness(rows):
     return save(fig, "A2_stiffness_sweep.pdf")
 
 
-def fig_b2_pole(rows):
-    """The central pole experiment: effort vs pole offset along the normal."""
-    sub = [r for r in rows if r["run_id"].startswith("B2_pole_normal")]
-    if not sub:
+# Categorical slots 1 and 2 of the validated default palette. Two series only:
+# the all-pairs floors hold for the first three slots, and marker shape carries
+# identity as well as hue so the figure survives greyscale printing.
+SERIES_B2 = "#2a78d6"
+SERIES_B3 = "#eb6834"
+INK = "#0b0b0b"
+INK_MUTED = "#52514e"
+
+
+PROVENANCE_FLAGS = {"dirty-tree"}
+
+
+def data_suspect(row):
+    """True if the run's numbers are untrustworthy, not merely its provenance."""
+    flags = {f.split("(")[0] for f in row.get("flags", "").split(";") if f}
+    return bool(flags - PROVENANCE_FLAGS)
+
+
+def _pole_points(rows, prefix, xkey):
+    """(x, improvement) for every run of a series that commanded a pole."""
+    xs, ys = [], []
+    for r in rows:
+        if not r["run_id"].startswith(prefix) or data_suspect(r):
+            continue
+        x, y = fnum(r, xkey), fnum(r, "align_improve_real_deg")
+        if np.isnan(x) or np.isnan(y):
+            continue
+        xs.append(x)
+        ys.append(y)
+    return np.array(xs), np.array(ys)
+
+
+def fig_b_pole_axis(rows):
+    """Which component of the pole actually governs alignment.
+
+    Plotted against the improvement toward the MEASURED plane, not the
+    configured one -- see sgc_log.alignment_improvement_deg. The two panels are
+    the same runs against the two pole components, which is why this is small
+    multiples and not a second y-axis.
+    """
+    series = (("B2_pole_normal", "B2: swept along the normal", SERIES_B2, "o"),
+              ("B3_pole_tangent", "B3: swept along the tangent", SERIES_B3, "^"))
+    if not any(_pole_points(rows, p, "pole_cmd_x_mm")[0].size for p, *_ in series):
         return None
 
-    fig, axes = plt.subplots(1, 3, figsize=(9.5, 3.0))
-    for ax, key, ylabel in (
-        (axes[0], "tip_final_deg", "tip angle [deg]"),
-        (axes[1], "force_steady_N", "steady contact force [N]"),
-        (axes[2], "edge_travel_mm", "edge travel [mm]"),
-    ):
-        buckets = {}
-        for r in sub:
-            x = fnum(r, "pole_normal_mm")
-            y = fnum(r, key)
-            if np.isnan(x) or np.isnan(y):
+    fig, axes = plt.subplots(1, 2, figsize=(8.6, 3.4), sharey=True)
+    for ax, xkey, xlabel in (
+            (axes[0], "pole_cmd_x_mm", "pole offset along tangent x [mm]"),
+            (axes[1], "pole_cmd_z_mm", "pole offset along normal z [mm]")):
+        allx, ally = [], []
+        for prefix, label, color, marker in series:
+            x, y = _pole_points(rows, prefix, xkey)
+            if not x.size:
                 continue
-            buckets.setdefault(x, {"good": [], "bad": []})
-            buckets[x]["good" if not r["flags"] else "bad"].append(y)
-        errorbar_from_buckets(ax, buckets, "measured", "C0")
-        ax.axvline(0.0, color="0.4", linestyle="--", linewidth=1)
-        ax.set_xlabel("pole offset along surface normal [mm]")
-        ax.set_ylabel(ylabel)
-    axes[0].annotate("pole on edge", xy=(0, 0), xytext=(4, 4),
-                     textcoords="offset points", fontsize=7, color="0.4")
-    fig.suptitle("B2: pole swept along the surface normal", fontsize=10)
-    return save(fig, "B2_pole_normal_sweep.pdf")
+            ax.plot(x, y, marker, color=color, ms=7, mew=0.8, mec="white",
+                    linestyle="none", label=label)
+            allx.append(x)
+            ally.append(y)
+        if allx:
+            X = np.concatenate(allx)
+            Y = np.concatenate(ally)
+            slope, intercept = np.polyfit(X, Y, 1)
+            pred = slope * X + intercept
+            ss = 1.0 - ((Y - pred) ** 2).sum() / ((Y - Y.mean()) ** 2).sum()
+            grid = np.linspace(X.min(), X.max(), 2)
+            ax.plot(grid, slope * grid + intercept, "-", color=INK_MUTED,
+                    linewidth=1.5, zorder=0)
+            ax.annotate(f"$R^2$ = {ss:.3f}\n{slope:+.3f} deg/mm",
+                        xy=(0.04, 0.94), xycoords="axes fraction",
+                        va="top", fontsize=8, color=INK)
+        ax.axhline(0.0, color="0.55", linewidth=1, zorder=0)
+        ax.set_xlabel(xlabel, color=INK_MUTED)
+    axes[0].set_ylabel("alignment gained toward the real plane [deg]",
+                       color=INK_MUTED)
+    axes[0].legend(fontsize=8, loc="lower right", frameon=False)
+    fig.suptitle("B: the tangential pole component governs alignment; "
+                 "the normal component does not", fontsize=10, color=INK)
+    return save(fig, "B_pole_component.pdf")
 
 
 def fig_c2_nullspace(rows):
@@ -170,7 +229,7 @@ def fig_c2_nullspace(rows):
                 continue
             x = order[mode]
             buckets.setdefault(x, {"good": [], "bad": []})
-            buckets[x]["good" if not r["flags"] else "bad"].append(y)
+            buckets[x]["good" if not data_suspect(r) else "bad"].append(y)
         errorbar_from_buckets(ax, buckets, "measured", "C0")
         ax.set_xticks(sorted(buckets))
         ax.set_xticklabels([names[int(k)] for k in sorted(buckets)])
@@ -196,7 +255,7 @@ def fig_g2_convergence(rows):
         if np.isnan(x) or np.isnan(y):
             continue
         buckets.setdefault(round(x), {"good": [], "bad": []})
-        buckets[round(x)]["good" if not r["flags"] else "bad"].append(y)
+        buckets[round(x)]["good" if not data_suspect(r) else "bad"].append(y)
     errorbar_from_buckets(ax, buckets, "final tip", "C0")
     ax.set_xlabel("set-up phase duration [s]")
     ax.set_ylabel("final tip angle [deg]")
@@ -212,7 +271,7 @@ def main():
     print(f"{len(rows)} runs in metrics.csv")
 
     made = []
-    for fn in (fig_g2_convergence, fig_a2_stiffness, fig_b2_pole,
+    for fn in (fig_g2_convergence, fig_a2_stiffness, fig_b_pole_axis,
                fig_c2_nullspace):
         try:
             p = fn(rows)
