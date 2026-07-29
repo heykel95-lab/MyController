@@ -310,6 +310,36 @@ for axis in (1, 2):
         repeats=3,
     )
 
+# Short sign pilot before the full centre-of-compliance campaign. The completed
+# MAIN_A1 repeats provide the decoupled reference. These two cases change only
+# the signed t2 lever required to generate a t1 moment under normal preload:
+#   m_t1 = (-r_c x f)_t1.
+# Direct surface-frame r_c avoids the old base-frame pole convention.
+for rc_t2_mm in (-60, 60):
+    sign_tag = "m060" if rc_t2_mm < 0 else "p060"
+    overrides = [
+        pair for pair in main_gain_overrides(angle_t1=5.0)
+        if pair[0] != "use_coupled_stiffness"
+    ] + [
+        ("use_coupled_stiffness", "1"),
+        ("coupled_use_block_diagonal", "0"),
+        ("coupled_pole_manual", "1"),
+        ("coupled_use_direct_rc_surface", "1"),
+        ("coupled_rc_tangent1", "0.0"),
+        ("coupled_rc_tangent2", f"{rc_t2_mm / 1000.0:.3f}"),
+        ("coupled_rc_normal", "0.0"),
+    ]
+    add(
+        f"PILOT_COC_t1_rc_t2_{sign_tag}",
+        f"Active compliance-centre sign pilot: +5 deg about t1 and "
+        f"r_c,t2={rc_t2_mm:+d} mm.",
+        "Compare with the completed decoupled MAIN_A1 reference. Select the "
+        "sign that reduces the measured t1 error and moves the physical "
+        "contact from the initially loaded edge toward full-face contact.",
+        overrides,
+        repeats=1,
+    )
+
 # Case D coarse centre-of-compliance sweep. These are generated now for
 # traceability but must not be run until Cases A--C select the gains.
 for axis in (1, 2):
@@ -588,7 +618,7 @@ def write_setups():
         os.makedirs(d, exist_ok=True)
         plane_profile = None
         tool_profile = None
-        if run_id.startswith("MAIN_"):
+        if run_id.startswith(("MAIN_", "PILOT_COC_")):
             plane_profile = "horizontal"
             tool_profile = "grinding_tool"
         elif run_id.startswith("VALID_T"):
