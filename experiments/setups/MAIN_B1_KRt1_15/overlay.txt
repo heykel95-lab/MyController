@@ -8,6 +8,7 @@ nullspace_mode = 1
 setup_translation_surface_frame = 1
 setup_Kp_surface_normal = 360.0
 setup_KR_normal = 50.0
+q_init_case = horizontal_table_search
 tool_target_offset_tangent1_deg = 10.0
 tool_target_offset_tangent2_deg = 0.0
 setup_KR_tangent1 = 15.0

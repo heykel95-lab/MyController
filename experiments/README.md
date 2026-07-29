@@ -45,17 +45,17 @@ coordinates: P1--P3 fit the plane and P4 validates it. Use fit points at least
 touch that same corner to every point. With the robot stationary at each
 point, run:
 
-The primary campaign uses the named `tilted` profile:
+The primary campaign uses the named `horizontal` profile:
 
 ```bash
 cd surface_grinding_controller
 make capture_plane_point
-./tools/capture_plane_point tilted P1
-./tools/capture_plane_point tilted P2
-./tools/capture_plane_point tilted P3
-./tools/capture_plane_point tilted P4
+./tools/capture_plane_point horizontal P1
+./tools/capture_plane_point horizontal P2
+./tools/capture_plane_point horizontal P3
+./tools/capture_plane_point horizontal P4
 cd ..
-python3 experiments/calibration/prepare_plane_calibration.py tilted
+python3 experiments/calibration/prepare_plane_calibration.py horizontal
 ```
 
 `capture_plane_point` is read-only and commands no robot motion. It converts
@@ -81,6 +81,14 @@ to zero or if a held-out plane point lies more than 1 mm from the fitted plane.
 The guided runner executes one robot trial at a time, selects the next missing
 repeat, verifies the exact gain matrices without connecting to the robot,
 archives the trial through `run.sh`, and refreshes metrics and plots.
+
+The separately calibrated `tilted` profile is used only for the compact
+frame-transfer validation after the horizontal primary campaign:
+
+```bash
+./experiments/run_tilted_validation.sh status
+./experiments/run_tilted_validation.sh next
+```
 
 **The backup is not optional.** It guarantees that no setup overlay contaminates
 the next trial. Restoration runs from a shell trap, so Ctrl-C and libfranka

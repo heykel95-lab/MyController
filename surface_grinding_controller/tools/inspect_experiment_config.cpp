@@ -42,6 +42,7 @@ int main(int argc, char** argv) {
     }
 
     printf("experiment preflight (no robot connection)\n");
+    printf("q_init_case = %s\n", params.q_init_case.c_str());
     printf("surface t1 = [%+.6f, %+.6f, %+.6f]\n",
            R_surface(0, 0), R_surface(1, 0), R_surface(2, 0));
     printf("surface t2 = [%+.6f, %+.6f, %+.6f]\n",

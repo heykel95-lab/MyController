@@ -1,7 +1,7 @@
 run_id:   MAIN_C1_KPt2_0800
 repeats:  3
 
-plane profile: tilted
+plane profile: horizontal
 
 purpose:
   Case C: +10 deg about t1; vary only K_p,t2 to 800 N/m.

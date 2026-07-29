@@ -13,18 +13,18 @@ For each physical plane:
 4. Place P4 elsewhere on the plane; it is not used in the fit.
 5. Generate the profile and require the P4 residual to be at most 1 mm.
 
-Example for the primary plane:
+Example for the horizontal primary plane:
 
 ```bash
 cd surface_grinding_controller
-./tools/capture_plane_point tilted P1
-./tools/capture_plane_point tilted P2
-./tools/capture_plane_point tilted P3
-./tools/capture_plane_point tilted P4
+./tools/capture_plane_point horizontal P1
+./tools/capture_plane_point horizontal P2
+./tools/capture_plane_point horizontal P3
+./tools/capture_plane_point horizontal P4
 cd ..
-python3 experiments/calibration/prepare_plane_calibration.py tilted
+python3 experiments/calibration/prepare_plane_calibration.py horizontal
 ```
 
-Use `horizontal` in both commands for the second plane. A setup chooses its
-plane through `experiments/setups/<run_id>/plane_profile.txt`; the runner does
-not use a global active-plane file.
+Use `tilted` in both commands for the later validation plane. A setup chooses
+its plane through `experiments/setups/<run_id>/plane_profile.txt`; the runner
+does not use a global active-plane file.

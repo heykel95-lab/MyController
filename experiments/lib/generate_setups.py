@@ -210,8 +210,10 @@ MAIN_COMMON = [
 
 
 def main_gain_overrides(angle_t1=0.0, angle_t2=0.0, kr_t1=5.0,
-                        kr_t2=5.0, kp_t1=2000.0, kp_t2=2000.0):
+                        kr_t2=5.0, kp_t1=2000.0, kp_t2=2000.0,
+                        q_init_case="horizontal_table_search"):
     return MAIN_COMMON + [
+        ("q_init_case", q_init_case),
         ("tool_target_offset_tangent1_deg", f"{angle_t1:.1f}"),
         ("tool_target_offset_tangent2_deg", f"{angle_t2:.1f}"),
         ("setup_KR_tangent1", f"{kr_t1:.1f}"),
@@ -327,6 +329,27 @@ for axis in (1, 2):
             overrides,
             repeats=3,
         )
+
+# Compact absolute-orientation validation on the separately calibrated tilted
+# plane. These reproduce the three baseline angle cases from horizontal Case A.
+# A final tuned condition is added only after horizontal Cases A--D select it.
+for run_id, a1, a2 in (
+    ("VALID_T0_00deg", 0.0, 0.0),
+    ("VALID_T1_t1_10deg", 10.0, 0.0),
+    ("VALID_T2_t2_10deg", 0.0, 10.0),
+):
+    add(
+        run_id,
+        f"Tilted-plane validation at the baseline gains with independent "
+        f"tool offsets (t1={a1:+.0f} deg, t2={a2:+.0f} deg).",
+        "Compare with the matched horizontal Case-A result using the measured "
+        "first-contact angle. This is a frame-transfer check, not a second "
+        "parameter sweep.",
+        main_gain_overrides(
+            a1, a2, q_init_case="tilted_tool"
+        ),
+        repeats=3,
+    )
 
 # ---- Series B: centre of compliance / pole ---------------------------------
 # NOTE ON THE NAME. This setup was originally called B1_pole_at_tcp and claimed
@@ -551,9 +574,11 @@ def write_setups():
     for run_id, purpose, criterion, overrides, repeats in SPEC:
         d = os.path.join(SETUPS, run_id)
         os.makedirs(d, exist_ok=True)
-        plane_profile = (
-            "tilted" if run_id.startswith(("D", "MAIN_")) else None
-        )
+        plane_profile = None
+        if run_id.startswith("MAIN_"):
+            plane_profile = "horizontal"
+        elif run_id.startswith("VALID_T"):
+            plane_profile = "tilted"
 
         with open(os.path.join(d, "overlay.txt"), "w") as f:
             f.write(f"# {run_id}\n")

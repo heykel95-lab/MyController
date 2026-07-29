@@ -255,8 +255,8 @@ that prints the configured `F_T_EE` / `EE_T_K` transforms without commanding
 any motion.
 
 `make capture_plane_point` builds the read-only named-plane capture tool. Use
-`tools/capture_plane_point tilted P1` through `P4` for the primary plane, or
-replace `tilted` with `horizontal` for the validation plane.
+`tools/capture_plane_point horizontal P1` through `P4` for the primary plane,
+or replace `horizontal` with `tilted` for the validation plane.
 
 Stop the controller at any time with `e + Enter`. A bare `Enter` continues past
 a phase gate.

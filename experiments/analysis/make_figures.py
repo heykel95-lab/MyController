@@ -435,6 +435,78 @@ def data_suspect(row):
     return bool(flags - PROVENANCE_FLAGS)
 
 
+def fig_plane_validation(rows):
+    """Matched horizontal-primary and tilted-validation baseline conditions."""
+    definitions = (
+        ("0 deg", "MAIN_A0_", "VALID_T0_", None),
+        (r"$10^\circ$ about $t_1$", "MAIN_A2_", "VALID_T1_", 1),
+        (r"$10^\circ$ about $t_2$", "MAIN_A4_", "VALID_T2_", 2),
+    )
+    selected = [
+        row for row in rows
+        if any(
+            row["run_id"].startswith((horizontal, tilted))
+            for _, horizontal, tilted, _ in definitions
+        )
+    ]
+    if not any(row["run_id"].startswith("VALID_T") for row in selected):
+        return None
+
+    fig, axes = plt.subplots(1, 2, figsize=(7.8, 3.3), sharex=True)
+    x_base = np.arange(len(definitions), dtype=float)
+    for profile, prefix_index, offset, color, marker in (
+        ("horizontal", 1, -0.08, "C0", "o"),
+        ("tilted", 2, +0.08, "C1", "s"),
+    ):
+        initial_means, initial_errs = [], []
+        residual_means, residual_errs = [], []
+        for _, horizontal_prefix, tilted_prefix, axis in definitions:
+            prefix = (horizontal_prefix, tilted_prefix)[prefix_index - 1]
+            matching = [
+                row for row in selected
+                if row["run_id"].startswith(prefix) and not data_suspect(row)
+            ]
+            if axis is None:
+                initial = [fnum(row, "align_before_deg") for row in matching]
+                residual = [fnum(row, "align_after_deg") for row in matching]
+            else:
+                initial = [
+                    abs(fnum(row, f"align_t{axis}_before_deg"))
+                    for row in matching
+                ]
+                residual = [
+                    abs(fnum(row, f"align_t{axis}_after_deg"))
+                    for row in matching
+                ]
+            initial = [value for value in initial if not np.isnan(value)]
+            residual = [value for value in residual if not np.isnan(value)]
+            initial_means.append(np.mean(initial) if initial else np.nan)
+            residual_means.append(np.mean(residual) if residual else np.nan)
+            initial_errs.append(
+                np.std(initial, ddof=1) if len(initial) > 1 else 0.0
+            )
+            residual_errs.append(
+                np.std(residual, ddof=1) if len(residual) > 1 else 0.0
+            )
+        for ax, means, errors in (
+            (axes[0], initial_means, initial_errs),
+            (axes[1], residual_means, residual_errs),
+        ):
+            ax.errorbar(
+                x_base + offset, means, yerr=errors, label=profile,
+                color=color, marker=marker, linewidth=1.5, capsize=3,
+            )
+
+    axes[0].set_ylabel("measured initial error [deg]")
+    axes[1].set_ylabel("residual after set-up [deg]")
+    for ax in axes:
+        ax.set_xticks(x_base)
+        ax.set_xticklabels([definition[0] for definition in definitions])
+    axes[0].legend(frameon=False)
+    fig.suptitle("Horizontal primary and tilted validation", fontsize=10)
+    return save(fig, "PLANE_validation.pdf")
+
+
 def _pole_points(rows, prefix, xkey):
     """(x, improvement) for every run of a series that commanded a pole."""
     xs, ys = [], []
@@ -648,6 +720,7 @@ def main():
         fig_main_translational_stiffness,
         fig_main_interaction,
         fig_main_compliance_centre,
+        fig_plane_validation,
         fig_b_pole_axis,
         fig_b_pole_surface,
         fig_c2_nullspace,

@@ -7,10 +7,10 @@ distances. Coordinates are base-frame metres at the calibrated physical probe
 point, not uncorrected end-effector positions.
 
 Usage:
-  cp experiments/calibration/planes/tilted/plane_points.example.csv \
-     experiments/calibration/planes/tilted/plane_points.csv
+  cp experiments/calibration/planes/horizontal/plane_points.example.csv \
+     experiments/calibration/planes/horizontal/plane_points.csv
   # Replace the example coordinates with measured points, then:
-  python3 experiments/calibration/prepare_plane_calibration.py tilted
+  python3 experiments/calibration/prepare_plane_calibration.py horizontal
 """
 
 import csv

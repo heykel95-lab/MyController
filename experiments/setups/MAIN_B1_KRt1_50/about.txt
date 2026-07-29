@@ -1,7 +1,7 @@
 run_id:   MAIN_B1_KRt1_50
 repeats:  3
 
-plane profile: tilted
+plane profile: horizontal
 
 purpose:
   Case B: +10 deg about t1; vary only K_R,t1 to 50 N m/rad.

@@ -1,7 +1,7 @@
 run_id:   MAIN_C2_interaction_KR50_KP300
 repeats:  3
 
-plane profile: tilted
+plane profile: horizontal
 
 purpose:
   Case C interaction corner for t2: K_R,t2=50 N m/rad and K_p,t1=300 N/m.

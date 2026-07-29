@@ -1,0 +1,10 @@
+run_id:   VALID_T0_00deg
+repeats:  3
+
+plane profile: tilted
+
+purpose:
+  Tilted-plane validation at the baseline gains with independent tool offsets (t1=+0 deg, t2=+0 deg).
+
+pass criterion:
+  Compare with the matched horizontal Case-A result using the measured first-contact angle. This is a frame-transfer check, not a second parameter sweep.

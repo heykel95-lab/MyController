@@ -8,9 +8,10 @@ with the `MAIN_*` results.
 
 - The physical plane is fitted from three non-collinear points. A fourth,
   held-out point must lie within 1 mm of the fit before any MAIN trial runs.
-- The full MAIN campaign is bound to the named `tilted` calibration profile.
-  A separately calibrated `horizontal` profile is reserved for the compact
-  validation block and cannot overwrite the primary calibration.
+- The full MAIN A--D campaign is bound to the named `horizontal` calibration
+  profile.
+- A separately calibrated `tilted` profile is reserved for the compact
+  frame-transfer validation and cannot overwrite the primary calibration.
 - The projected direction from \(P_1\) to \(P_2\) defines \(+t_1\);
   \(t_2=n_s\times t_1\). These directions should be marked on the workpiece.
 - The plane defines its point, normal and surface frame
@@ -143,3 +144,14 @@ The runner currently exposes only Cases A--C:
 parameters, plane calibration, terminal transcript and Git provenance, then
 refreshes the derived metrics and figures. It stops after Case C so that the
 selected gains can be reviewed before Case D is enabled.
+
+After horizontal Cases A--D, the compact tilted-plane baseline validation is:
+
+```bash
+./experiments/run_tilted_validation.sh status
+./experiments/run_tilted_validation.sh next
+```
+
+It repeats the \(0^\circ\), \(10^\circ\) about \(t_1\), and \(10^\circ\) about
+\(t_2\) baseline-gain conditions. A final tuned condition is generated only
+after the horizontal campaign selects its gains and compliance centre.
