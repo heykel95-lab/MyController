@@ -89,11 +89,22 @@ def main():
             )
             if not np.all(np.isfinite(rotation)):
                 sys.exit(f"Invalid rotation sample {row['label']}")
-            if (
-                np.linalg.norm(rotation.T @ rotation - np.eye(3)) > 1e-6
-                or abs(float(np.linalg.det(rotation)) - 1.0) > 1e-6
-            ):
+            raw_orthogonality = float(
+                np.linalg.norm(rotation.T @ rotation - np.eye(3))
+            )
+            raw_determinant = float(np.linalg.det(rotation))
+            if raw_orthogonality > 1e-3 or raw_determinant <= 0.0:
                 sys.exit(f"R_EE for {row['label']} is not a valid rotation.")
+            # Robot-state transforms can differ from SO(3) by a few 1e-5 due
+            # to finite-precision state estimation. Project each sample onto
+            # its nearest proper rotation before estimating the invariant
+            # axis; this removes numerical scale/shear without changing the
+            # measured orientation.
+            left_r, _, right_r = np.linalg.svd(rotation)
+            rotation = left_r @ right_r
+            if float(np.linalg.det(rotation)) < 0.0:
+                left_r[:, -1] *= -1.0
+                rotation = left_r @ right_r
             samples.append(
                 (row["label"].strip(), row["plane_profile"].strip(), rotation)
             )
