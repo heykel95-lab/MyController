@@ -1,0 +1,21 @@
+run_id: MAIN_A1_t1_05deg
+repeat: r03
+observation_source: operator immediately after trial
+contact_state: one-sided
+final_face_state: not fully flat
+physical_alignment_result: failure to reach full-face contact
+repeatability: same qualitative result in r01, r02, and r03
+
+Interpretation:
+The third repeat again remained on the initially contacting edge and did not
+reach full-face contact. The three completed repeats therefore establish a
+repeatable qualitative result for this condition; no additional A1 repeats
+are required.
+
+The EE-derived alignment error decreased from 2.816 deg to 1.908 deg in r03.
+Across the three repeats, the mean error reduction was 0.844 deg with a
+standard deviation of 0.065 deg, but all three physical observations remained
+one-sided. This decoupled condition is a valid negative control: orientation
+error was reduced without producing complete physical flattening. The known
+tool-mount play still prevents the EE-derived angle from being interpreted as
+an independent physical tool-face measurement.
