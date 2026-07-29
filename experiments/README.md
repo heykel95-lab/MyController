@@ -111,10 +111,13 @@ with the earlier 180 mm pilot, this supports an expected settled load close to
 ramp to settle before evaluation. Automatic damping is recomputed for the
 higher stiffness at phase entry.
 
-The MAIN overlays also tighten the approach-orientation transition from the
-controller-wide 2 degree default to 0.5 degrees. This is required for the A0
-zero-offset gate: contact-induced rotation must not be confused with a large
-residual that was already present when the set-up phase began.
+The MAIN overlays explicitly retain the reachable 2 degree
+approach-orientation transition. A tested 0.5 degree threshold did not permit
+descent because the mounted system settled near 1.5 degrees in free space.
+With the 2 degree transition, the continued orientation control during
+descent reduced the EE-inferred A0 first-contact residual to approximately
+1 degree. The measured first-contact value, rather than the nominal command,
+is used in analysis.
 
 The calibrated `tool_axis_ee` assumes a rigid transform between the Franka EE
 and the physical grinding face. Mark the tool and holder with a witness line

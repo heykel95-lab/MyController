@@ -200,12 +200,11 @@ for case in ("tilted_tool", "tilted_close", "table"):
 # being allowed to influence every contact-alignment trial.
 MAIN_COMMON = [
     ("use_coupled_stiffness", "0"),
-    # The nominal zero-offset gate must reach the physical-plane command
-    # closely enough to distinguish controller-induced contact motion from
-    # residual approach tracking. The previous global 2 deg transition
-    # threshold produced about 1 deg at first contact in two repeatable A0
-    # diagnostics, which is too large for a zero-angle reference.
-    ("approach_orient_error_threshold", "0.008726646"),
+    # The approach controller settles near 1.5 deg under the mounted-tool load;
+    # a tested 0.5 deg switch condition therefore deadlocked in orient. The
+    # explicit 2 deg gate is reachable and the subsequent descend reduced the
+    # EE-inferred first-contact residual to about 1 deg in repeated A0 runs.
+    ("approach_orient_error_threshold", "0.035"),
     ("setup_timeout", "5.0"),
     # The two loose-gate A0 diagnostics reached 24.33 N at 0.060 m with
     # Kp,n=360 N/m. The primary campaign instead targets the established

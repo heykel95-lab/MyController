@@ -20,9 +20,12 @@ entered set-up with about 1 degree of residual error. The response was
 repeatable: mean alignment change was -0.853 degrees with a two-sample
 standard deviation of 0.041 degrees, and mean steady load was 24.33 N.
 
-The MAIN overlays were therefore changed to require a 0.5 degree
-approach-orientation error before descent. These archived runs must not be
-pooled with replacement A0 data collected under the tighter gate.
+An attempted 0.5 degree approach-orientation gate was subsequently rejected:
+the mounted system settled near 1.5 degrees and could not enter descent. The
+replacement MAIN campaign therefore retains the reachable 2 degree gate and
+uses the measured first-contact error rather than treating the nominal zero
+command as an exact physical angle. These archived runs remain separate
+because they used the earlier 360 N/m normal stiffness.
 
 They also showed that the 360 N/m normal stiffness produced only 24.33 N at
 the corrected 60 mm virtual press. The replacement MAIN campaign uses

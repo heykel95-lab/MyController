@@ -40,13 +40,21 @@ repeats_for() {
   esac
 }
 
+repeat_complete() {
+  local run_dir="$1"
+  [ -d "$run_dir" ] &&
+    [ -s "$run_dir/surface_grinding_controller_log.csv" ] &&
+    grep -q '^controller_exit: 0$' "$run_dir/meta.txt" 2>/dev/null &&
+    grep -q '^=== Set-up result ===$' "$run_dir/terminal.log" 2>/dev/null
+}
+
 show_status() {
   local run_id repeats complete i
   for run_id in "${RUN_IDS[@]}"; do
     repeats="$(repeats_for "$run_id")"
     complete=0
     for i in $(seq 1 "$repeats"); do
-      if [ -d "$HERE/results/$run_id/$(printf 'r%02d' "$i")" ]; then
+      if repeat_complete "$HERE/results/$run_id/$(printf 'r%02d' "$i")"; then
         complete=$((complete + 1))
       fi
     done
@@ -60,6 +68,12 @@ find_next() {
     repeats="$(repeats_for "$run_id")"
     for i in $(seq 1 "$repeats"); do
       repeat_tag="$(printf 'r%02d' "$i")"
+      if [ -d "$HERE/results/$run_id/$repeat_tag" ] &&
+         ! repeat_complete "$HERE/results/$run_id/$repeat_tag"; then
+        echo "ERROR: incomplete trial blocks $run_id/$repeat_tag." >&2
+        echo "Archive or remove that partial directory before retrying." >&2
+        return 2
+      fi
       if [ ! -d "$HERE/results/$run_id/$repeat_tag" ]; then
         echo "$run_id $i"
         return 0

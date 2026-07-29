@@ -1,7 +1,7 @@
 # MAIN_D2_t2_rc_t1_p000
 # Applied on top of surface_grinding_controller/params/.
 # Only keys listed here differ from the nominal set.
-approach_orient_error_threshold = 0.008726646
+approach_orient_error_threshold = 0.035
 setup_timeout = 5.0
 setup_push_end = 0.060
 setup_push_speed = 0.050
