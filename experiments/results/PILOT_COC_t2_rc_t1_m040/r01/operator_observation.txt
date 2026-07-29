@@ -1,0 +1,19 @@
+run_id: PILOT_COC_t2_rc_t1_m040
+repeat: r01
+observation_source: operator immediately after trial
+initial_contact: both edges together
+final_contact: full face
+physical_alignment_result: indeterminate (already parallel at contact)
+qualitative_speed: no distinct physical alignment motion observed
+
+Interpretation:
+The tool face was physically parallel to the plane and both relevant edges
+contacted together. The run therefore achieved full-face contact, but it did
+not provide a visible edge-to-face alignment transient from which the effect
+of the negative t1 compliance-centre lever could be isolated.
+
+The EE-derived metric changed from 4.285 deg to 3.110 deg about t2
+(improvement 1.175 deg; t90 = 1.293 s), while the operator observed the
+physical tool as parallel. This mismatch is consistent with the declared
+tool-mount play and means that the EE-derived angle must not be presented as
+the physical tool-face angle for this exploratory run.
