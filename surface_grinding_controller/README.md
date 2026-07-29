@@ -26,9 +26,12 @@ contact-point plane coordinate as its start, then ramps toward
 end, and speed; `setup_timeout` is an independent phase limit and may stop the
 ramp before its endpoint.
 
-Instead of the sequence, the startup menu can pick a plain **hold** at the start
-pose. From a hold, `g+Enter` hands the tool over to manual guidance and
-`p+Enter` re-captures the pose and resumes hold from there.
+The startup menu uses one direct run-mode choice. `s` moves to the configured
+`q_init` and starts the sequence; `h` moves to `q_init` and starts a plain
+**hold**. The separate `q` choice remains available when the start posture
+should be inspected before committing to a run. From a hold, `g+Enter` hands
+the tool over to manual guidance and `p+Enter` re-captures the pose and resumes
+hold from there.
 
 Optional Enter gates (`pause_before_set_up`, `pause_before_grind`) freeze the
 run between phases with a stiff position lock until you press Enter.
@@ -127,9 +130,11 @@ sigma:     tau = k_sigma * sign * N_tau * n
 both:      tau = -d_null * N_tau * dq + k_sigma * sign * N_tau * n
 ```
 
-The interactive hold menu exposes all four modes: 0 off, 1 damping only,
-2 sigma only, and 3 damping plus sigma. This allows the isolated terms and the
-damped combined response to be tested from the same captured hold pose.
+The direct startup `h` choice uses the configured `nullspace_mode`: 0 off,
+1 damping only, 2 sigma only, or 3 damping plus sigma. After a manually guided
+start, the interactive hold selector exposes the same four modes. This allows
+the isolated terms and the damped combined response to be tested from the same
+captured hold pose.
 
 Here `n` is the one-dimensional 6x7 Jacobian nullspace direction. The sign is
 chosen by comparing `sigma_min(q + alpha*n)` with

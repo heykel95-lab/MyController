@@ -842,7 +842,6 @@ bool graspTool(const Parameters& params, Gripper& gripper) {
 }
 
 void askStartupRunMode(Parameters& params, Robot& robot) {
-  const bool default_sequence = params.use_phase_sequence;
   bool q_init_reached = false;
 
   const auto move_to_q_init = [&]() {
@@ -853,21 +852,40 @@ void askStartupRunMode(Parameters& params, Robot& robot) {
     q_init_reached = true;
   };
 
-  // Menu 1: where the start pose comes from. Loops so the gripper action runs
-  // and q_init can be reached before the user continues.
+  const auto ensure_q_init = [&]() {
+    if (!q_init_reached) {
+      move_to_q_init();
+    }
+  };
+
+  // One explicit startup choice selects both the start-pose source and the run
+  // mode. The q option remains useful for inspecting q_init before committing
+  // to sequence or hold; open/close also return to this menu.
   while (true) {
-    printf("\n=== Startup choice ===\n");
-    printf("  q = go to q_init (from params/common.txt), then choose again\n");
+    printf("\n=== Startup mode ===\n");
+    printf("  s = go to q_init, then run the phase sequence\n");
+    printf("  h = go to q_init, then hold that pose\n");
     printf("  g = guiding mode: go to q_init, then hand-guide to your pose;\n");
     printf("      use s+Enter for sequence or h+Enter for hold\n");
+    printf("  q = go to q_init, inspect the posture, then choose again\n");
     printf("  o = open the Franka hand now (release/load tool), then choose again\n");
     printf("  c = close/grasp the tool now, then choose again\n");
-    printf("  r = continue to run mode%s\n",
-           q_init_reached ? "" : " (available after q_init is reached)");
-    printf("Choice [q/g/o/c/r, Enter = q]: ");
+    printf("Choice [s/h/g/q/o/c]: ");
 
     const std::string choice = readChoice();
-    if (choice.empty() || matches(choice, {"q", "qinit"})) {
+    if (matches(choice, {"s", "sequence"})) {
+      ensure_q_init();
+      params.use_manual_guidance_start = false;
+      params.use_phase_sequence = true;
+      break;
+    }
+    if (matches(choice, {"h", "hold"})) {
+      ensure_q_init();
+      params.use_manual_guidance_start = false;
+      params.use_phase_sequence = false;
+      break;
+    }
+    if (matches(choice, {"q", "qinit"})) {
       move_to_q_init();
       continue;
     }
@@ -892,24 +910,18 @@ void askStartupRunMode(Parameters& params, Robot& robot) {
       params.startup_gripper_manual = true;
       continue;
     }
-    if (matches(choice, {"r", "run", "continue"})) {
-      if (!q_init_reached) {
-        printf("Reach q_init with q before continuing.\n");
-        continue;
-      }
-      params.use_manual_guidance_start = false;
-      break;
-    }
     if (matches(choice, {"g", "guide", "guiding"})) {
-      if (!q_init_reached) {
-        move_to_q_init();
-      }
+      ensure_q_init();
       params.use_manual_guidance_start = true;
       printf("Selected: guiding mode (hand-place the start pose after q_init).\n");
       break;
     }
-    printf("Unknown startup choice '%s'; choose q, g, o, c, or r.\n",
-           choice.c_str());
+    if (choice.empty()) {
+      printf("Choose s, h, g, q, o, or c explicitly.\n");
+    } else {
+      printf("Unknown startup choice '%s'; choose s, h, g, q, o, or c.\n",
+             choice.c_str());
+    }
   }
 
   // In guiding mode the run mode is chosen at the END of guiding, so asking
@@ -919,33 +931,14 @@ void askStartupRunMode(Parameters& params, Robot& robot) {
     return;
   }
 
-  // Menu 2: run mode.
-  printf("\n=== Run mode ===\n");
-  printf("  s = phase sequence (approach / set up / grind)\n");
-  printf("  h = hold at the start pose\n");
-  printf("Choice [s/h, Enter = %s]: ", default_sequence ? "s" : "h");
-
-  const std::string choice = readChoice();
-  if (matches(choice, {"s", "sequence"})) {
-    params.use_phase_sequence = true;
-  } else if (matches(choice, {"h", "hold"})) {
-    params.use_phase_sequence = false;
-  } else {
-    params.use_phase_sequence = default_sequence;
-    if (!choice.empty()) {
-      printf("Unknown run-mode choice '%s'; using default %s.\n",
-             choice.c_str(), default_sequence ? "sequence" : "hold");
-    }
-  }
-
   if (params.use_phase_sequence) {
     printf("Selected: phase sequence. Nullspace mode from parameters: %s.\n",
            nullspaceModeName(params.nullspace_mode));
     return;
   }
 
-  (void)selectHoldNullspaceMode(params);
-  printf("Selected: hold mode with %s.\n", nullspaceModeName(params.nullspace_mode));
+  printf("Selected: hold mode with configured %s.\n",
+         nullspaceModeName(params.nullspace_mode));
 }
 
 bool performStartupGripperAction(const Parameters& params) {
