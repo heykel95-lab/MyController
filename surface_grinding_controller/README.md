@@ -265,10 +265,12 @@ any motion.
 or replace `horizontal` with `tilted` for the validation plane.
 
 `make capture_tool_axis` builds the read-only physical tool-normal capture
-tool. With the complete face flat on a validated plane, record T1--T4 using
+tool. With the complete face flat on a validated plane, vary yaw about the
+plane normal and record T1--T4 using
 `tools/capture_tool_axis grinding_tool horizontal T1` (and T2--T4). The
-experiment runner applies and archives the validated tool-axis overlay
-separately from the plane profile.
+invariant axis is estimated directly from the EE rotation matrices; the plane
+normal is only a validation check. The experiment runner applies and archives
+the validated tool-axis overlay separately from the plane profile.
 
 Stop the controller at any time with `e + Enter`. A bare `Enter` continues past
 a phase gate.

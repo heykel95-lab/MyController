@@ -36,8 +36,9 @@ physical grinding face and the nominal `+Z_EE` axis. Calibrate that angle
 separately after every tool regrasp that can change its orientation.
 
 With the horizontal plane already validated, place the complete tool face flat
-at four positions. Keep it flat, but change its yaw about the plane normal
-between samples when this can be done safely. The capture is read-only:
+at four positions. Keep it flat and deliberately change its yaw about the
+plane normal by roughly 20--45 degrees between samples. The capture is
+read-only:
 
 ```bash
 cd surface_grinding_controller
@@ -50,8 +51,11 @@ cd ..
 python3 experiments/calibration/prepare_tool_axis_calibration.py grinding_tool
 ```
 
-T1--T3 estimate the physical face normal in EE coordinates and T4 validates
-it. Both the fit-sample spread and the held-out error must be at most
-0.5 degrees. MAIN and validation setups declare `grinding_tool` in
-`tool_profile.txt`; the runner refuses to start without a passing report and
-archives the exact tool-axis overlay with every result.
+T1--T3 estimate the EE-frame axis whose mapped base-frame direction remains
+invariant across yaw; T4 validates it. This estimate is independent of the
+plane-normal fit. The plane normal is used only as a separate sanity check.
+Both the fit-sample spread and the held-out error must be at most 0.5 degrees,
+and the yaw samples must provide sufficient observability. MAIN and validation
+setups declare `grinding_tool` in `tool_profile.txt`; the runner refuses to
+start without a passing report and archives the exact tool-axis overlay with
+every result.

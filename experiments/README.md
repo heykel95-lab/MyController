@@ -70,7 +70,8 @@ its profile in `plane_profile.txt`; `run.sh` refuses missing, mismatched or
 failed calibration and archives the profile with the result.
 
 The physical grinding-face normal must then be calibrated independently from
-the point geometry. Place the complete face flat and capture T1--T4:
+the point geometry. Place the complete face flat, change yaw about the plane
+normal by roughly 20--45 degrees between poses, and capture T1--T4:
 
 ```bash
 cd surface_grinding_controller
@@ -83,8 +84,11 @@ cd ..
 python3 experiments/calibration/prepare_tool_axis_calibration.py grinding_tool
 ```
 
-The runner requires the held-out tool-axis error to be at most 0.5 degrees.
-Recalibrate after any tool regrasp that may change the mounting orientation.
+The estimator finds the EE-frame axis whose base-frame image is invariant
+across the different yaw poses; the fitted plane normal is only a separate
+sanity check. The runner requires the held-out tool-axis error to be at most
+0.5 degrees and sufficient yaw observability. Recalibrate after any tool
+regrasp that may change the mounting orientation.
 
 Run the zero-offset control first:
 

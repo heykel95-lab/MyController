@@ -2,16 +2,13 @@
 
 #include <fstream>
 
-// Read-only capture of the physical grinding-face normal in the EE frame.
+// Read-only capture of one EE orientation while the grinding face is flat.
 //
-// Place the complete tool face flat on a validated physical plane. If n is the
-// calibrated upward plane normal and tool_axis_target_sign=-1, the physical
-// tool axis in base coordinates is -n. For the measured EE orientation R_EE,
-// the corresponding constant tool-frame vector is
-//
-//   a_EE = R_EE^T (sign * n).
-//
-// Four samples are captured. T1--T3 estimate the vector and T4 validates it.
+// Place the complete tool face flat on a validated physical plane and vary
+// only yaw about the plane normal between samples. T1--T3 estimate the unique
+// EE-frame axis a for which R_EE,i*a is invariant in the base frame. T4
+// validates it. The plane normal is not used to estimate a; it is only a
+// separate sanity check in prepare_tool_axis_calibration.py.
 
 namespace {
 
@@ -83,16 +80,15 @@ int main(int argc, char** argv) {
     const RobotState state = robot.readOnce();
     Map<const Mat4x4> T_EE(state.O_T_EE.data());
     const Mat3 R_EE = T_EE.block<3, 3>(0, 0);
+    const Vec3 nominal_axis_ee =
+        params.tool_axis_ee.normalized();
+    const Vec3 nominal_axis_base = R_EE * nominal_axis_ee;
     const double sign = params.tool_axis_target_sign >= 0.0 ? 1.0 : -1.0;
     const Vec3 target_axis_base =
         sign * params.alignment_target_normal.normalized();
-    const Vec3 sample_axis_ee =
-        (R_EE.transpose() * target_axis_base).normalized();
-    const Vec3 nominal_axis_ee =
-        params.tool_axis_ee.normalized();
     const double dot =
-        std::max(-1.0, std::min(1.0, sample_axis_ee.dot(nominal_axis_ee)));
-    const double nominal_offset_deg = 180.0 / M_PI * std::acos(dot);
+        std::max(-1.0, std::min(1.0, nominal_axis_base.dot(target_axis_base)));
+    const double nominal_plane_error_deg = 180.0 / M_PI * std::acos(dot);
 
     bool write_header = true;
     {
@@ -107,22 +103,25 @@ int main(int argc, char** argv) {
       return 2;
     }
     if (write_header) {
-      output << "label,plane_profile,axis_ee_x,axis_ee_y,axis_ee_z\n";
+      output << "label,plane_profile,"
+             << "r00,r01,r02,r10,r11,r12,r20,r21,r22\n";
     }
     output << std::fixed << std::setprecision(12)
-           << label << "," << plane_profile << ","
-           << sample_axis_ee(0) << ","
-           << sample_axis_ee(1) << ","
-           << sample_axis_ee(2) << "\n";
+           << label << "," << plane_profile;
+    for (int row = 0; row < 3; ++row) {
+      for (int col = 0; col < 3; ++col) {
+        output << "," << R_EE(row, col);
+      }
+    }
+    output << "\n";
 
     printf("surface normal base = [%+.9f, %+.9f, %+.9f]\n",
            params.alignment_target_normal(0),
            params.alignment_target_normal(1),
            params.alignment_target_normal(2));
-    printf("sample tool axis EE = [%+.9f, %+.9f, %+.9f]\n",
-           sample_axis_ee(0), sample_axis_ee(1), sample_axis_ee(2));
-    printf("offset from currently configured tool axis = %.4f deg\n",
-           nominal_offset_deg);
+    printf("recorded R_EE for invariant-axis estimation\n");
+    printf("current nominal +Z_EE plane error = %.4f deg (diagnostic only)\n",
+           nominal_plane_error_deg);
     printf("appended to %s\n", output_path.c_str());
     return 0;
   } catch (const franka::Exception& e) {
