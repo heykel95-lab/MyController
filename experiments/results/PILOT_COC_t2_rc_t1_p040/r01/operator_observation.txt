@@ -1,0 +1,19 @@
+run_id: PILOT_COC_t2_rc_t1_p040
+repeat: r01
+observation_source: operator immediately after trial
+physical_orientation_change: not clearly noticeable
+physical_alignment_result: indeterminate
+qualitative_speed: no distinct physical alignment motion observed
+
+Interpretation:
+The operator did not observe a clearly noticeable physical change in the
+tool orientation. The EE-derived metric nevertheless changed from
+4.293 deg to 2.582 deg about t2 (improvement 1.711 deg; t90 = 1.336 s).
+This confirms a measured EE orientation response, but the known tool-mount
+play prevents that response from being claimed as the physical tool-face
+rotation.
+
+The positive t1 lever produced a larger EE-derived t2 improvement than the
+negative t1 lever in these single exploratory trials. The result is useful as
+a controller-response comparison, but it does not select a physical-alignment
+setting without repeat trials and a rigid tool mount.

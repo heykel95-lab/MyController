@@ -1,0 +1,11 @@
+run_id:        PILOT_COC_t2_rc_t1_p040
+repeat:        1
+timestamp:     2026-07-29T21:56:17+02:00
+git_commit:    96f3d48fcbe59d9b75160f14328df69c2da5f03a
+git_dirty:     no
+host:          Computer19
+plane_profile: horizontal
+tool_profile:  grinding_tool
+tool_mount_status: known_play
+tool_mount_play_bound_deg: 2.0
+controller_exit: 0
