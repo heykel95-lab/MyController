@@ -1,0 +1,12 @@
+run_id:   PILOT_COC_t1_rc_t2_m040
+repeats:  1
+
+plane profile: horizontal
+
+tool profile: grinding_tool
+
+purpose:
+  Active compliance-centre sign pilot: +5 deg about t1 and r_c,t2=-40 mm.
+
+pass criterion:
+  Compare with the completed decoupled MAIN_A1 reference. Select the sign that reduces the measured t1 error and moves the physical contact from the initially loaded edge toward full-face contact.

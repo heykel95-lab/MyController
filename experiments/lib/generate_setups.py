@@ -315,8 +315,8 @@ for axis in (1, 2):
 # the signed t2 lever required to generate a t1 moment under normal preload:
 #   m_t1 = (-r_c x f)_t1.
 # Direct surface-frame r_c avoids the old base-frame pole convention.
-for rc_t2_mm in (-60, 60):
-    sign_tag = "m060" if rc_t2_mm < 0 else "p060"
+for rc_t2_mm in (-60, -40, 60):
+    sign_tag = f"{'m' if rc_t2_mm < 0 else 'p'}{abs(rc_t2_mm):03d}"
     overrides = [
         pair for pair in main_gain_overrides(angle_t1=5.0)
         if pair[0] != "use_coupled_stiffness"

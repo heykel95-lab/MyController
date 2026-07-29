@@ -11,6 +11,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_IDS=(
   PILOT_COC_t1_rc_t2_p060
   PILOT_COC_t1_rc_t2_m060
+  PILOT_COC_t1_rc_t2_m040
 )
 
 repeat_complete() {
@@ -55,7 +56,7 @@ case "${1:-status}" in
     ;;
   next)
     if ! run_id="$(find_next)"; then
-      echo "The two centre-of-compliance sign pilots are complete."
+      echo "The centre-of-compliance sign and refinement pilots are complete."
       exit 0
     fi
     echo "Next trial: $run_id / r01"
