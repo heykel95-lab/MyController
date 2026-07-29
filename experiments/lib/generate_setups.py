@@ -340,6 +340,34 @@ for rc_t2_mm in (-60, -40, 60):
         repeats=3 if rc_t2_mm == -40 else 1,
     )
 
+# Orthogonal sign pilot. A t2 angular mismatch requires a t1 lever. The
+# magnitude starts at the repeatable 40 mm selected above; both signs are
+# tested because the physical EE/surface-axis correspondence is pose dependent.
+for rc_t1_mm in (-40, 40):
+    sign_tag = f"{'m' if rc_t1_mm < 0 else 'p'}{abs(rc_t1_mm):03d}"
+    overrides = [
+        pair for pair in main_gain_overrides(angle_t2=5.0)
+        if pair[0] != "use_coupled_stiffness"
+    ] + [
+        ("use_coupled_stiffness", "1"),
+        ("coupled_use_block_diagonal", "0"),
+        ("coupled_pole_manual", "1"),
+        ("coupled_use_direct_rc_surface", "1"),
+        ("coupled_rc_tangent1", f"{rc_t1_mm / 1000.0:.3f}"),
+        ("coupled_rc_tangent2", "0.0"),
+        ("coupled_rc_normal", "0.0"),
+    ]
+    add(
+        f"PILOT_COC_t2_rc_t1_{sign_tag}",
+        f"Orthogonal compliance-centre sign pilot: +5 deg about t2 and "
+        f"r_c,t1={rc_t1_mm:+d} mm.",
+        "Select the sign that reduces the measured t2 component and moves "
+        "the physical contact from the initially loaded edge toward "
+        "full-face contact without increasing the t1 cross-axis error.",
+        overrides,
+        repeats=1,
+    )
+
 # Case D coarse centre-of-compliance sweep. These are generated now for
 # traceability but must not be run until Cases A--C select the gains.
 for axis in (1, 2):

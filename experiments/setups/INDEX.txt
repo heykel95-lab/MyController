@@ -1,4 +1,4 @@
-97 setups, 296 total runs
+99 setups, 298 total runs
 
 G1_coupled_block_diagonal          x3  Coupled 6x6 path with block-diagonal gains must reproduce the decoupled wrench exactly.
 G1_decoupled_baseline              x5  Decoupled wrench, no coupling.
@@ -46,6 +46,8 @@ MAIN_C2_interaction_KR50_KP300     x3  Case C interaction corner for t2: K_R,t2=
 PILOT_COC_t1_rc_t2_m060            x1  Active compliance-centre sign pilot: +5 deg about t1 and r_c,t2=-60 mm.
 PILOT_COC_t1_rc_t2_m040            x3  Active compliance-centre sign pilot: +5 deg about t1 and r_c,t2=-40 mm.
 PILOT_COC_t1_rc_t2_p060            x1  Active compliance-centre sign pilot: +5 deg about t1 and r_c,t2=+60 mm.
+PILOT_COC_t2_rc_t1_m040            x1  Orthogonal compliance-centre sign pilot: +5 deg about t2 and r_c,t1=-40 mm.
+PILOT_COC_t2_rc_t1_p040            x1  Orthogonal compliance-centre sign pilot: +5 deg about t2 and r_c,t1=+40 mm.
 MAIN_D1_t1_rc_t2_m060              x3  Case D coarse centre-of-compliance sweep: +10 deg about t1, direct r_c,t2=-60 mm.
 MAIN_D1_t1_rc_t2_p000              x3  Case D coarse centre-of-compliance sweep: +10 deg about t1, direct r_c,t2=+0 mm.
 MAIN_D1_t1_rc_t2_p060              x3  Case D coarse centre-of-compliance sweep: +10 deg about t1, direct r_c,t2=+60 mm.

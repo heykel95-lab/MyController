@@ -1,0 +1,12 @@
+run_id:   PILOT_COC_t2_rc_t1_m040
+repeats:  1
+
+plane profile: horizontal
+
+tool profile: grinding_tool
+
+purpose:
+  Orthogonal compliance-centre sign pilot: +5 deg about t2 and r_c,t1=-40 mm.
+
+pass criterion:
+  Select the sign that reduces the measured t2 component and moves the physical contact from the initially loaded edge toward full-face contact without increasing the t1 cross-axis error.
