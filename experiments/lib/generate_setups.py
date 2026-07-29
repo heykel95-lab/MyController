@@ -215,9 +215,12 @@ for s in (-0.12, -0.08, -0.04, 0.0, 0.04, 0.08, 0.12, 0.16):
         f"B2_pole_normal_{tag}",
         f"Pole swept ALONG THE SURFACE NORMAL, s = {s:+.2f} m from the contact "
         "edge. Offset is written in base coordinates as s * n.",
-        "The main experiment. Expect a sign flip at the edge (s = 0), assist "
-        "on the far side, an optimum near +0.08 m, and decay by +0.12 m as the "
-        "quadratic lever term re-stiffens the rotation.",
+        "MEASURED (24 runs): this sweep does NOT isolate the normal offset. "
+        "The configured normal carries a tangential component from the surface "
+        "tilt, so sweeping along n also drags the pole tangentially from -5 to "
+        "+28 mm, and that drift accounts for the whole trend. Against the "
+        "normal component alone the response is flat (R^2 = 0.005). Kept for "
+        "the record; B3/B4 are the sweeps that isolate a single axis.",
         [
             ("use_coupled_stiffness", "1"),
             ("coupled_use_block_diagonal", "0"),
@@ -227,7 +230,7 @@ for s in (-0.12, -0.08, -0.04, 0.0, 0.04, 0.08, 0.12, 0.16):
         + pole_keys(pole_offset_along(N, s)),
     )
 
-for s in (-0.08, -0.04, 0.0, 0.04):
+for s in (-0.08, -0.04, 0.0, 0.04, 0.08, 0.12):
     tag = f"{'m' if s < 0 else 'p'}{abs(int(round(s * 1000))):03d}"
     offset = [
         pole_offset_along(N, 0.08)[i] + pole_offset_along(T1, s)[i]
@@ -237,8 +240,10 @@ for s in (-0.08, -0.04, 0.0, 0.04):
         f"B3_pole_tangent_{tag}",
         f"Pole swept along surface tangent t1, {s:+.2f} m, at fixed normal "
         "offset +0.08 m.",
-        "Isolates the tangential pole component. The nominal configuration is "
-        "dominated by a tangential offset that has never been tested alone.",
+        "Isolates the tangential pole component -- the variable that actually "
+        "governs alignment (R^2 = 0.907, +0.125 deg/mm over 36 runs). Measured "
+        "-10.3 deg at s = -0.08 to +6.9 deg at s = +0.04, still rising at the "
+        "positive end: +0.08 and +0.12 exist to locate the optimum.",
         [
             ("use_coupled_stiffness", "1"),
             ("coupled_use_block_diagonal", "0"),
@@ -265,6 +270,33 @@ add(
 
 # B6_pole_on_measured_axis is deliberately absent: it commanded the pole AT the
 # measured Chasles axis, and the finite-screw-axis line of work was dropped.
+
+for s in (-0.08, -0.04, 0.04, 0.08):
+    tag = f"{'m' if s < 0 else 'p'}{abs(int(round(s * 1000))):03d}"
+    offset = [
+        pole_offset_along(N, 0.08)[i] + pole_offset_along(T2, s)[i]
+        for i in range(3)
+    ]
+    add(
+        f"B4_pole_tangent2_{tag}",
+        f"Pole swept along surface tangent t2, {s:+.2f} m, at fixed normal "
+        "offset +0.08 m and zero t1 offset.",
+        "The untested axis. Across all 44 pole runs recorded so far the t2 "
+        "component was held at approximately zero, so the placement rule "
+        "'the compliance centre belongs opposite the side that contacts "
+        "first' has never actually been tested -- B3 sweeps t1, which the "
+        "recovered contact geometry suggests is not the relevant axis. See "
+        "PREDICTIONS.md for the ordering predicted before these runs exist.",
+        [
+            ("use_coupled_stiffness", "1"),
+            ("coupled_use_block_diagonal", "0"),
+            ("coupled_pole_manual", "1"),
+            ("coupled_pole_freeze_at_contact", "1"),
+        ]
+        + pole_keys(offset),
+        repeats=3,
+    )
+
 
 # ---- Series C: hold mode, null-space --------------------------------------
 add(

@@ -1,8 +1,8 @@
-run_id:   B3_pole_tangent_p000
+run_id:   B3_pole_tangent_p080
 repeats:  3
 
 purpose:
-  Pole swept along surface tangent t1, +0.00 m, at fixed normal offset +0.08 m.
+  Pole swept along surface tangent t1, +0.08 m, at fixed normal offset +0.08 m.
 
 pass criterion:
   Isolates the tangential pole component -- the variable that actually governs alignment (R^2 = 0.907, +0.125 deg/mm over 36 runs). Measured -10.3 deg at s = -0.08 to +6.9 deg at s = +0.04, still rising at the positive end: +0.08 and +0.12 exist to locate the optimum.

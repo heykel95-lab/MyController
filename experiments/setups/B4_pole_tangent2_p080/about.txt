@@ -1,0 +1,8 @@
+run_id:   B4_pole_tangent2_p080
+repeats:  3
+
+purpose:
+  Pole swept along surface tangent t2, +0.08 m, at fixed normal offset +0.08 m and zero t1 offset.
+
+pass criterion:
+  The untested axis. Across all 44 pole runs recorded so far the t2 component was held at approximately zero, so the placement rule 'the compliance centre belongs opposite the side that contacts first' has never actually been tested -- B3 sweeps t1, which the recovered contact geometry suggests is not the relevant axis. See PREDICTIONS.md for the ordering predicted before these runs exist.

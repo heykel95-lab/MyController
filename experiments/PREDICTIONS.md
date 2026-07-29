@@ -112,3 +112,64 @@ normal carries a +x component from the surface tilt, pole_x drifted from -5.0
 to +27.6 mm across that sweep. The B2 trend is that x drift, not the normal
 offset. B3 holds pole_z near 100 mm and varies pole_x, which breaks the
 confound.
+
+---
+
+## B4 — pole swept along surface tangent t2
+
+**Recorded 2026-07-29. Verified before writing: `experiments/results/` contains
+no `B4_*` directory, and none of `B3_pole_tangent_p080`, `p120` either. This
+one is genuinely pre-registered; the B3 entry above is not, and the difference
+is deliberate.**
+
+### Why this axis at all
+
+Across all 44 pole runs recorded so far the t2 component of the commanded pole
+sat at approximately zero, while t1 and n were both swept widely:
+
+    t1: -71.4 .. +63.4 mm   swept
+    t2:  -1.0 ..  +0.0 mm   never varied within B2/B3
+    n:  -97.7 .. +179.7 mm  swept
+
+So the placement rule — *the compliance centre belongs opposite the side that
+contacts first* — has not been tested. B3 sweeps t1 and produces a large
+effect, but t1 is not necessarily the axis the rule speaks to.
+
+### What the contact geometry says, and how confidently
+
+The contact point was recovered from the archived wrench, without any new runs,
+by solving `m = r x f` for the line of action and intersecting it with the
+tool-face plane. Two results, with different confidence:
+
+- **Reliable.** In t1 the contact sits near the middle of the 40 mm face width
+  (mean -1.6 mm, range -11.6 to +20.4 across ten runs), *not* at the +20 mm
+  corner the controller's tie-breaking selection reports in 48 of 52 runs. The
+  EE x axis used for this projection was recovered empirically from 63 runs, so
+  this component is trustworthy.
+- **Not reliable.** In t2 the contact came out consistently toward the +y end
+  (+20 to +59 mm), which would make t2 the rule's axis. But decomposing t2
+  requires the tool-axis direction, which is not logged; the assumed direction
+  was found to be about 5% inconsistent with the known geometry, and the orient
+  phase leaves ~1.9 deg of residual. Treat this as a hint.
+
+### The prediction
+
+**Conditional on the contact being toward +t2**, the rule places the pole at
+-t2, so alignment improvement toward the measured plane should be ordered:
+
+    B4_pole_tangent2_m080  >  m040  >  p040  >  p080
+
+If instead the contact is confirmed at -t2, the ordering reverses and the same
+runs still test the rule — the prediction is the *sign relationship*, not the
+labels. If the response is flat within the 0.4 deg noise floor, t2 does not
+matter and the rule is not about the contact side at all.
+
+Settling which by direct observation before running B4 would make this a
+sharper test. The check: with the tool loaded at the gate, find where a paper
+strip pinches along each edge of the face.
+
+### How it will be scored
+
+`python3 experiments/analysis/alignment_vs_real_plane.py` extended to the B4
+tags, and the two-panel figure regenerated with t2 as a third panel. Noise
+floor from G3: differences below ~0.4 deg are not claimable.
