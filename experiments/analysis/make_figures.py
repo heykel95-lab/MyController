@@ -36,9 +36,9 @@ FIGURES = os.path.join(EXP, "figures")
 
 plt.rcParams.update({
     "font.family": "serif",
-    # Nimbus Roman is the installed metric-compatible Times face on the robot
-    # computer. Keep the proprietary family names as fallbacks for other hosts.
-    "font.serif": ["Nimbus Roman", "Times New Roman", "Times", "Liberation Serif"],
+    # Liberation Serif is the installed metric-compatible Times New Roman face
+    # on the robot computer. Keep the proprietary family names as fallbacks.
+    "font.serif": ["Liberation Serif", "Times New Roman", "Times", "Nimbus Roman"],
     "mathtext.fontset": "stix",
     "pdf.fonttype": 42,
     "ps.fonttype": 42,
