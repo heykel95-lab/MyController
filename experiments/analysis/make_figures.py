@@ -216,6 +216,71 @@ def fig_b_pole_axis(rows):
     return save(fig, "B_pole_component.pdf")
 
 
+def fig_b_pole_surface(rows):
+    """The contribution in one plot: alignment as a surface over the pole plane.
+
+    Diverging scale, because the quantity crosses zero and the sign is the
+    point -- above zero the coupling drives the tool onto the surface, below it
+    drives the tool away. Neutral gray at zero, blue/red poles.
+    """
+    pts = []
+    for r in rows:
+        if not r["run_id"].startswith(("B1_", "B2_", "B3_", "B4_")):
+            continue
+        if data_suspect(r):
+            continue
+        x, y = fnum(r, "pole_cmd_x_mm"), fnum(r, "pole_cmd_y_mm")
+        v = fnum(r, "align_improve_real_deg")
+        if np.isnan(x) or np.isnan(y) or np.isnan(v):
+            continue
+        pts.append((x, y, v))
+    if len(pts) < 12:
+        return None
+    P = np.array(pts)
+    X, Y, V = P[:, 0], P[:, 1], P[:, 2]
+
+    A = np.column_stack([X, X ** 2, Y, Y ** 2, np.ones(len(P))])
+    coef, res, *_ = np.linalg.lstsq(A, V, rcond=None)
+    r2 = 1.0 - res[0] / ((V - V.mean()) ** 2).sum()
+    x_opt = -coef[0] / (2.0 * coef[1])
+    y_opt = -coef[2] / (2.0 * coef[3])
+
+    gx = np.linspace(X.min() - 10, X.max() + 10, 240)
+    gy = np.linspace(Y.min() - 10, Y.max() + 10, 240)
+    GX, GY = np.meshgrid(gx, gy)
+    GZ = (coef[0] * GX + coef[1] * GX ** 2
+          + coef[2] * GY + coef[3] * GY ** 2 + coef[4])
+
+    # The runs form a cross, not a grid: t1 was swept at t2 ~ 0 and t2 at
+    # t1 ~ 15 mm. Drawing the fitted surface across the unsampled corners would
+    # show confident contours over regions no run visited, and would let the
+    # extrapolated minimum set the colour scale. Mask anything far from a
+    # measured point, and scale the colours by the measured range.
+    reach = 45.0
+    d2 = np.min((GX[..., None] - X) ** 2 + (GY[..., None] - Y) ** 2, axis=-1)
+    GZ = np.ma.masked_where(d2 > reach ** 2, GZ)
+
+    fig, ax = plt.subplots(figsize=(6.4, 4.6))
+    lim = np.abs(V).max()
+    cf = ax.contourf(GX, GY, GZ, levels=np.linspace(-lim, lim, 15),
+                     cmap="RdBu_r", extend="both")
+    ax.contour(GX, GY, GZ, levels=[0.0], colors="0.25", linewidths=1.2)
+    ax.plot(X, Y, "o", ms=5, mfc="none", mec=INK, mew=0.9,
+            linestyle="none", label="measured runs")
+    ax.plot([x_opt], [y_opt], "*", ms=15, color=INK, linestyle="none",
+            label=f"optimum ({x_opt:+.0f}, {y_opt:+.0f}) mm")
+    cb = fig.colorbar(cf, ax=ax)
+    cb.set_label("alignment gained toward the real plane [deg]",
+                 color=INK_MUTED)
+    ax.set_xlabel("pole offset along $t_1$ [mm]", color=INK_MUTED)
+    ax.set_ylabel("pole offset along $t_2$ [mm]", color=INK_MUTED)
+    ax.set_title(f"Fitted pole surface, $R^2$ = {r2:.3f} over {len(P)} runs; "
+                 "shaded only where runs support it", fontsize=9, color=INK)
+    ax.legend(fontsize=7, loc="lower right", framealpha=0.9)
+    ax.grid(False)
+    return save(fig, "B_pole_surface.pdf")
+
+
 def fig_c2_nullspace(rows):
     """Null-space modes: sigma recovery and the task-invariance proof."""
     sub = [r for r in rows if r["run_id"].startswith("C2_hold_mode")]
@@ -282,7 +347,7 @@ def main():
     print(f"{len(rows)} runs in metrics.csv")
 
     made = []
-    for fn in (fig_g2_convergence, fig_a2_stiffness, fig_b_pole_axis,
+    for fn in (fig_g2_convergence, fig_a2_stiffness, fig_b_pole_axis, fig_b_pole_surface,
                fig_c2_nullspace):
         try:
             p = fn(rows)
