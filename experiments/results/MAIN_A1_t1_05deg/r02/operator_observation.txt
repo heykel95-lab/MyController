@@ -1,0 +1,14 @@
+run_id: MAIN_A1_t1_05deg
+repeat: r02
+observation_source: operator immediately after trial
+contact_state: one-sided
+contact_side: right side, positive y_EE direction
+final_face_state: not fully flat
+
+Interpretation:
+The result repeats r01: the initially selected leading edge remained loaded
+and full-face contact was not reached. This run used decoupled impedance
+(use_coupled_stiffness = 0), so it is retained as a decoupled contact-response
+control and must not be presented as an evaluation of the virtual
+centre-of-compliance mechanism. The EE-inferred error decreased from 2.82 deg
+to 1.98 deg; physical face angle remains uncertain because of known tool play.
