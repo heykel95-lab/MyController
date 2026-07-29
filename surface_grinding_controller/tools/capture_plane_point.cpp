@@ -7,7 +7,7 @@
 // The same +X_EE,+Y_EE corner of the configured rectangular tool face must be
 // touched to the workpiece for every point. The program converts the measured
 // EE pose to that corner's base-frame position and appends it to
-// ../experiments/calibration/plane_points.csv.
+// ../experiments/calibration/planes/<profile>/plane_points.csv.
 
 namespace {
 
@@ -26,19 +26,24 @@ bool labelAlreadyExists(const std::string& path, const std::string& label) {
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc != 2) {
-    fprintf(stderr, "usage: %s P1|P2|P3|P4\n", argv[0]);
+  if (argc != 3) {
+    fprintf(stderr, "usage: %s tilted|horizontal P1|P2|P3|P4\n", argv[0]);
     return 2;
   }
 
-  const std::string label(argv[1]);
+  const std::string profile(argv[1]);
+  if (profile != "tilted" && profile != "horizontal") {
+    fprintf(stderr, "Plane profile must be 'tilted' or 'horizontal'.\n");
+    return 2;
+  }
+  const std::string label(argv[2]);
   if (label.empty() || label.find(',') != std::string::npos) {
     fprintf(stderr, "Point label must be non-empty and contain no comma.\n");
     return 2;
   }
 
   const std::string output_path =
-      "../experiments/calibration/plane_points.csv";
+      "../experiments/calibration/planes/" + profile + "/plane_points.csv";
   if (labelAlreadyExists(output_path, label)) {
     fprintf(stderr,
             "Point %s already exists in %s. Remove that row explicitly before "
@@ -53,6 +58,7 @@ int main(int argc, char** argv) {
 
     printf("Read-only plane-point capture. No robot motion is commanded.\n");
     printf("Touch the SAME +X_EE,+Y_EE tool-face corner to the plane.\n");
+    printf("Plane profile: %s\n", profile.c_str());
     printf("Capturing %s from robot %s\n", label.c_str(), params.robot_ip.c_str());
 
     Robot robot(params.robot_ip);

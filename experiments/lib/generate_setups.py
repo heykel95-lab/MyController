@@ -551,6 +551,9 @@ def write_setups():
     for run_id, purpose, criterion, overrides, repeats in SPEC:
         d = os.path.join(SETUPS, run_id)
         os.makedirs(d, exist_ok=True)
+        plane_profile = (
+            "tilted" if run_id.startswith(("D", "MAIN_")) else None
+        )
 
         with open(os.path.join(d, "overlay.txt"), "w") as f:
             f.write(f"# {run_id}\n")
@@ -564,8 +567,17 @@ def write_setups():
         with open(os.path.join(d, "about.txt"), "w") as f:
             f.write(f"run_id:   {run_id}\n")
             f.write(f"repeats:  {repeats}\n\n")
+            if plane_profile:
+                f.write(f"plane profile: {plane_profile}\n\n")
             f.write("purpose:\n  " + purpose.replace("\n", "\n  ") + "\n\n")
             f.write("pass criterion:\n  " + criterion.replace("\n", "\n  ") + "\n")
+
+        profile_path = os.path.join(d, "plane_profile.txt")
+        if plane_profile:
+            with open(profile_path, "w") as f:
+                f.write(plane_profile + "\n")
+        elif os.path.exists(profile_path):
+            os.unlink(profile_path)
 
         index.append((run_id, repeats, purpose))
 

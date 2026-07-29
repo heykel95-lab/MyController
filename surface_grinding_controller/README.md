@@ -240,6 +240,8 @@ non-finite / non-positive result).
 | `runtime_io.cpp` | Startup menus, gripper actions, debug printing, CSV output |
 | `setup_report.cpp` | The one-shot set-up report and commanded-pole diagnostics |
 | `tools/check_tool_offset.cpp` | Read-only TCP/stiffness-frame inspection tool |
+| `tools/capture_plane_point.cpp` | Read-only P1--P4 capture for a named physical plane |
+| `tools/inspect_experiment_config.cpp` | Offline frame/gain/sign preflight |
 
 ## Build and run
 
@@ -251,6 +253,10 @@ make
 `make check_tool_offset` builds `tools/check_tool_offset`, a read-only helper
 that prints the configured `F_T_EE` / `EE_T_K` transforms without commanding
 any motion.
+
+`make capture_plane_point` builds the read-only named-plane capture tool. Use
+`tools/capture_plane_point tilted P1` through `P4` for the primary plane, or
+replace `tilted` with `horizontal` for the validation plane.
 
 Stop the controller at any time with `e + Enter`. A bare `Enter` continues past
 a phase gate.

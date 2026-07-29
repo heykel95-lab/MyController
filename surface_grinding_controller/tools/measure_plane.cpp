@@ -3,9 +3,9 @@
 // Read-only measurement of the physical surface tilt. Commands no motion.
 //
 // This is a quick orientation cross-check obtained by seating the tool face.
-// The calibrated-plane D-series instead uses three non-collinear probe points
-// and experiments/calibration/prepare_plane_calibration.py, because plane
-// geometry requires both a normal and a point.
+// The calibrated MAIN campaign instead uses P1--P3 plus a held-out P4 through
+// experiments/calibration/prepare_plane_calibration.py, because plane geometry
+// requires a point, a normal and a declared tangent direction.
 //
 // Procedure:
 //   1. Start the controller, choose g (guiding mode), and hand-place the tool
@@ -96,9 +96,9 @@ int main() {
     printf("total mismatch between measured and configured normal: %.2f deg\n",
            mismatch_deg);
     printf("\nA correctly calibrated plane gives a mismatch near zero when the\n"
-           "tool is seated flat. For D-series experiments, create the active\n"
-           "plane overlay from three probe points; command-angle offsets are\n"
-           "specified separately in each experiment setup.\n");
+           "tool is seated flat. Generate the named tilted or horizontal\n"
+           "profile from P1--P4; command-angle offsets remain separate in\n"
+           "each experiment setup.\n");
 
     return 0;
   } catch (const franka::Exception& e) {

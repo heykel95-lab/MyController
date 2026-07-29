@@ -6,5 +6,8 @@
 experiments/calibration/plane_points.csv
 experiments/calibration/active_plane_overlay.txt
 experiments/calibration/plane_calibration_report.txt
+experiments/calibration/planes/*/plane_points.csv
+experiments/calibration/planes/*/plane_overlay.txt
+experiments/calibration/planes/*/plane_calibration_report.txt
 surface_grinding_controller/tools/capture_plane_point
 surface_grinding_controller/tools/inspect_experiment_config

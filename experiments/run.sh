@@ -33,8 +33,10 @@ RUN_ID="$1"
 REPEAT="${2:-1}"
 SETUP_DIR="$HERE/setups/$RUN_ID"
 OVERLAY="$SETUP_DIR/overlay.txt"
-PLANE_OVERLAY="$HERE/calibration/active_plane_overlay.txt"
-PLANE_REPORT="$HERE/calibration/plane_calibration_report.txt"
+PLANE_PROFILE_FILE="$SETUP_DIR/plane_profile.txt"
+PLANE_PROFILE=""
+PLANE_OVERLAY=""
+PLANE_REPORT=""
 USES_PLANE_CALIBRATION=0
 
 if [ ! -f "$OVERLAY" ]; then
@@ -83,18 +85,40 @@ echo ""
 echo "--- applying overlay ---"
 case "$RUN_ID" in
   D*|MAIN_*)
+    if [ ! -f "$PLANE_PROFILE_FILE" ]; then
+      echo "ERROR: calibrated setup '$RUN_ID' has no explicit plane_profile.txt."
+      echo "Regenerate the setup or declare tilted/horizontal before running it."
+      exit 1
+    fi
+    ;;
+esac
+if [ -f "$PLANE_PROFILE_FILE" ]; then
+    PLANE_PROFILE="$(tr -d '[:space:]' < "$PLANE_PROFILE_FILE")"
+    case "$PLANE_PROFILE" in
+      tilted|horizontal) ;;
+      *)
+        echo "ERROR: invalid plane profile '$PLANE_PROFILE' in $PLANE_PROFILE_FILE"
+        exit 1
+        ;;
+    esac
+    PLANE_OVERLAY="$HERE/calibration/planes/$PLANE_PROFILE/plane_overlay.txt"
+    PLANE_REPORT="$HERE/calibration/planes/$PLANE_PROFILE/plane_calibration_report.txt"
     USES_PLANE_CALIBRATION=1
     if [ ! -f "$PLANE_OVERLAY" ] || [ ! -f "$PLANE_REPORT" ]; then
-      echo "ERROR: calibrated-plane experiments require a validated plane calibration."
-      echo "Create experiments/calibration/plane_points.csv and run:"
-      echo "  python3 experiments/calibration/prepare_plane_calibration.py"
+      echo "ERROR: setup '$RUN_ID' requires validated plane profile '$PLANE_PROFILE'."
+      echo "Capture P1--P4, then run:"
+      echo "  python3 experiments/calibration/prepare_plane_calibration.py $PLANE_PROFILE"
+      exit 1
+    fi
+    if ! grep -q "^profile: $PLANE_PROFILE$" "$PLANE_REPORT"; then
+      echo "ERROR: calibration report does not match profile '$PLANE_PROFILE'."
       exit 1
     fi
     if ! grep -q "^surface tangent t1 (P1->P2)" "$PLANE_REPORT" ||
        ! grep -q "^held-out signed distances" "$PLANE_REPORT"; then
       echo "ERROR: calibration is missing the P1--P2 tangent or held-out P4 check."
       echo "Regenerate it with:"
-      echo "  python3 experiments/calibration/prepare_plane_calibration.py"
+      echo "  python3 experiments/calibration/prepare_plane_calibration.py $PLANE_PROFILE"
       exit 1
     fi
     if grep -q "^WARNING:" "$PLANE_REPORT"; then
@@ -103,8 +127,7 @@ case "$RUN_ID" in
       exit 1
     fi
     python3 "$HERE/lib/apply_overlay.py" "$PLANE_OVERLAY" "$PARAMS" || exit 1
-    ;;
-esac
+fi
 python3 "$HERE/lib/apply_overlay.py" "$OVERLAY" "$PARAMS" || exit 1
 echo ""
 
@@ -127,14 +150,16 @@ mkdir -p "$OUT"
   echo "git_commit:    $(cd "$REPO" && git rev-parse HEAD)"
   echo "git_dirty:     $GIT_DIRTY"
   echo "host:          $(hostname)"
+  if [ "$USES_PLANE_CALIBRATION" -eq 1 ]; then
+    echo "plane_profile: $PLANE_PROFILE"
+  fi
 } > "$OUT/meta.txt"
 cp -a "$PARAMS" "$OUT/params_effective"
 cp "$OVERLAY" "$OUT/overlay.txt"
 if [ "$USES_PLANE_CALIBRATION" -eq 1 ]; then
+  cp "$PLANE_PROFILE_FILE" "$OUT/"
   cp "$PLANE_OVERLAY" "$OUT/plane_calibration_overlay.txt"
-  if [ -f "$HERE/calibration/plane_calibration_report.txt" ]; then
-    cp "$HERE/calibration/plane_calibration_report.txt" "$OUT/"
-  fi
+  cp "$PLANE_REPORT" "$OUT/plane_calibration_report.txt"
 fi
 
 echo "--- starting controller (drive it as usual; 'e'+Enter to stop) ---"

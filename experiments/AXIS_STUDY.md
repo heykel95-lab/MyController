@@ -8,6 +8,9 @@ with the `MAIN_*` results.
 
 - The physical plane is fitted from three non-collinear points. A fourth,
   held-out point must lie within 1 mm of the fit before any MAIN trial runs.
+- The full MAIN campaign is bound to the named `tilted` calibration profile.
+  A separately calibrated `horizontal` profile is reserved for the compact
+  validation block and cannot overwrite the primary calibration.
 - The projected direction from \(P_1\) to \(P_2\) defines \(+t_1\);
   \(t_2=n_s\times t_1\). These directions should be marked on the workpiece.
 - The plane defines its point, normal and surface frame

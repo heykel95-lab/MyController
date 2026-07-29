@@ -1,6 +1,8 @@
 run_id:   MAIN_D2_t2_rc_t1_p000
 repeats:  3
 
+plane profile: tilted
+
 purpose:
   Case D coarse centre-of-compliance sweep: +10 deg about t2, direct r_c,t1=+0 mm.
 

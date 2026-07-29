@@ -1,6 +1,8 @@
 run_id:   MAIN_A2_t1_10deg
 repeats:  3
 
+plane profile: tilted
+
 purpose:
   Case A: calibrated plane with independent tool command offsets (t1=+10 deg, t2=+0 deg).
 

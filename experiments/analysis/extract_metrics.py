@@ -27,7 +27,7 @@ RESULTS = os.path.join(EXP, "results")
 DERIVED = os.path.join(EXP, "derived")
 
 FIELDS = [
-    "run_id", "repeat", "series", "test_case",
+    "run_id", "repeat", "series", "test_case", "plane_profile",
     "git_commit", "timestamp",
     "has_alignment_metric", "has_alignment_components",
     "setup_present", "setup_duration_s",
@@ -158,6 +158,7 @@ def process_run(run_id, repeat_tag, run_dir):
     meta = read_meta(os.path.join(run_dir, "meta.txt"))
     row["git_commit"] = meta.get("git_commit", "")[:10]
     row["timestamp"] = meta.get("timestamp", "")
+    row["plane_profile"] = meta.get("plane_profile", "")
     if meta.get("git_dirty") == "yes":
         flags.append("dirty-tree")
 

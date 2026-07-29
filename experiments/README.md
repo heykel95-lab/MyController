@@ -8,8 +8,9 @@ data lives.
 ```
 experiments/
   setups/<run_id>/overlay.txt   parameter keys that differ from params/
+  setups/<run_id>/plane_profile.txt  required physical plane, when applicable
   setups/<run_id>/about.txt     what the run tests, what counts as a pass
-  setups/INDEX.txt              all 65 setups, 213 runs
+  setups/INDEX.txt              generated setup and repeat index
   run.sh                        run one setup, archive it with provenance
   lib/generate_setups.py        regenerates setups/ from one spec
   lib/apply_overlay.py          applies an overlay onto params/
@@ -44,26 +45,29 @@ coordinates: P1--P3 fit the plane and P4 validates it. Use fit points at least
 touch that same corner to every point. With the robot stationary at each
 point, run:
 
+The primary campaign uses the named `tilted` profile:
+
 ```bash
 cd surface_grinding_controller
 make capture_plane_point
-./tools/capture_plane_point P1
-./tools/capture_plane_point P2
-./tools/capture_plane_point P3
-./tools/capture_plane_point P4  # recommended held-out check
+./tools/capture_plane_point tilted P1
+./tools/capture_plane_point tilted P2
+./tools/capture_plane_point tilted P3
+./tools/capture_plane_point tilted P4
 cd ..
-python3 experiments/calibration/prepare_plane_calibration.py
+python3 experiments/calibration/prepare_plane_calibration.py tilted
 ```
 
 `capture_plane_point` is read-only and commands no robot motion. It converts
-the EE pose to the configured tool-corner position and appends it to
-`plane_points.csv`. If a different physical probe is used, enter its calibrated
-base-frame coordinates in a copy of `plane_points.example.csv` instead.
+the EE pose to the configured tool-corner position and appends it to the
+selected profile's `plane_points.csv`. If a different physical probe is used,
+enter its calibrated base-frame coordinates in that profile's
+`plane_points.example.csv` instead.
 
 The script fits the plane from P1--P3, uses P1-to-P2 as \(+t_1\), checks P4,
-and writes `active_plane_overlay.txt`. Every `MAIN_*` run applies this
-calibration before its own setup overlay and archives both the effective
-parameters and calibration report.
+and writes a profile-local overlay and report. Every calibrated setup declares
+its profile in `plane_profile.txt`; `run.sh` refuses missing, mismatched or
+failed calibration and archives the profile with the result.
 
 Run the zero-offset control first:
 
