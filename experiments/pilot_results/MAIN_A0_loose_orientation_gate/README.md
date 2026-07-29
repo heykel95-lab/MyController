@@ -1,0 +1,29 @@
+# Rejected A0 diagnostics: loose approach-orientation gate
+
+These two zero-offset runs are preserved as diagnostics and are not primary
+campaign repeats. They used the calibrated horizontal plane and physical tool
+axis, the corrected 60 mm virtual press, and the controller-wide
+`approach_orient_error_threshold = 0.035 rad` (approximately 2 degrees).
+
+| Quantity | r01 | r02 |
+|---|---:|---:|
+| First-contact alignment error [deg] | 0.992 | 0.990 |
+| End-of-set-up alignment error [deg] | 1.874 | 1.814 |
+| Alignment change [deg] | -0.882 | -0.824 |
+| Steady contact load [N] | 24.70 | 23.95 |
+| Peak contact load [N] | 29.06 | 27.79 |
+| Selected-feature travel [mm] | 2.92 | 1.95 |
+
+The two repeats demonstrate that reducing the virtual press from 180 mm to
+60 mm corrected the contact load, but the nominal zero-angle condition still
+entered set-up with about 1 degree of residual error. The response was
+repeatable: mean alignment change was -0.853 degrees with a two-sample
+standard deviation of 0.041 degrees, and mean steady load was 24.33 N.
+
+The MAIN overlays were therefore changed to require a 0.5 degree
+approach-orientation error before descent. These archived runs must not be
+pooled with replacement A0 data collected under the tighter gate.
+
+The r02 `dirty-tree` marker was caused only by metrics and figures regenerated
+after r01; no controller, calibration, or setup input changed. The runner was
+updated to exclude these derived outputs from the input-provenance check.

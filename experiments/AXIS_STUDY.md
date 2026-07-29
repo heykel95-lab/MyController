@@ -22,6 +22,10 @@ with the `MAIN_*` results.
 - The commanded tool orientation is an independent signed offset about
   \(t_1\) and/or \(t_2\).
 - Alignment is always evaluated against the calibrated physical plane.
+- The approach-to-descend transition is tightened to \(0.5^\circ\) for every
+  MAIN and validation condition. The measured first-contact angle remains the
+  reported independent variable; the tighter gate only reduces unintended
+  approach residual.
 - Translational experimental gains are diagonal in the surface frame:
 
   \[

@@ -65,8 +65,15 @@ cp -a "$PARAMS/." "$BACKUP/"
 # non-empty overlay as dirty -- i.e. nearly the whole campaign. The overlay is
 # already recorded verbatim in overlay.txt and params_effective/; what this
 # field is for is whether anything ELSE was uncommitted when the run happened.
-# Tracked changes only: untracked files are results/ piling up during a batch.
-if [ -n "$(cd "$REPO" && git status --porcelain --untracked-files=no)" ]; then
+# Tracked source/configuration changes only. Derived metrics and figures are
+# regenerated after every successful repeat, so including them would mark
+# repeat 2 onward dirty even when the controller, calibration and setup inputs
+# are unchanged. Those outputs retain their own Git history and are not inputs
+# to a robot trial.
+if [ -n "$(cd "$REPO" && git status --porcelain --untracked-files=no -- \
+    . \
+    ':(exclude)experiments/derived/**' \
+    ':(exclude)experiments/figures/**')" ]; then
   GIT_DIRTY=yes
 else
   GIT_DIRTY=no

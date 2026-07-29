@@ -109,6 +109,11 @@ approximately 21.6 N; the A0 pilot measured 66.2 N at 180 mm, so the scaled
 target is approximately 22 N. The set-up window remains 5 s, allowing the
 shorter preload ramp to settle before evaluation.
 
+The MAIN overlays also tighten the approach-orientation transition from the
+controller-wide 2 degree default to 0.5 degrees. This is required for the A0
+zero-offset gate: contact-induced rotation must not be confused with a large
+residual that was already present when the set-up phase began.
+
 The separately calibrated `tilted` profile is used only for the compact
 frame-transfer validation after the horizontal primary campaign:
 
