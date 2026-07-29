@@ -24,6 +24,11 @@ The MAIN overlays were therefore changed to require a 0.5 degree
 approach-orientation error before descent. These archived runs must not be
 pooled with replacement A0 data collected under the tighter gate.
 
+They also showed that the 360 N/m normal stiffness produced only 24.33 N at
+the corrected 60 mm virtual press. The replacement MAIN campaign uses
+800 N/m, corresponding to a 48 N quasi-static command and an expected measured
+equilibrium near the established 50 N operating range.
+
 The r02 `dirty-tree` marker was caused only by metrics and figures regenerated
 after r01; no controller, calibration, or setup input changed. The runner was
 updated to exclude these derived outputs from the input-provenance check.

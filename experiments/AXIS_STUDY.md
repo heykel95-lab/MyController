@@ -17,6 +17,11 @@ with the `MAIN_*` results.
 - The physical tool-face normal is calibrated independently from the plane
   points using T1--T3 plus a held-out T4 sample. Every MAIN and validation run
   requires and archives the `grinding_tool` calibration profile.
+- The EE-to-tool transform must remain rigid. A witness mark across the tool
+  and holder is checked before and after every repeat; any relative rotation
+  rejects the run. A possible 2 degree slip is not folded into the alignment
+  uncertainty because it can change during contact and is not observable from
+  the robot EE pose.
 - The plane defines its point, normal and surface frame
   \(R_s=[t_1,t_2,n_s]\).
 - The commanded tool orientation is an independent signed offset about
@@ -156,12 +161,14 @@ All primary conditions use the same normal preload command:
 
 \[
 \delta_n=0.060\ \mathrm{m},\qquad
-K_{p,n}=360\ \mathrm{N/m},\qquad
-F_{n,\mathrm{qs}}\approx K_{p,n}\delta_n=21.6\ \mathrm{N}.
+K_{p,n}=800\ \mathrm{N/m},\qquad
+F_{n,\mathrm{qs}}\approx K_{p,n}\delta_n=48.0\ \mathrm{N}.
 \]
 
 The five-second set-up window is retained. Thus the preload reaches its final
 value early enough for the alignment and load to settle before evaluation.
+The expected measured equilibrium is close to 50 N based on the 24.33 N
+loose-gate A0 mean at 360 N/m and the earlier 180 mm preload pilot.
 
 After horizontal Cases A--D, the compact tilted-plane baseline validation is:
 

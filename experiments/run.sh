@@ -171,6 +171,21 @@ if [ -f "$TOOL_PROFILE_FILE" ]; then
     fi
     python3 "$HERE/lib/apply_overlay.py" "$TOOL_OVERLAY" "$PARAMS" || exit 1
 fi
+
+if [ "$USES_TOOL_CALIBRATION" -eq 1 ]; then
+    echo ""
+    echo "--- rigid tool-mount check ---"
+    echo "The alignment metric assumes the physical tool cannot rotate relative"
+    echo "to the EE. With the robot stationary, verify the anti-rotation feature"
+    echo "and witness marks now. A movable tool invalidates this trial."
+    printf "Type  rigid  to confirm, anything else aborts: "
+    read -r TOOL_RIGID_CONFIRM
+    if [ "$TOOL_RIGID_CONFIRM" != "rigid" ]; then
+      echo "Aborted before robot control: rigid tool mounting was not confirmed."
+      exit 2
+    fi
+fi
+
 python3 "$HERE/lib/apply_overlay.py" "$OVERLAY" "$PARAMS" || exit 1
 echo ""
 

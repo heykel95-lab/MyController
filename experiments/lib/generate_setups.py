@@ -207,15 +207,17 @@ MAIN_COMMON = [
     # diagnostics, which is too large for a zero-angle reference.
     ("approach_orient_error_threshold", "0.008726646"),
     ("setup_timeout", "5.0"),
-    # The A0 pilot reached 66.2 N at 0.180 m with Kp,n=360 N/m. Scaling the
-    # same measured equilibrium to 0.060 m targets about 22 N, while the 5 s
-    # phase retains ample settling time after the shorter preload ramp.
+    # The two loose-gate A0 diagnostics reached 24.33 N at 0.060 m with
+    # Kp,n=360 N/m. The primary campaign instead targets the established
+    # 50 N operating range: 800 N/m gives a 48 N quasi-static command and
+    # about 50 N after the measured low-load offset is accounted for. The
+    # 5 s phase retains ample settling time after the short preload ramp.
     ("setup_push_end", "0.060"),
     ("setup_push_speed", "0.050"),
     ("grind_sweep_enabled", "0"),
     ("nullspace_mode", "1"),
     ("setup_translation_surface_frame", "1"),
-    ("setup_Kp_surface_normal", "360.0"),
+    ("setup_Kp_surface_normal", "800.0"),
     ("setup_KR_normal", "50.0"),
 ]
 

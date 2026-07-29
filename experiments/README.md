@@ -104,15 +104,27 @@ repeat, verifies the exact gain matrices without connecting to the robot,
 archives the trial through `run.sh`, and refreshes metrics and plots.
 
 The MAIN campaign uses a 60 mm virtual penetration with
-`setup_Kp_surface_normal = 360 N/m`. The resulting quasi-static target is
-approximately 21.6 N; the A0 pilot measured 66.2 N at 180 mm, so the scaled
-target is approximately 22 N. The set-up window remains 5 s, allowing the
-shorter preload ramp to settle before evaluation.
+`setup_Kp_surface_normal = 800 N/m`. The resulting quasi-static command is
+48 N. The two loose-gate A0 diagnostics measured 24.33 N at 360 N/m; together
+with the earlier 180 mm pilot, this supports an expected settled load close to
+50 N at 800 N/m. The set-up window remains 5 s, allowing the short preload
+ramp to settle before evaluation. Automatic damping is recomputed for the
+higher stiffness at phase entry.
 
 The MAIN overlays also tighten the approach-orientation transition from the
 controller-wide 2 degree default to 0.5 degrees. This is required for the A0
 zero-offset gate: contact-induced rotation must not be confused with a large
 residual that was already present when the set-up phase began.
+
+The calibrated `tool_axis_ee` assumes a rigid transform between the Franka EE
+and the physical grinding face. Mark the tool and holder with a witness line
+and reject a run if the marks move. A tool that can rotate by approximately
+2 degrees relative to the EE cannot be treated as a fixed calibration
+uncertainty: motion during contact is invisible to the robot pose and would be
+mistaken for, or hide, alignment. Mechanically constrain that rotation before
+the MAIN campaign and recalibrate T1--T4 after the final regrasp. The runner
+requires the operator to type `rigid` before every calibrated trial; this
+confirmation must not be given while rotational play remains.
 
 The separately calibrated `tilted` profile is used only for the compact
 frame-transfer validation after the horizontal primary campaign:
