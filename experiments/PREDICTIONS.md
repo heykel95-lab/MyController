@@ -223,3 +223,40 @@ short 40 mm end at -y_EE, or it is a long side at -x_EE and the axis in the
 report is a slip. The measured relationship is unaffected either way -- positive
 offsets win on both axes -- but which edge contacts decides how the rule should
 be phrased.
+
+---
+
+## Postscript — the t1 response turns over
+
+Extending B3 to `p080` and `p120` (six further runs) located the optimum that
+the earlier entries record as unbounded:
+
+| pole_x [mm] | improvement |
+|---|---|
+| -70.9 | -10.31 +/- 1.04 |
+| -26.6 |  -1.78 +/- 0.09 |
+| +15.2 |  +2.73 +/- 0.29 |
+| **+62.9** | **+6.96 +/- 0.38** |
+| +115.4 |  +2.37 +/- 0.77 |
+| +160.8 |  -3.75 +/- 0.09 |
+
+Past the optimum the response reverses rather than flattening: at +161 mm the
+pole is worse than commanding no coupling at all.
+
+**This supersedes the R^2 = 0.907 linear figure recorded earlier in this file.**
+That fit sampled only the rising flank. Over all 54 pole runs a linear model in
+t1 now accounts for R^2 = 0.047, and the correct model is quadratic in both
+in-plane components:
+
+    t1 linear                   R^2 = 0.047
+    t1 + t1^2                   R^2 = 0.644
+    normal only                 R^2 = 0.010
+    t1 + t1^2 + t2 + t2^2       R^2 = 0.962   optima +62 and +30 mm
+      and the normal            R^2 = 0.966
+
+The alignment response is a quadratic surface in the two in-plane pole
+components with an interior maximum. The normal component remains irrelevant.
+
+This confirms the mechanism the historical Difference-Chasles-Pole campaign
+proposed -- an optimum beyond which the quadratic lever term re-stiffens the
+rotation -- while relocating it from the surface normal to the surface plane.

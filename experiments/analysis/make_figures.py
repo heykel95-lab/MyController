@@ -189,14 +189,22 @@ def fig_b_pole_axis(rows):
         if allx:
             X = np.concatenate(allx)
             Y = np.concatenate(ally)
-            slope, intercept = np.polyfit(X, Y, 1)
-            pred = slope * X + intercept
+            # The two in-plane axes turn over inside the tested range, so a
+            # straight line through them is not just imprecise, it points the
+            # wrong way past the optimum. The normal axis stays linear.
+            deg = 1 if xkey == "pole_cmd_z_mm" else 2
+            coef = np.polyfit(X, Y, deg)
+            pred = np.polyval(coef, X)
             ss = 1.0 - ((Y - pred) ** 2).sum() / ((Y - Y.mean()) ** 2).sum()
-            grid = np.linspace(X.min(), X.max(), 2)
-            ax.plot(grid, slope * grid + intercept, "-", color=INK_MUTED,
+            grid = np.linspace(X.min(), X.max(), 200)
+            ax.plot(grid, np.polyval(coef, grid), "-", color=INK_MUTED,
                     linewidth=1.5, zorder=0)
-            ax.annotate(f"$R^2$ = {ss:.3f}\n{slope:+.3f} deg/mm",
-                        xy=(0.04, 0.94), xycoords="axes fraction",
+            if deg == 2:
+                peak = -coef[1] / (2.0 * coef[0])
+                note = f"$R^2$ = {ss:.3f}\noptimum {peak:+.0f} mm"
+            else:
+                note = f"$R^2$ = {ss:.3f}\n{coef[0]:+.3f} deg/mm"
+            ax.annotate(note, xy=(0.04, 0.94), xycoords="axes fraction",
                         va="top", fontsize=8, color=INK)
         ax.axhline(0.0, color="0.55", linewidth=1, zorder=0)
         ax.set_xlabel(xlabel, color=INK_MUTED)

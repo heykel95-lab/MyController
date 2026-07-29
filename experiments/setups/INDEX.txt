@@ -1,4 +1,4 @@
-69 setups, 224 total runs
+69 setups, 216 total runs
 
 G1_coupled_block_diagonal          x3  Coupled 6x6 path with block-diagonal gains must reproduce the decoupled wrench exactly.
 G1_decoupled_baseline              x5  Decoupled wrench, no coupling.
@@ -49,10 +49,10 @@ B4_pole_tangent2_m040              x3  Pole swept along surface tangent t2, -0.0
 B4_pole_tangent2_p040              x3  Pole swept along surface tangent t2, +0.04 m, at fixed normal offset +0.08 m and zero t1 offset.
 B4_pole_tangent2_p080              x3  Pole swept along surface tangent t2, +0.08 m, at fixed normal offset +0.08 m and zero t1 offset.
 C1_hold_drift_mode0                x2  Hold, null-space off, 60 s, arm untouched.
-C2_hold_mode0_off                  x5  Hold, push-and-release protocol, nullspace_mode = 0 (off).
-C2_hold_mode1_damping              x5  Hold, push-and-release protocol, nullspace_mode = 1 (damping).
-C2_hold_mode2_sigma                x5  Hold, push-and-release protocol, nullspace_mode = 2 (sigma).
-C2_hold_mode3_both                 x5  Hold, push-and-release protocol, nullspace_mode = 3 (both).
+C2_hold_mode0_off                  x3  Hold, push-and-release protocol, nullspace_mode = 0 (off).
+C2_hold_mode1_damping              x3  Hold, push-and-release protocol, nullspace_mode = 1 (damping).
+C2_hold_mode2_sigma                x3  Hold, push-and-release protocol, nullspace_mode = 2 (sigma).
+C2_hold_mode3_both                 x3  Hold, push-and-release protocol, nullspace_mode = 3 (both).
 C4_ksigma_0p5                      x3  Sigma torque magnitude sweep, nullspace_k_sigma = 0.5, mode 2.
 C4_ksigma_1p0                      x3  Sigma torque magnitude sweep, nullspace_k_sigma = 1.0, mode 2.
 C4_ksigma_2p0                      x3  Sigma torque magnitude sweep, nullspace_k_sigma = 2.0, mode 2.

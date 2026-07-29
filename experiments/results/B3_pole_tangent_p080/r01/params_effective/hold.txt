@@ -1,0 +1,26 @@
+# ====================================================================
+# HOLD mode gains
+# ====================================================================
+# Used when the startup menu picks hold instead of the phase sequence (or when
+# use_phase_sequence = 0). Hold locks the captured start pose: POSITION with
+# hold_Kp/hold_Dp and ORIENTATION with hold_KR/hold_DR, both isotropic in the
+# base frame. The auto-damping toggle/factor for hold live in common.txt.
+#
+# From hold you can press g+Enter to hand-guide the tool and p+Enter to
+# re-capture the new pose and resume hold.
+
+# Cartesian position stiffness [N/m], base x/y/z.
+hold_Kp = 300.0
+
+# Manual damping target/fallback [Ns/m], paired with hold_Kp. With
+# hold_auto_match_manual_damping = 1, the online factor is fitted so the three
+# auto coefficients are collectively as close as possible to this value. It is
+# also the fallback if the online inertia estimate is unavailable.
+hold_Dp = 50.0
+
+# Isotropic rotational hold spring [Nm/rad]. hold_DR [Nms/rad] is the fallback
+# if auto damping is disabled/unavailable. Otherwise rotation uses the online
+# formula D_R = factor * 2 * sqrt(I * hold_KR), with the same fitted factor as
+# translation.
+hold_KR = 40.0
+hold_DR = 8.0

@@ -1,0 +1,7 @@
+run_id:        B3_pole_tangent_p120
+repeat:        1
+timestamp:     2026-07-29T14:05:15+02:00
+git_commit:    30df61f652a8426f062202ee07048ac788061eee
+git_dirty:     no
+host:          Computer19
+controller_exit: 0

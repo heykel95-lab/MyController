@@ -312,9 +312,12 @@ for mode, name in ((0, "off"), (1, "damping"), (2, "sigma"), (3, "both")):
         f"Hold, push-and-release protocol, nullspace_mode = {mode} ({name}).",
         "Core comparison. Metrics: recovered sigma_min, recovery time, vBest "
         "sign, tau_sigma norm. C3 (task invariance) is extracted from the same "
-        "logs at no extra cost.",
+        "logs at no extra cost. Three repeats rather than five: the disturbance "
+        "is a hand push and so is not a controlled input, which puts a floor on "
+        "the precision two extra repeats could buy. Differences between modes "
+        "have to clear the G3 noise floor either way.",
         [("nullspace_mode", f"{mode}"), ("print_sigma_debug", "1")],
-        repeats=5,
+        repeats=3,
     )
 
 for k in (0.5, 1.0, 2.0, 4.0):
