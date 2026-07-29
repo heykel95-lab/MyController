@@ -195,11 +195,19 @@ for case in ("tilted_tool", "tilted_close", "table"):
     )
 
 # ---- Series B: centre of compliance / pole ---------------------------------
+# NOTE ON THE NAME. This setup was originally called B1_pole_at_tcp and claimed
+# a zero lever. It does not have one: main.cpp computes
+#     r_c = tcp_ref - (edge_ref + coupled_pole_from_edge)
+# so zeroing the parameter puts the pole on the CONTACT EDGE, and the measured
+# lever is r_c = [-13.8, 60.7, 41.4] mm, about 75 mm. The runs recorded under
+# the old name are a valid pole-on-edge measurement and are kept; the zero-lever
+# gate it was meant to be is B1b below.
 add(
-    "B1_pole_at_tcp",
-    "Coupled law with the pole placed at the TCP (zero lever).",
-    "Must reproduce the decoupled baseline. Second correctness gate: the "
-    "adjoint reduces to the identity when r_c = 0.",
+    "B1_pole_on_contact_edge",
+    "Coupled law with the pole on the contact edge (coupled_pole_from_edge = 0).",
+    "Historically the pole-on-edge case suppressed alignment almost entirely. "
+    "Also serves as a held-out check of the quadratic pole model fitted on "
+    "B2/B3/B4: predicted +2.44 deg, measured +2.30 +/- 0.07 deg.",
     [
         ("use_coupled_stiffness", "1"),
         ("coupled_use_block_diagonal", "0"),
@@ -207,6 +215,26 @@ add(
         ("coupled_pole_freeze_at_contact", "1"),
     ]
     + pole_keys([0.0, 0.0, 0.0]),
+)
+
+# The lever measured under the old B1 was repeatable to 0.1 mm across three
+# runs, so cancelling it with a fixed offset puts the pole within a tenth of a
+# millimetre of the TCP -- close enough for Ad to reduce to the identity.
+add(
+    "B1b_pole_at_tcp",
+    "Coupled law with the pole AT the TCP: the offset cancels the measured "
+    "TCP-to-edge lever, giving r_c ~ 0.",
+    "Second correctness gate. With a zero lever the adjoint reduces to the "
+    "identity, so this must reproduce the decoupled baseline "
+    "(2.458 +/- 0.111 deg tip, 59.37 +/- 0.11 N). Check the printed r_c is "
+    "within a millimetre of zero before trusting the run.",
+    [
+        ("use_coupled_stiffness", "1"),
+        ("coupled_use_block_diagonal", "0"),
+        ("coupled_pole_manual", "1"),
+        ("coupled_pole_freeze_at_contact", "1"),
+    ]
+    + pole_keys([-0.0138, 0.0607, 0.0414]),
 )
 
 for s in (-0.12, -0.08, -0.04, 0.0, 0.04, 0.08, 0.12, 0.16):

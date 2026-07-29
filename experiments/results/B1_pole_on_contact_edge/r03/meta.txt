@@ -1,0 +1,7 @@
+run_id:        B1_pole_at_tcp
+repeat:        3
+timestamp:     2026-07-29T14:19:41+02:00
+git_commit:    b666d7494d0fc03a2ca4b8a7606edba1748279e4
+git_dirty:     no
+host:          Computer19
+controller_exit: 0

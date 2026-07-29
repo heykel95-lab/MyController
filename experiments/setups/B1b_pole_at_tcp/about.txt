@@ -1,0 +1,8 @@
+run_id:   B1b_pole_at_tcp
+repeats:  3
+
+purpose:
+  Coupled law with the pole AT the TCP: the offset cancels the measured TCP-to-edge lever, giving r_c ~ 0.
+
+pass criterion:
+  Second correctness gate. With a zero lever the adjoint reduces to the identity, so this must reproduce the decoupled baseline (2.458 +/- 0.111 deg tip, 59.37 +/- 0.11 N). Check the printed r_c is within a millimetre of zero before trusting the run.

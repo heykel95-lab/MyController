@@ -1,0 +1,8 @@
+run_id:   B1_pole_on_contact_edge
+repeats:  3
+
+purpose:
+  Coupled law with the pole on the contact edge (coupled_pole_from_edge = 0).
+
+pass criterion:
+  Historically the pole-on-edge case suppressed alignment almost entirely. Also serves as a held-out check of the quadratic pole model fitted on B2/B3/B4: predicted +2.44 deg, measured +2.30 +/- 0.07 deg.
