@@ -1040,7 +1040,11 @@ void askStartupRunMode(Parameters& params, Robot& robot) {
     return;
   }
 
-  printf("Selected: hold mode with configured %s.\n",
+  // Hold is the mode the nullspace terms are studied in, so ask for the mode
+  // here instead of silently taking the configured one. Enter keeps the
+  // parameter-file value.
+  (void)selectHoldNullspaceMode(params);
+  printf("Selected: hold mode with %s.\n",
          nullspaceModeName(params.nullspace_mode));
 }
 
