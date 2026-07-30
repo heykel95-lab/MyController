@@ -3,7 +3,7 @@
 # ====================================================================
 # q_init_case selects one of the postures below. The startup menu moves the
 # arm there before anything else runs. Type the name of which q_init_case you want to start from there
-q_init_case = saved_qinit
+q_init_case = tilted_tool
 
 # horizontal_tool
 q_init_horizontal_1 = 0.0

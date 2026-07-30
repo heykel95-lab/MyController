@@ -1,0 +1,194 @@
+
+Press Enter to recover and configure the robot.
+Robot recovered or already ready.
+Collision: custom thresholds.
+
+=== Startup mode ===
+  s = go to q_init, then run the phase sequence
+  h = go to q_init, then hold that pose
+  g = guiding mode: go to q_init, then hand-guide to your pose;
+      use s+Enter for sequence or h+Enter for hold
+  q = go to q_init, inspect the posture, then choose again
+  o = open the Franka hand now (release/load tool), then choose again
+  c = close/grasp the tool now, then choose again
+Choice [s/h/g/q/o/c]: Grasping tool: width 70.0 mm, force 60.0 N...
+Gripper closed on the tool.
+
+=== Startup mode ===
+  s = go to q_init, then run the phase sequence
+  h = go to q_init, then hold that pose
+  g = guiding mode: go to q_init, then hand-guide to your pose;
+      use s+Enter for sequence or h+Enter for hold
+  q = go to q_init, inspect the posture, then choose again
+  o = open the Franka hand now (release/load tool), then choose again
+  c = close/grasp the tool now, then choose again
+Choice [s/h/g/q/o/c]: Grasping tool: width 70.0 mm, force 60.0 N...
+Gripper closed on the tool.
+
+=== Startup mode ===
+  s = go to q_init, then run the phase sequence
+  h = go to q_init, then hold that pose
+  g = guiding mode: go to q_init, then hand-guide to your pose;
+      use s+Enter for sequence or h+Enter for hold
+  q = go to q_init, inspect the posture, then choose again
+  o = open the Franka hand now (release/load tool), then choose again
+  c = close/grasp the tool now, then choose again
+Choice [s/h/g/q/o/c]: Unknown startup choice 'm'; choose s, h, g, q, o, or c.
+
+=== Startup mode ===
+  s = go to q_init, then run the phase sequence
+  h = go to q_init, then hold that pose
+  g = guiding mode: go to q_init, then hand-guide to your pose;
+      use s+Enter for sequence or h+Enter for hold
+  q = go to q_init, inspect the posture, then choose again
+  o = open the Franka hand now (release/load tool), then choose again
+  c = close/grasp the tool now, then choose again
+Choice [s/h/g/q/o/c]: Opening gripper to 80.0 mm...
+Gripper opened.
+
+=== Startup mode ===
+  s = go to q_init, then run the phase sequence
+  h = go to q_init, then hold that pose
+  g = guiding mode: go to q_init, then hand-guide to your pose;
+      use s+Enter for sequence or h+Enter for hold
+  q = go to q_init, inspect the posture, then choose again
+  o = open the Franka hand now (release/load tool), then choose again
+  c = close/grasp the tool now, then choose again
+Choice [s/h/g/q/o/c]: Grasping tool: width 70.0 mm, force 60.0 N...
+Gripper closed on the tool.
+
+=== Startup mode ===
+  s = go to q_init, then run the phase sequence
+  h = go to q_init, then hold that pose
+  g = guiding mode: go to q_init, then hand-guide to your pose;
+      use s+Enter for sequence or h+Enter for hold
+  q = go to q_init, inspect the posture, then choose again
+  o = open the Franka hand now (release/load tool), then choose again
+  c = close/grasp the tool now, then choose again
+Choice [s/h/g/q/o/c]: Moving to q_init...
+q_init reached.
+Selected: guiding mode (hand-place the start pose after q_init).
+Run mode (s/h) will be chosen at the end of guiding.
+
+=== Setup ===
+run: phase sequence | approach_orient: on | nullspace: nullspace_damping_only
+nullspace parameters: d_null=2.000 | k_sigma=1.000 Nm (inactive) | alpha=0.0800 rad
+hold: Kp=300.0 N/m | KR=40.0 Nm/rad | damping=auto translation+rotation (factor fitted online toward Dp=50.0 Ns/m)
+manual_guidance_start: on | manual_damping=0.50
+descend: clearance=20.0 mm | speed=0.100 m/s | max_distance=640 mm
+alignment push: start=captured | end=+60 mm | speed=0.050 m/s | ramp_time~=1.6 s | timeout=5.0 s | moment_threshold=150.0 Nm
+grind: free-slide hold | axis=tangent2 | amplitude=30 mm | frequency=0.20 Hz
+set-up translation: frame=surface [t1,t2,n] | Kp=[2000.0, 2000.0, 800.0] N/m
+coupled stiffness: apply=off | pole=commanded
+gates: pause_before_set_up=on | pause_auto_damping=on | pause_before_grind=off | debug_period=0.20 s
+surface-plane normal=[+0.017, +0.028, +0.999] | tilt a(x)=-1.6 deg, b(y)=1.0 deg (from angles)
+tool-axis command offset: tangent1=+10.0 deg | tangent2=+0.0 deg
+tool face: 40 x 120 mm | center offset EE=[+0.0, +0.0, +20.0] mm
+Press e+Enter to stop the controller before the duration expires.
+During startup guidance: use s+Enter for sequence or h+Enter for hold.
+During hold: press g+Enter to hand-guide the tool, then p+Enter to recapture and resume hold.
+experiment_duration <= 0: running indefinitely until e + Enter.
+
+phase: manual_guidance_start
+Move the robot by hand. Then:
+  o+Enter = open the gripper
+  c+Enter = close/grasp the tool
+  s+Enter = start phase sequence from this pose
+  h+Enter = start hold from this pose
+  e+Enter = stop (prints this pose as a q_init_* case)
+Opening gripper to 80.0 mm...
+Gripper opened.
+
+phase: manual_guidance_start
+Move the robot by hand. Then:
+  o+Enter = open the gripper
+  c+Enter = close/grasp the tool
+  s+Enter = start phase sequence from this pose
+  h+Enter = start hold from this pose
+  e+Enter = stop (prints this pose as a q_init_* case)
+Grasping tool: width 70.0 mm, force 60.0 N...
+Gripper closed on the tool.
+
+phase: manual_guidance_start
+Move the robot by hand. Then:
+  o+Enter = open the gripper
+  c+Enter = close/grasp the tool
+  s+Enter = start phase sequence from this pose
+  h+Enter = start hold from this pose
+  e+Enter = stop (prints this pose as a q_init_* case)
+Grasping tool: width 70.0 mm, force 60.0 N...
+Gripper closed on the tool.
+
+phase: manual_guidance_start
+Move the robot by hand. Then:
+  o+Enter = open the gripper
+  c+Enter = close/grasp the tool
+  s+Enter = start phase sequence from this pose
+  h+Enter = start hold from this pose
+  e+Enter = stop (prints this pose as a q_init_* case)
+Grasping tool: width 70.0 mm, force 60.0 N...
+Gripper closed on the tool.
+
+phase: manual_guidance_start
+Move the robot by hand. Then:
+  o+Enter = open the gripper
+  c+Enter = close/grasp the tool
+  s+Enter = start phase sequence from this pose
+  h+Enter = start hold from this pose
+  e+Enter = stop (prints this pose as a q_init_* case)
+Selected: phase sequence from the guided pose.
+
+=== Start pose ===
+q_start = [-0.9, 10.0, -1.1, -130.3, -0.0, 145.2, 42.7] deg
+p_start = [550.6, -19.5, 185.1] mm
+
+=== Run ===
+phase: approach_orient
+orient:     t=  0.0 s | axis_err= 10.3 deg | rot_err= 10.3 deg
+approach Dp        auto=[ 127.09,  105.68,  125.82]  manual=[  20.00,   20.00,   20.00] Ns/m
+approach DR        auto=[  13.60,   15.17,    2.22]  manual=[  12.00,   12.00,   12.00] Nms/rad
+orient:     t=  0.2 s | axis_err=  4.6 deg | rot_err=  4.6 deg
+orient:     t=  0.4 s | axis_err=  2.5 deg | rot_err=  2.5 deg
+orient:     t=  0.6 s | axis_err=  2.3 deg | rot_err=  2.3 deg
+orient:     t=  0.8 s | axis_err=  2.2 deg | rot_err=  2.2 deg
+orient:     t=  1.0 s | axis_err=  2.1 deg | rot_err=  2.2 deg
+orient:     t=  1.2 s | axis_err=  2.1 deg | rot_err=  2.1 deg
+orient:     t=  1.4 s | axis_err=  2.1 deg | rot_err=  2.1 deg
+orient:     t=  1.6 s | axis_err=  2.1 deg | rot_err=  2.1 deg
+orient:     t=  1.8 s | axis_err=  2.1 deg | rot_err=  2.1 deg
+orient:     t=  2.0 s | axis_err=  2.0 deg | rot_err=  2.1 deg
+orient:     t=  2.2 s | axis_err=  2.0 deg | rot_err=  2.0 deg
+
+Orientation reached: axis_err=2.0 deg
+phase: approach_descend
+descend:    t=  0.0 s | distance=   0.1 mm | height=+152.8 mm (target 20.0) | force=  0.0 N
+descend:    t=  0.2 s | distance=  20.2 mm | height=+142.6 mm (target 20.0) | force=  1.3 N
+descend:    t=  0.4 s | distance=  40.3 mm | height=+128.2 mm (target 20.0) | force=  1.9 N
+descend:    t=  0.6 s | distance=  60.4 mm | height=+112.9 mm (target 20.0) | force=  1.7 N
+descend:    t=  0.8 s | distance=  80.5 mm | height= +97.0 mm (target 20.0) | force=  2.0 N
+descend:    t=  1.0 s | distance= 100.6 mm | height= +81.1 mm (target 20.0) | force=  3.0 N
+descend:    t=  1.2 s | distance= 120.7 mm | height= +64.6 mm (target 20.0) | force=  1.9 N
+descend:    t=  1.4 s | distance= 140.8 mm | height= +47.3 mm (target 20.0) | force=  2.5 N
+descend:    t=  1.6 s | distance= 160.9 mm | height= +29.9 mm (target 20.0) | force=  2.5 N
+
+Stop requested with e + Enter. Finishing control loop...
+
+Joint motion [deg]:
+joint    start   final   delta
+------------------------------
+q1       -0.9    -0.2     0.7
+q2       10.0    26.9    16.8
+q3       -1.1    -2.9    -1.8
+q4     -130.3  -129.4     0.8
+q5       -0.0   -17.4   -17.4
+q6      145.2   158.0    12.7
+q7       42.7    58.2    15.5
+
+=== Final result ===
+p_d = [547.7, -24.1, 17.2] mm
+p_EE = [539.8, -31.7, 51.9] mm
+e_p = [7.9, 7.6, -34.7] mm
+position_error = 36.39 mm
+e_R = [-2.74, -1.38, -0.16] deg
+rotation_error = 3.07 deg
+csv: surface_grinding_controller_log.csv
