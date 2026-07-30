@@ -71,47 +71,54 @@ def read_meta(path):
     return out
 
 
-def surface_normal_from_params(params_dir):
+def read_params(params_dir):
+    """Merge every parameter file in the directory into one key -> value dict.
+
+    The controller's files are disjoint by design and have been reorganised
+    over the campaign (common.txt/sequence.txt became one file per topic), so
+    reading the whole directory keeps archived runs and current runs parsing
+    through the same code path.
+    """
+    out = {}
+    if not os.path.isdir(params_dir):
+        return out
+    for name in sorted(os.listdir(params_dir)):
+        if not name.endswith(".txt"):
+            continue
+        with open(os.path.join(params_dir, name)) as f:
+            for raw in f:
+                line = raw.split("#")[0].strip()
+                if "=" not in line:
+                    continue
+                k, v = [x.strip() for x in line.split("=", 1)]
+                out[k] = v
+    return out
+
+
+def surface_normal_from_params(params):
     """Recover the surface normal so the pole offset can be resolved into its
     normal component -- the physically meaningful coordinate for series B."""
     import math
-    a_deg = b_deg = 0.0
-    p = os.path.join(params_dir, "common.txt")
-    if not os.path.exists(p):
+    if "alignment_target_tilt_angle_deg" not in params:
         return None
-    with open(p) as f:
-        for raw in f:
-            line = raw.split("#")[0].strip()
-            if "=" not in line:
-                continue
-            k, v = [x.strip() for x in line.split("=", 1)]
-            if k == "alignment_target_tilt_angle_deg":
-                a_deg = float(v)
-            elif k == "alignment_target_tilt_angle_y_deg":
-                b_deg = float(v)
+    a_deg = float(params.get("alignment_target_tilt_angle_deg", 0.0))
+    b_deg = float(params.get("alignment_target_tilt_angle_y_deg", 0.0))
     a, b = math.radians(a_deg), math.radians(b_deg)
     return (math.sin(b) * math.cos(a), -math.sin(a), math.cos(b) * math.cos(a))
 
 
-def pole_from_params(params_dir):
-    p = os.path.join(params_dir, "sequence.txt")
+def pole_from_params(params):
     vals = {}
-    if not os.path.exists(p):
-        return None
-    with open(p) as f:
-        for raw in f:
-            line = raw.split("#")[0].strip()
-            if "=" not in line:
-                continue
-            k, v = [x.strip() for x in line.split("=", 1)]
-            if k.startswith("coupled_pole_from_edge_"):
-                vals[k[-1]] = float(v)
+    for axis in ("x", "y", "z"):
+        key = "coupled_pole_from_edge_" + axis
+        if key in params:
+            vals[axis] = float(params[key])
     if len(vals) != 3:
         return None
     return (vals["x"], vals["y"], vals["z"])
 
 
-def study_params(params_dir):
+def study_params(params):
     wanted = {
         "setup_Kp_surface_tangent1": ("setup_Kp_t1", 1.0),
         "setup_Kp_surface_tangent2": ("setup_Kp_t2", 1.0),
@@ -127,23 +134,15 @@ def study_params(params_dir):
         "tool_target_offset_tangent2_deg": "tool_offset_t2_deg",
     }
     out = {}
-    for filename in ("common.txt", "sequence.txt"):
-        path = os.path.join(params_dir, filename)
-        if not os.path.exists(path):
+    for key, value in params.items():
+        if key not in wanted:
             continue
-        with open(path) as handle:
-            for raw in handle:
-                line = raw.split("#")[0].strip()
-                if "=" not in line:
-                    continue
-                key, value = [part.strip() for part in line.split("=", 1)]
-                if key in wanted:
-                    destination = wanted[key]
-                    if isinstance(destination, tuple):
-                        name, scale = destination
-                    else:
-                        name, scale = destination, 1.0
-                    out[name] = scale * float(value)
+        destination = wanted[key]
+        if isinstance(destination, tuple):
+            name, scale = destination
+        else:
+            name, scale = destination, 1.0
+        out[name] = scale * float(value)
     return out
 
 
@@ -169,11 +168,11 @@ def process_run(run_id, repeat_tag, run_dir):
     if row["tool_mount_status"] == "known_play":
         flags.append("tool-play")
 
-    params_dir = os.path.join(run_dir, "params_effective")
-    for key, value in study_params(params_dir).items():
+    params = read_params(os.path.join(run_dir, "params_effective"))
+    for key, value in study_params(params).items():
         row[key] = f"{value:.6f}"
-    pole = pole_from_params(params_dir)
-    normal = surface_normal_from_params(params_dir)
+    pole = pole_from_params(params)
+    normal = surface_normal_from_params(params)
     if pole:
         row["pole_x"], row["pole_y"], row["pole_z"] = (f"{v:.6f}" for v in pole)
         if normal:

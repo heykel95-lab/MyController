@@ -1,3 +1,9 @@
+// ====================================================================
+// Control mathematics
+// ====================================================================
+// The pure computations behind the controller: trajectory shaping, spatial
+// gain matrices, task-space inertia, task frames and alignment errors, and
+// the nullspace sigma-min torque. No robot state is owned here.
 #include "controller.h"
 
 // ====================================================================
@@ -73,9 +79,8 @@ void grindSweep(double t, double amplitude, double stroke_duration,
     s_dot = 0.0;
     return;
   }
-  // Endpoints in units of amplitude: stroke 0 goes center -> +A, then ping-pong
-  // +A <-> -A. smoothStep gives zero velocity at both ends of every stroke, so
-  // the reversals are smooth.
+  // Stroke 0 runs center -> +A, then it ping-pongs +A <-> -A. smoothStep has
+  // zero velocity at both ends, so the reversals stay smooth.
   const double tau = std::max(0.0, t) / stroke_duration;
   const int k = static_cast<int>(std::floor(tau));
   const double r = tau - std::floor(tau);
@@ -328,13 +333,8 @@ double toolSurfaceMisalignmentAngle(
     const Parameters& params,
     const Mat3& R_EE,
     const Mat3& R_alignment_target) {
-  // Residual angle between the physical tool axis and the signed surface
-  // target. This is the alignment quality itself: it is zero when the tool face
-  // lies flat on the plane. It is NOT the same quantity as the logged e_R,
-  // which is measured against the orientation frozen at the clearance
-  // transition and therefore reports how far the tool turned, not how flat it
-  // ended up. Always non-negative, so a drop across the phase is the useful
-  // alignment gain.
+  // Alignment quality [rad]: zero when the tool face lies flat on the plane.
+  // Not the logged e_R, which measures how far the tool turned instead.
   return toolSurfaceAlignmentErrorInBase(params, R_EE, R_alignment_target).norm();
 }
 
@@ -347,9 +347,8 @@ Mat3 makeToolOrientationForAlignmentTarget(
   const Vec3 tool_axis_target =
       desiredToolAxisInBase(params, R_alignment_target).normalized();
 
-  // Rotate the current physical tool axis onto the deliberately offset command
-  // axis while keeping the remaining orientation twist as close as possible
-  // to the start.
+  // Rotate the tool axis onto the offset command axis, keeping the remaining
+  // twist as close to the start as possible.
   return rotationBetweenUnitVectors(tool_axis_start, tool_axis_target) * R_start;
 }
 
@@ -370,15 +369,80 @@ Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_a
 // Robot interaction
 // ====================================================================
 
-void startKeyboardStopThread(
-    const Parameters& params,
-    std::atomic<bool>& stop_requested,
-    std::atomic<bool>& proceed_requested,
-    std::atomic<bool>& guide_requested,
-    std::atomic<char>& guidance_menu_key,
-    std::atomic<bool>& guided_hold_selector_pending,
-    std::atomic<bool>& gate_continue) {
-  printf("Press e+Enter to stop the controller before the duration expires.\n");
+// Joint limits of the Panda, with a small margin kept clear.
+bool withinJointLimits(const Array7& q, int& joint_out) {
+  static const std::array<double, 7> lower = {
+      {-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973}};
+  static const std::array<double, 7> upper = {
+      {2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973}};
+  const double margin = 0.05;
+  for (int i = 0; i < 7; ++i) {
+    if (q[i] < lower[i] + margin || q[i] > upper[i] - margin) {
+      joint_out = i + 1;
+      return false;
+    }
+  }
+  joint_out = 0;
+  return true;
+}
+
+bool solveStandoffPosture(const Model& model,
+                          const RobotState& state,
+                          const Array7& q_target,
+                          double standoff,
+                          Array7& q_standoff) {
+  const std::array<double, 16> pose_target =
+      model.pose(Frame::kEndEffector, q_target, state.F_T_EE, state.EE_T_K);
+  Map<const Mat4x4> T_target(pose_target.data());
+  const Mat3 R_target = T_target.block<3, 3>(0, 0);
+  // -Z_EE points back out of the fingers, so this retreats along the tool
+  // axis instead of anywhere in the base frame.
+  const Vec3 p_goal =
+      T_target.block<3, 1>(0, 3) - standoff * (R_target * Vec3(0.0, 0.0, 1.0));
+
+  Array7 q = q_target;
+  for (int iteration = 0; iteration < 200; ++iteration) {
+    const std::array<double, 16> pose =
+        model.pose(Frame::kEndEffector, q, state.F_T_EE, state.EE_T_K);
+    Map<const Mat4x4> T(pose.data());
+    Vec6 dx;
+    dx.head<3>() = p_goal - T.block<3, 1>(0, 3);
+    dx.tail<3>() = orientationError(T.block<3, 3>(0, 0), R_target);
+    if (dx.head<3>().norm() < 1e-6 && dx.tail<3>().norm() < 1e-6) {
+      q_standoff = q;
+      return true;
+    }
+
+    const std::array<double, 42> jacobian_array =
+        model.zeroJacobian(Frame::kEndEffector, q, state.F_T_EE, state.EE_T_K);
+    Map<const Mat6x7> J(jacobian_array.data());
+    Mat6x6 damped = J * J.transpose();
+    damped.diagonal().array() += 1e-6;
+    const Vec7 dq = J.transpose() * damped.ldlt().solve(dx);
+    if (!dq.allFinite()) {
+      return false;
+    }
+    // Cap the step so the linearization stays valid over a few centimetres.
+    const double scale = std::min(1.0, 0.05 / std::max(1e-9, dq.norm()));
+    for (int i = 0; i < 7; ++i) {
+      q[i] += scale * dq(i);
+    }
+  }
+  return false;
+}
+
+void startKeyboardStopThread(const Parameters& params,
+                             KeyboardSignals& signals) {
+  std::atomic<bool>& stop_requested = signals.stop_requested;
+  std::atomic<bool>& proceed_requested = signals.proceed_requested;
+  std::atomic<bool>& guide_requested = signals.guide_requested;
+  std::atomic<char>& guidance_menu_key = signals.guidance_menu_key;
+  std::atomic<bool>& guided_hold_selector_pending =
+      signals.guided_hold_selector_pending;
+  std::atomic<bool>& gate_continue = signals.gate_continue;
+  std::atomic<bool>& menu_requested = signals.menu_requested;
+
+  printf("Press e+Enter to stop the controller, or m+Enter for the menu.\n");
   if (params.use_manual_guidance_start) {
     printf("During startup guidance: use s+Enter for sequence or h+Enter for hold.\n");
   }
@@ -390,15 +454,28 @@ void startKeyboardStopThread(
   std::thread keyboard_thread([&stop_requested, &proceed_requested,
                                &guide_requested, &guidance_menu_key,
                                &guided_hold_selector_pending,
-                               &gate_continue]() {
+                               &gate_continue, &menu_requested]() {
     std::string line;
-    while (std::getline(std::cin, line)) {
+    while (true) {
+      // Parked while the startup menu owns stdin, so the two never consume
+      // the same input line. main clears the flag when the menu is done.
+      while (menu_requested.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+      if (!std::getline(std::cin, line)) {
+        break;
+      }
       if (line.empty()) {
         // Bare Enter = continue past a phase gate.
         gate_continue.store(true);
       } else if (line == "e" || line == "E") {
         stop_requested.store(true);
         break;
+      } else if (line == "m" || line == "M") {
+        // Back to the startup menu: end this run, then park until main has
+        // finished asking.
+        menu_requested.store(true);
+        stop_requested.store(true);
       } else if (line == "p" || line == "P") {
         proceed_requested.store(true);
       } else if (line == "g" || line == "G") {
@@ -407,18 +484,16 @@ void startKeyboardStopThread(
         guidance_menu_key.store('o');
       } else if (line == "c" || line == "C") {
         guidance_menu_key.store('c');
-      } else if (line == "home" || line == "HOME") {
-        // The full word is the confirmation: homing opens the fingers fully
-        // and may drop a tool. runManualGuidanceStart performs the action only
-        // after torque control has returned.
-        guidance_menu_key.store('m');
+      } else if (line == "recal" || line == "RECAL") {
+        // The full word is the confirmation: recalibrating opens the fingers
+        // fully and may drop a tool. It runs after torque control returns.
+        guidance_menu_key.store('r');
       } else if (line == "s" || line == "S") {
         guidance_menu_key.store('s');
       } else if (line == "h" || line == "H") {
         guidance_menu_key.store('h');
-        // During startup guidance, hand stdin to the synchronous 0/1/2 hold
-        // selector after this key ends the robot control loop. Without this
-        // handoff, both threads could consume the next input line.
+        // Hand stdin to the hold selector once this key ends the control
+        // loop, so both threads never consume the same input line.
         while (guided_hold_selector_pending.load() &&
                !stop_requested.load()) {
           std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -477,11 +552,8 @@ Vec7 computeNullspaceTorque(
 
   Map<const Vec7> q_current(state.q.data());
 
-  // Moore-Penrose pseudo-inverse from the Jacobian singular values:
-  //   J^+ = sum_i (1/sigma_i) v_i u_i^T
-  // Singular directions below the relative cutoff are omitted. Unlike the
-  // previous damped normal-equation inverse, this produces an exact projector
-  // onto the retained SVD nullspace.
+  // Moore-Penrose pseudo-inverse J^+ = sum_i (1/sigma_i) v_i u_i^T, dropping
+  // directions below the cutoff. Gives an exact projector onto the nullspace.
   Eigen::JacobiSVD<Mat6x7> svd_current(
       J, Eigen::ComputeFullU | Eigen::ComputeFullV);
   const Eigen::Matrix<double, 6, 1> singular_values =

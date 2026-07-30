@@ -1,25 +1,17 @@
+// ====================================================================
+// Franka Hand homing
+// ====================================================================
+// Homes the hand, then optionally re-grasps the tool. Separate from the
+// controller because homing drives the fingers to both limits: THE TOOL WILL
+// FALL unless it is held or supported. The program asks before moving.
+//
+// Needed after a power cycle or gripper fault, where the hand loses its width
+// calibration and move()/grasp() then report success without travelling.
 #include "controller.h"
-
-// Home the Franka Hand, then optionally re-grasp the tool.
-//
-// The controller never calls homing(): see the comment in
-// performStartupGripperAction(). That is correct during a campaign, because
-// homing drives the fingers to both limits and would drop a held tool. But the
-// hand loses its width calibration across a power cycle or a gripper fault, and
-// until it is homed, move() and grasp() report success while the fingers do not
-// travel where they were asked to. That failure is silent, which is why this
-// exists as an explicit, separate step.
-//
-//   ./tools/home_gripper
-//
-// Homing takes a few seconds and opens the hand completely.
-//
-// THE TOOL WILL FALL unless you are holding it or it is resting on something.
-// The program asks before moving anything.
 
 int main() {
   try {
-    const Parameters params = readParameters({"params/common.txt"});
+    const Parameters params = readParameters(parameterFiles());
 
     printf("Franka Hand homing.\n");
     printf("Robot: %s\n\n", params.robot_ip.c_str());

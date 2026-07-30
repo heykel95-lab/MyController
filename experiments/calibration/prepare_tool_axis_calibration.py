@@ -47,6 +47,16 @@ def parameter_values(path):
     return values
 
 
+def parameter_dir_values(params_dir):
+    """Merged key -> value over every file in the controller's params dir, so
+    this script does not care which topic file a key was filed under."""
+    values = {}
+    for name in sorted(os.listdir(params_dir)):
+        if name.endswith(".txt"):
+            values.update(parameter_values(os.path.join(params_dir, name)))
+    return values
+
+
 def main():
     if len(sys.argv) != 2 or sys.argv[1] not in TOOL_PROFILES:
         sys.exit("usage: prepare_tool_axis_calibration.py grinding_tool")
@@ -145,10 +155,8 @@ def main():
             HERE, "planes", plane_profile, "plane_overlay.txt"
         )
     )
-    common_values = parameter_values(
-        os.path.join(
-            repo, "surface_grinding_controller", "params", "common.txt"
-        )
+    common_values = parameter_dir_values(
+        os.path.join(repo, "surface_grinding_controller", "params")
     )
     a = math.radians(
         float(plane_values["alignment_target_tilt_angle_deg"])

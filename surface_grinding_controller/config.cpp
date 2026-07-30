@@ -1,3 +1,8 @@
+// ====================================================================
+// Parameter loading
+// ====================================================================
+// Reads the params/ topic files into one Parameters struct. 
+// Values accept plain numbers and simple pi expressions.
 #include "controller.h"
 
 std::string trim(const std::string& input) {
@@ -80,6 +85,28 @@ NullspaceMode parseNullspaceMode(const std::string& input, NullspaceMode fallbac
   return fallback;
 }
 
+std::vector<std::string> parameterFiles(const std::string& dir) {
+  const std::string prefix =
+      (dir.empty() || dir.back() == '/') ? dir : dir + "/";
+  return {
+      prefix + "Run_Settings.txt",
+      prefix + "safety.txt",
+      prefix + "Gripper_Action.txt",
+      prefix + "Auto_Damping.txt",
+      prefix + "Plane_Definition.txt",
+      prefix + "Tool_Orientation.txt",
+      prefix + "Tool_Geometry.txt",
+      prefix + "Q_Init.txt",
+      prefix + "Approach_Phase.txt",
+      prefix + "Clearance_Gate.txt",
+      prefix + "SetUp_Phase.txt",
+      prefix + "Grind_Phase.txt",
+      prefix + "Nullspace.txt",
+      prefix + "hold.txt",
+      prefix + "guidance.txt",
+  };
+}
+
 Parameters readParameters(const std::vector<std::string>& filenames) {
   Parameters p;
   std::map<std::string, std::string> values;
@@ -134,9 +161,8 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
                 getDouble(key + "_y", def(1)),
                 getDouble(key + "_z", def(2)));
   };
-  // Reads "<key>_tangent1/_tangent2/_normal" into a task-frame diagonal. The
-  // stored order is [tangent1, tangent2, normal], matching the column order of
-  // the alignment-target frame.
+  // Reads "<key>_tangent1/_tangent2/_normal" into a task-frame diagonal,
+  // stored [tangent1, tangent2, normal] like the alignment-frame columns.
   auto getVec3Task = [&](const std::string& key, const Vec3& def) {
     return Vec3(getDouble(key + "_tangent1", def(0)),
                 getDouble(key + "_tangent2", def(1)),
@@ -181,7 +207,6 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
       getDouble("gripper_grasp_epsilon_outer", p.gripper_grasp_epsilon_outer);
 
   // ---- run mode ----
-  p.use_phase_sequence = getBool("use_phase_sequence", p.use_phase_sequence);
   p.use_approach_orient = getBool("use_approach_orient", p.use_approach_orient);
   p.use_manual_guidance_start =
       getBool("use_manual_guidance_start", p.use_manual_guidance_start);
@@ -189,10 +214,10 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
       getDouble("manual_guidance_damping", p.manual_guidance_damping);
 
   // ---- hold ----
-  p.hold_Kp = getDouble("hold_Kp", p.hold_Kp);
-  p.hold_Dp = getDouble("hold_Dp", p.hold_Dp);
-  p.hold_KR = getDouble("hold_KR", p.hold_KR);
-  p.hold_DR = getDouble("hold_DR", p.hold_DR);
+  p.hold_Kp_diag = getVec3Xyz("hold_Kp", p.hold_Kp_diag);
+  p.hold_Dp_diag = getVec3Xyz("hold_Dp", p.hold_Dp_diag);
+  p.hold_KR_diag = getVec3Xyz("hold_KR", p.hold_KR_diag);
+  p.hold_DR_diag = getVec3Xyz("hold_DR", p.hold_DR_diag);
   p.hold_auto_damping = getBool("hold_auto_damping", p.hold_auto_damping);
   p.hold_auto_match_manual_damping =
       getBool("hold_auto_match_manual_damping",
@@ -292,8 +317,10 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
   // ---- phase gates ----
   p.pause_before_set_up = getBool("pause_before_set_up", p.pause_before_set_up);
   p.pause_before_grind = getBool("pause_before_grind", p.pause_before_grind);
-  p.pause_hold_Kp = getDouble("pause_hold_Kp", p.pause_hold_Kp);
-  p.pause_hold_Dp = getDouble("pause_hold_Dp", p.pause_hold_Dp);
+  p.pause_hold_Kp_diag = getVec3Xyz("pause_hold_Kp", p.pause_hold_Kp_diag);
+  p.pause_hold_Dp_diag = getVec3Xyz("pause_hold_Dp", p.pause_hold_Dp_diag);
+  p.pause_hold_KR_diag = getVec3Task("pause_hold_KR", p.pause_hold_KR_diag);
+  p.pause_hold_DR_diag = getVec3Task("pause_hold_DR", p.pause_hold_DR_diag);
   p.pause_hold_auto_damping =
       getBool("pause_hold_auto_damping", p.pause_hold_auto_damping);
 
@@ -352,6 +379,16 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
   for (int i = 0; i < 7; ++i) {
     snprintf(q_key, sizeof(q_key), "q_init_%d", i + 1);
     p.q_init[i] = getDouble(q_key, p.q_init[i]);
+  }
+
+  // ---- tool pickup posture ----
+  p.use_tool_pickup = getBool("use_tool_pickup", p.use_tool_pickup);
+  p.pickup_standoff = getDouble("pickup_standoff", p.pickup_standoff);
+  p.pickup_descend_speed_factor =
+      getDouble("pickup_descend_speed_factor", p.pickup_descend_speed_factor);
+  for (int i = 0; i < 7; ++i) {
+    snprintf(q_key, sizeof(q_key), "q_pickup_%d", i + 1);
+    p.q_pickup[i] = getDouble(q_key, p.q_pickup[i]);
   }
 
   // ---- collision thresholds ----

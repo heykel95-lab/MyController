@@ -1,14 +1,15 @@
+// ====================================================================
+// Tool axis capture
+// ====================================================================
+// Read-only, commands no motion. Place the complete face flat on a validated
+// plane and vary only yaw between samples: T1--T3 estimate the EE-frame axis
+// whose base-frame direction is invariant, and T4 validates it.
+//
+// The plane normal never enters the estimate; it is a separate check in
+// prepare_tool_axis_calibration.py.
 #include "controller.h"
 
 #include <fstream>
-
-// Read-only capture of one EE orientation while the grinding face is flat.
-//
-// Place the complete tool face flat on a validated physical plane and vary
-// only yaw about the plane normal between samples. T1--T3 estimate the unique
-// EE-frame axis a for which R_EE,i*a is invariant in the base frame. T4
-// validates it. The plane normal is not used to estimate a; it is only a
-// separate sanity check in prepare_tool_axis_calibration.py.
 
 namespace {
 
@@ -66,8 +67,11 @@ int main(int argc, char** argv) {
   }
 
   try {
-    const Parameters params =
-        readParameters({"params/common.txt", plane_overlay});
+    // The calibrated plane overlay is loaded last so it overrides whatever
+    // plane the working params/ currently hold.
+    std::vector<std::string> files = parameterFiles();
+    files.push_back(plane_overlay);
+    const Parameters params = readParameters(files);
 
     printf("Read-only tool-axis capture. No robot motion is commanded.\n");
     printf("The COMPLETE tool face must be flat on the validated %s plane.\n",

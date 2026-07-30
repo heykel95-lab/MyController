@@ -1,3 +1,9 @@
+// ====================================================================
+// Shared declarations
+// ====================================================================
+// Types, the Parameters struct that every module reads, and the prototypes
+// that connect config / control_math / runtime_io / setup_report / main.
+// One translation unit implements each group; nothing here has a definition.
 #pragma once
 
 #include <algorithm>
@@ -101,19 +107,19 @@ struct Parameters {
   // Runtime-only: set when the startup menu already handled the gripper.
   bool startup_gripper_manual = false;
 
-  // Run mode.
-  // 1 = sequence, 0 = hold.
+  // Run mode. Runtime-only: not read from the parameter files, because the
+  // startup menu chooses sequence or hold on every run.
   bool use_phase_sequence = true;
   // 0 = skip the orient step and start the sequence at the descend step.
   bool use_approach_orient = true;
   bool use_manual_guidance_start = false;
   double manual_guidance_damping = 0.5;
 
-  // Hold mode gains (isotropic, base frame).
-  double hold_Kp = 300.0;
-  double hold_Dp = 50.0;
-  double hold_KR = 40.0;
-  double hold_DR = 8.0;
+  // Hold mode gains, per axis of the base frame [x, y, z].
+  Vec3 hold_Kp_diag = Vec3::Constant(300.0);
+  Vec3 hold_Dp_diag = Vec3::Constant(50.0);
+  Vec3 hold_KR_diag = Vec3::Constant(40.0);
+  Vec3 hold_DR_diag = Vec3::Constant(8.0);
   bool hold_auto_damping = true;
   bool hold_auto_match_manual_damping = true;
   double hold_auto_damping_factor = 1.0;
@@ -125,9 +131,8 @@ struct Parameters {
   double alignment_target_tilt_angle_deg = 0.0;    // a, about base x
   double alignment_target_tilt_angle_y_deg = 0.0;  // b, about base y
   Vec3 alignment_target_tangent1 = Vec3(0.0, 1.0, 0.0);
-  // Commanded tool-axis offset relative to the calibrated surface normal.
-  // These offsets create a controlled contact mismatch without changing the
-  // plane used for clearance, contact geometry, gains, or alignment scoring.
+  // Commanded tool-axis offset from the calibrated surface normal [deg]. It
+  // tilts only the command, not the plane used for clearance, gains or scoring.
   double tool_target_offset_tangent1_deg = 0.0;
   double tool_target_offset_tangent2_deg = 0.0;
   Vec3 tool_axis_ee = Vec3(0.0, 0.0, 1.0);
@@ -165,9 +170,8 @@ struct Parameters {
   // Position preload ramped into the surface; grind inherits the final value.
   double setup_push_speed = 0.0;
   double setup_push_end = 0.0;
-  // Translational spring. The legacy/default form is diagonal in base [x,y,z].
-  // New experiments set setup_translation_surface_frame=1 and use the
-  // [tangent1,tangent2,normal] vectors below.
+  // Translational spring, diagonal in base [x,y,z]. Setting
+  // setup_translation_surface_frame=1 uses the surface-frame vectors below.
   Vec3 setup_Kp_diag = Vec3(40.0, 40.0, 5500.0);
   Vec3 setup_Dp_diag = Vec3(10.0, 10.0, 175.0);
   bool setup_translation_surface_frame = false;
@@ -190,8 +194,11 @@ struct Parameters {
   bool pause_before_set_up = false;  // hold at the clearance height
   bool pause_before_grind = false;   // hold the seated/pressed pose
   // Stiff position hold; rotation retains the approach stiffness.
-  double pause_hold_Kp = 5000.0;
-  double pause_hold_Dp = 200.0;
+  // Gate hold: translation per base axis, rotation per surface axis.
+  Vec3 pause_hold_Kp_diag = Vec3::Constant(5000.0);
+  Vec3 pause_hold_Dp_diag = Vec3::Constant(200.0);
+  Vec3 pause_hold_KR_diag = Vec3::Constant(90.0);
+  Vec3 pause_hold_DR_diag = Vec3::Constant(12.0);
   bool pause_hold_auto_damping = true;
 
   // Coupled (pole-based) stiffness for the set-up phase.
@@ -236,6 +243,15 @@ struct Parameters {
   }};
   std::string q_init_case = "horizontal_tool";
 
+  // Tool pickup posture, used by the menu's t (fetch) and b (put back) keys.
+  // Disabled until a measured posture is pasted in.
+  bool use_tool_pickup = false;
+  Array7 q_pickup = {{0.0, 0.0, 0.0, -M_PI_2, 0.0, M_PI_2, 0.0}};
+  // Stand-off retreat along -Z_EE from the pickup pose [m]. The posture is
+  // solved from it, so only this distance is configured.
+  double pickup_standoff = 0.05;
+  double pickup_descend_speed_factor = 0.15;
+
   bool use_custom_collision_behavior = false;
   double collision_torque_acc = 80.0;
   double collision_torque_nom = 80.0;
@@ -258,9 +274,8 @@ struct SigmaDiagnostics {
   double tau_sigma_norm = 0.0;
   double nullspace_speed = 0.0;
   double speed_toward_better = 0.0;
-  // Sign-selected unit nullspace direction, projected joint velocity, and
-  // commanded sigma-torque contribution. Fixed-size vectors must be
-  // explicitly initialized.
+  // Sign-selected unit nullspace direction, projected joint velocity and
+  // commanded sigma torque. Fixed-size vectors need explicit initialization.
   Vec7 best_direction = Vec7::Zero();
   Vec7 nullspace_velocity = Vec7::Zero();
   Vec7 tau_sigma = Vec7::Zero();
@@ -403,6 +418,10 @@ struct SetUpReport {
 
 Parameters readParameters(const std::vector<std::string>& filenames);
 
+// The parameter files, in load order, one topic per file. dir may be given
+// with or without a trailing slash.
+std::vector<std::string> parameterFiles(const std::string& dir = "params");
+
 Array7 vec7ToArray(const Vec7& v);
 
 Array7 filledArray7(double value);
@@ -485,14 +504,56 @@ Mat3 makeToolOrientationForAlignmentTarget(
 
 Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_alignment_target);
 
-void startKeyboardStopThread(
-    const Parameters& params,
-    std::atomic<bool>& stop_requested,
-    std::atomic<bool>& proceed_requested,
-    std::atomic<bool>& guide_requested,
-    std::atomic<char>& guidance_menu_key,
-    std::atomic<bool>& guided_hold_selector_pending,
-    std::atomic<bool>& gate_continue);
+// The keys the operator can press while a run is in progress. One object so
+// the control loop takes a single signals argument instead of seven atomics.
+struct KeyboardSignals {
+  std::atomic<bool> stop_requested{false};
+  std::atomic<bool> proceed_requested{false};
+  std::atomic<bool> guide_requested{false};
+  std::atomic<char> guidance_menu_key{0};
+  std::atomic<bool> guided_hold_selector_pending{false};
+  std::atomic<bool> gate_continue{false};
+  // Starts parked so the first startup menu owns stdin alone.
+  std::atomic<bool> menu_requested{true};
+};
+
+// Every gain matrix a run uses, all derived from the parameters alone.
+struct RunGains {
+  Mat3 R_alignment_target = Mat3::Identity();
+  Mat3 Kp_approach = Mat3::Zero();
+  Mat3 Dp_approach = Mat3::Zero();
+  Mat3 KR_approach = Mat3::Zero();
+  Mat3 DR_approach = Mat3::Zero();
+  Vec3 setup_Kp_active_diag = Vec3::Zero();
+  Vec3 setup_Dp_active_diag = Vec3::Zero();
+  Mat3 Kp_setup = Mat3::Zero();
+  Mat3 Dp_setup = Mat3::Zero();
+  Mat3 KR_setup = Mat3::Zero();
+  Mat3 DR_setup = Mat3::Zero();
+  Mat3 Kp_hold = Mat3::Zero();
+  Mat3 Dp_hold = Mat3::Zero();
+  Mat3 KR_hold = Mat3::Zero();
+  Mat3 DR_hold = Mat3::Zero();
+  Mat3 Kp_pause = Mat3::Zero();
+  Mat3 Dp_pause = Mat3::Zero();
+  Mat3 KR_pause = Mat3::Zero();
+  Mat3 DR_pause = Mat3::Zero();
+};
+
+// What one run leaves behind for the report and the CSV.
+struct RunResult {
+  bool descend_failed = false;
+  Vec7 q_start = Vec7::Zero();
+  Vec7 final_q = Vec7::Zero();
+  Vec3 final_p_d = Vec3::Zero();
+  Vec3 final_p_EE = Vec3::Zero();
+  Vec3 final_e_p = Vec3::Zero();
+  Vec3 final_e_R = Vec3::Zero();
+  std::vector<LogData> log;  // already in chronological order
+};
+
+void startKeyboardStopThread(const Parameters& params,
+                             KeyboardSignals& signals);
 
 void configureCollisionBehavior(Robot& robot, const Parameters& params);
 
@@ -508,13 +569,47 @@ bool openGripper(const Parameters& params, Gripper& gripper);
 
 bool graspTool(const Parameters& params, Gripper& gripper);
 
-bool homeGripper(const Parameters& params,
-                 Gripper& gripper,
-                 bool confirmation_already_received = false);
+// Franka Hand width recalibration (libfranka homing). Opens the fingers
+// fully, so a held tool falls unless it is supported.
+bool recalibrateGripper(const Parameters& params,
+                        Gripper& gripper,
+                        bool confirmation_already_received = false);
 
-void askStartupRunMode(Parameters& params, Robot& robot);
+// Returns false when the operator chose to quit instead of starting a run.
+bool askStartupRunMode(Parameters& params, Robot& robot,
+                       const Model& model);
 
 bool performStartupGripperAction(const Parameters& params);
+
+// ---- the run, one file each ----
+
+// run_gains.cpp: all stiffness and damping matrices, from the parameters.
+RunGains buildRunGains(const Parameters& params);
+
+// run_loop.cpp: one complete run, from start pose to stop.
+RunResult runControlLoop(Parameters& params,
+                         Robot& robot,
+                         const Model& model,
+                         const RunGains& gains,
+                         KeyboardSignals& signals);
+
+// run_report.cpp: the post-run printout and the CSV.
+void writeRunLogs(const Parameters& params, const RunResult& result);
+
+// run_report.cpp: log file name for the second and later run of one program
+// start, e.g. surface_grinding_controller_log_s2.csv.
+std::string sessionFileName(const std::string& name, int session);
+
+// Joint posture that puts the EE `standoff` metres back along its own -Z_EE
+// from q_target, keeping the orientation. Solved offline, commands no motion.
+bool solveStandoffPosture(const Model& model,
+                          const RobotState& state,
+                          const Array7& q_target,
+                          double standoff,
+                          Array7& q_standoff);
+
+// False if any joint is outside its limit; joint_out gets the 1-based index.
+bool withinJointLimits(const Array7& q, int& joint_out);
 
 bool runManualGuidanceStart(Parameters& params,
                             Robot& robot,

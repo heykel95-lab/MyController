@@ -33,6 +33,12 @@ CONTROLLER_SRCS := config.cpp \
                    runtime_io.cpp \
                    setup_report.cpp
 
+# The controller program's own units: one run, split by what it does. The
+# read-only tools do not link these.
+RUN_SRCS := run_gains.cpp \
+            run_loop.cpp \
+            run_report.cpp
+
 HEADERS := controller.h
 
 FRANKA_DIR := /home/hm-panda/libfranka
@@ -50,6 +56,7 @@ LDFLAGS := -L$(FRANKA_DIR)/build \
 LDLIBS := -lfranka -lpthread
 
 CONTROLLER_OBJS := $(CONTROLLER_SRCS:.cpp=.o)
+RUN_OBJS := $(RUN_SRCS:.cpp=.o)
 EXAMPLES_COMMON_OBJ := examples_common.o
 
 .PHONY: all run check clean
@@ -65,8 +72,8 @@ all: $(TARGET)
 $(EXAMPLES_COMMON_OBJ): $(FRANKA_DIR)/examples/examples_common.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(TARGET): $(SRC) $(CONTROLLER_OBJS) $(EXAMPLES_COMMON_OBJ) $(HEADERS)
-	$(CXX) $(CXXFLAGS) $(SRC) $(CONTROLLER_OBJS) $(EXAMPLES_COMMON_OBJ) -o $@ $(LDFLAGS) $(LDLIBS)
+$(TARGET): $(SRC) $(CONTROLLER_OBJS) $(RUN_OBJS) $(EXAMPLES_COMMON_OBJ) $(HEADERS)
+	$(CXX) $(CXXFLAGS) $(SRC) $(CONTROLLER_OBJS) $(RUN_OBJS) $(EXAMPLES_COMMON_OBJ) -o $@ $(LDFLAGS) $(LDLIBS)
 
 $(TOOL_OFFSET_TARGET): $(TOOL_OFFSET_BIN)
 
@@ -105,4 +112,4 @@ check: $(TARGET)
 	ldd ./$(TARGET) | grep franka
 
 clean:
-	rm -f $(TARGET) $(TOOL_OFFSET_BIN) $(MEASURE_PLANE_BIN) $(CAPTURE_PLANE_POINT_BIN) $(CAPTURE_TOOL_AXIS_BIN) $(INSPECT_CONFIG_BIN) $(CONTROLLER_OBJS) $(EXAMPLES_COMMON_OBJ)
+	rm -f $(TARGET) $(TOOL_OFFSET_BIN) $(MEASURE_PLANE_BIN) $(CAPTURE_PLANE_POINT_BIN) $(CAPTURE_TOOL_AXIS_BIN) $(INSPECT_CONFIG_BIN) $(CONTROLLER_OBJS) $(RUN_OBJS) $(EXAMPLES_COMMON_OBJ)

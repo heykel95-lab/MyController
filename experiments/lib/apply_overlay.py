@@ -13,13 +13,17 @@ import os
 import re
 import sys
 
-PARAM_FILES = [
-    "common.txt",
-    "safety.txt",
-    "sequence.txt",
-    "hold.txt",
-    "guidance.txt",
-]
+def param_files(params_dir):
+    """Every parameter file in the directory, whatever they are called.
+
+    The controller splits its parameters by topic and renames/adds files as the
+    layout evolves; the duplicate check below is what actually enforces
+    disjointness, so listing the directory is both simpler and safer than
+    keeping a copy of the file list here.
+    """
+    return sorted(
+        name for name in os.listdir(params_dir) if name.endswith(".txt")
+    )
 
 
 def read_overlay(path):
@@ -48,11 +52,9 @@ def apply_overlay(overlay_path, params_dir):
         return 0
 
     contents = {}
-    for name in PARAM_FILES:
-        p = os.path.join(params_dir, name)
-        if os.path.exists(p):
-            with open(p) as f:
-                contents[name] = f.readlines()
+    for name in param_files(params_dir):
+        with open(os.path.join(params_dir, name)) as f:
+            contents[name] = f.readlines()
 
     applied = 0
     for key, value in pairs:

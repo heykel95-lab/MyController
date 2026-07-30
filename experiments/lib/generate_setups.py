@@ -18,7 +18,7 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 SETUPS = os.path.normpath(os.path.join(HERE, "..", "setups"))
 
-# Surface tilt of the nominal configuration (params/common.txt).
+# Surface tilt of the nominal configuration (params/Plane_Definition.txt).
 TILT_A_DEG = 0.0
 TILT_B_DEG = 5.0
 

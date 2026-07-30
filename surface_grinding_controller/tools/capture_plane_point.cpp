@@ -1,13 +1,12 @@
+// ====================================================================
+// Plane point capture
+// ====================================================================
+// Read-only, commands no motion. Touch the same +X_EE,+Y_EE tool-face corner
+// to the workpiece for every point; the measured EE pose is converted to that
+// corner's base position and appended to the profile's plane_points.csv.
 #include "controller.h"
 
 #include <fstream>
-
-// Read-only capture of one physical plane point. No robot motion is commanded.
-//
-// The same +X_EE,+Y_EE corner of the configured rectangular tool face must be
-// touched to the workpiece for every point. The program converts the measured
-// EE pose to that corner's base-frame position and appends it to
-// ../experiments/calibration/planes/<profile>/plane_points.csv.
 
 namespace {
 
@@ -54,7 +53,7 @@ int main(int argc, char** argv) {
 
   try {
     const Parameters params =
-        readParameters({"params/common.txt", "params/sequence.txt"});
+        readParameters(parameterFiles());
 
     printf("Read-only plane-point capture. No robot motion is commanded.\n");
     printf("Touch the SAME +X_EE,+Y_EE tool-face corner to the plane.\n");

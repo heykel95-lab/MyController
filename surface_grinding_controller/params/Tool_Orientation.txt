@@ -1,0 +1,33 @@
+# ====================================================================
+# TOOL ORIENTATION -- the tool axis and how it is commanded
+# ====================================================================
+# The face dimensions are in Tool_Geometry.txt; the plane this axis is
+# commanded against is in Plane_Definition.txt.
+
+# --------------------------------------------------------------------
+# Tool axis in the EE frame
+# --------------------------------------------------------------------
+# Grinding-face normal, written by the tool-axis calibration
+# (experiments/calibration/tools/<profile>/tool_axis_overlay.txt).
+tool_axis_ee_x = 0.0
+tool_axis_ee_y = 0.0
+tool_axis_ee_z = 1.0
+
+# Sign along the surface normal. -1 points the +Z_EE face at the surface.
+tool_axis_target_sign = -1.0
+
+# --------------------------------------------------------------------
+# Commanded offset from the surface normal
+# --------------------------------------------------------------------
+# The deliberate mismatch under study [deg]. It tilts only the commanded tool
+# axis, not the plane used for clearance, gains or alignment scoring.
+tool_target_offset_tangent1_deg = 10.0
+tool_target_offset_tangent2_deg = 0.0
+
+# --------------------------------------------------------------------
+# Rotational constraint
+# --------------------------------------------------------------------
+# Rotational spring mask in the surface frame. 0 removes that axis.
+constrain_rotation_about_alignment_normal = 1
+constrain_rotation_about_alignment_tangent1 = 1
+constrain_rotation_about_alignment_tangent2 = 1

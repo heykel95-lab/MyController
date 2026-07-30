@@ -1,3 +1,8 @@
+// ====================================================================
+// Tool transform check
+// ====================================================================
+// Read-only: prints the configured F_T_EE and EE_T_K transforms as the robot
+// reports them, so a wrong tool offset is caught before any motion.
 #include "controller.h"
 
 void printTransform(const char* name, const std::array<double, 16>& transform) {
@@ -21,8 +26,9 @@ void printTranslation(const char* name, const std::array<double, 16>& transform)
 
 int main() {
   try {
-    // Only robot_ip is needed here, and that lives in common.txt.
-    const Parameters params = readParameters({"params/common.txt"});
+    // Only robot_ip is needed here, but loading the full set keeps this
+    // working wherever a key ends up living.
+    const Parameters params = readParameters(parameterFiles());
 
     printf("Read-only tool offset check. No robot motion is commanded.\n");
     printf("Connecting to robot: %s\n", params.robot_ip.c_str());

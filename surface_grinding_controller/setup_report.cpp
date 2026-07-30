@@ -1,3 +1,9 @@
+// ====================================================================
+// Set-up report
+// ====================================================================
+// Printed once when the set-up phase ends: what the press achieved, resolved
+// into the alignment-target frame, plus the alignment quality against the
+// calibrated surface.
 #include "controller.h"
 
 namespace {
@@ -11,12 +17,9 @@ void formatRatio(char* out, size_t n, double num, double den, double den_floor) 
   }
 }
 
-// The contact wrench and the motion it produced, both resolved into the
-// alignment-target frame [tangent1, tangent2, normal]. Force is paired with TCP
-// displacement (where the translational spring acts); the contact moment is
-// taken at the pressed edge and paired with the tip angle. This gives real
-// per-axis force-vs-displacement and moment-vs-angle pairs measured from the
-// run instead of from a target ratio.
+// Contact wrench and the motion it produced, in the alignment-target frame.
+// Pairs force with TCP displacement and edge moment with tip angle, so the
+// per-axis ratios come from the run rather than from a target.
 void printSurfaceFrameBreakdown(const Mat3& R_alignment_target,
                                 const SetUpReport& r) {
   const Vec3 force_surf =
@@ -74,9 +77,8 @@ void reportSetUpResult(const Parameters& params,
          tcp_from_contact_mm(0), tcp_from_contact_mm(1), tcp_from_contact_mm(2),
          tcp_from_contact_mm.norm());
 
-  // Alignment quality against the calibrated surface. tip (above) says how far
-  // the tool turned; this says how flat it ended up. They are different
-  // questions and only this one answers "did the alignment work".
+  // Alignment quality against the calibrated surface. tip says how far the
+  // tool turned; this says how flat it ended up -- the question that matters.
   const double align_before_deg =
       (180.0 / M_PI) *
       toolSurfaceMisalignmentAngle(params, r.R_contact_start, R_alignment_target);

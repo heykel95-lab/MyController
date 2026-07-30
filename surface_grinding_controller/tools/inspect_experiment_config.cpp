@@ -1,24 +1,16 @@
+// ====================================================================
+// Experiment preflight
+// ====================================================================
+// Offline check of an overlay: reads the parameter files and builds the exact
+// gain matrices the controller would use, without opening a robot connection
+// or commanding motion. Non-zero exit means the setup is not runnable.
 #include "controller.h"
-
-// Offline preflight for the experiment overlays. It reads parameters and
-// constructs the exact gain matrices used by the controller, but never opens a
-// robot connection or commands motion.
 
 int main(int argc, char** argv) {
   const std::string params_dir = (argc > 1) ? argv[1] : "params";
-  const std::string prefix =
-      (!params_dir.empty() && params_dir.back() == '/')
-          ? params_dir
-          : params_dir + "/";
 
   try {
-    const Parameters params = readParameters({
-        prefix + "common.txt",
-        prefix + "safety.txt",
-        prefix + "sequence.txt",
-        prefix + "hold.txt",
-        prefix + "guidance.txt",
-    });
+    const Parameters params = readParameters(parameterFiles(params_dir));
     const Mat3 R_surface = makeAlignmentTargetFrame(params);
     const Mat3 Kp =
         params.setup_translation_surface_frame

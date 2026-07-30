@@ -1,3 +1,9 @@
+// ====================================================================
+// Runtime input and output
+// ====================================================================
+// Everything the operator sees or types: CSV logging, the setup and per-phase
+// debug printing, the startup menu, gripper actions and hand-guidance. No
+// control law lives here.
 #include "controller.h"
 
 // ====================================================================
@@ -474,18 +480,24 @@ void printParameters(const Parameters& params) {
          params.nullspace_k_sigma,
          nullspace_sigma_active ? "" : " (inactive)",
          params.nullspace_alpha);
-  printf("hold: Kp=%.1f N/m | KR=%.1f Nm/rad | damping=%s",
-         params.hold_Kp, params.hold_KR,
+  printf("hold [xyz]: Kp=[%.1f, %.1f, %.1f] N/m | "
+         "KR=[%.1f, %.1f, %.1f] Nm/rad | damping=%s",
+         params.hold_Kp_diag(0), params.hold_Kp_diag(1), params.hold_Kp_diag(2),
+         params.hold_KR_diag(0), params.hold_KR_diag(1), params.hold_KR_diag(2),
          params.hold_auto_damping ? "auto translation+rotation" : "manual");
   if (params.hold_auto_damping) {
     if (params.hold_auto_match_manual_damping) {
-      printf(" (factor fitted online toward Dp=%.1f Ns/m)\n", params.hold_Dp);
+      printf(" (factor fitted online toward Dp=[%.1f, %.1f, %.1f] Ns/m)\n",
+             params.hold_Dp_diag(0), params.hold_Dp_diag(1),
+             params.hold_Dp_diag(2));
     } else {
       printf(" (factor %.2f)\n", params.hold_auto_damping_factor);
     }
   } else {
-    printf(" (Dp=%.1f Ns/m, DR=%.1f Nms/rad)\n",
-           params.hold_Dp, params.hold_DR);
+    printf(" (Dp=[%.1f, %.1f, %.1f] Ns/m, DR=[%.1f, %.1f, %.1f] Nms/rad)\n",
+           params.hold_Dp_diag(0), params.hold_Dp_diag(1),
+           params.hold_Dp_diag(2), params.hold_DR_diag(0),
+           params.hold_DR_diag(1), params.hold_DR_diag(2));
   }
   printf("manual_guidance_start: %s | manual_damping=%.2f\n",
          params.use_manual_guidance_start ? "on" : "off",
@@ -833,7 +845,7 @@ bool openGripper(const Parameters& params, Gripper& gripper) {
     } else {
       fprintf(stderr,
               "Gripper did not reach the requested open width. Support/remove "
-              "the tool and select m/home to home the hand.\n");
+              "the tool and select r to recalibrate the hand.\n");
     }
     return verified;
   } catch (const franka::Exception& e) {
@@ -870,7 +882,7 @@ bool graspTool(const Parameters& params, Gripper& gripper) {
     } else {
       fprintf(stderr,
               "Tool grasp was not verified. Support the tool, check its "
-              "placement, and select m/home if the fingers did not travel.\n");
+              "placement, and select r if the fingers did not travel.\n");
     }
     return verified;
   } catch (const franka::Exception& e) {
@@ -879,28 +891,28 @@ bool graspTool(const Parameters& params, Gripper& gripper) {
   }
 }
 
-bool homeGripper(const Parameters& params,
-                 Gripper& gripper,
-                 bool confirmation_already_received) {
+bool recalibrateGripper(const Parameters& params,
+                        Gripper& gripper,
+                        bool confirmation_already_received) {
   try {
     const franka::GripperState before = gripper.readOnce();
-    printf("\n=== Franka Hand homing ===\n");
+    printf("\n=== Franka Hand width recalibration ===\n");
     printf("Current width: %.1f mm | reported max: %.1f mm | grasped: %s\n",
            1000.0 * before.width,
            1000.0 * before.max_width,
            before.is_grasped ? "yes" : "no");
-    printf("Homing opens the fingers completely. A held tool WILL FALL.\n");
+    printf("This opens the fingers completely. A held tool WILL FALL.\n");
     printf("Support the tool by hand or remove it before continuing.\n");
 
     if (!confirmation_already_received) {
-      printf("Type  home  and press Enter to continue, anything else to abort: ");
+      printf("Type  recal  and press Enter to continue, anything else to abort: ");
       fflush(stdout);
-      if (readChoice() != "home") {
-        printf("Homing aborted. Nothing was moved.\n");
+      if (readChoice() != "recal") {
+        printf("Recalibration aborted. Nothing was moved.\n");
         return false;
       }
     } else {
-      printf("Explicit home command received; starting homing.\n");
+      printf("Explicit recal command received; starting.\n");
     }
 
     const bool homed = gripper.homing();
@@ -912,24 +924,125 @@ bool homeGripper(const Parameters& params,
         after.width + width_tolerance >= params.gripper_open_width;
     const bool verified = homed && calibration_supports_target && opened;
 
-    printf("After homing: width %.1f mm | reported max %.1f mm.\n",
+    printf("After recalibration: width %.1f mm | reported max %.1f mm.\n",
            1000.0 * after.width,
            1000.0 * after.max_width);
     if (verified) {
-      printf("Homing verified. The hand is open; place the tool and select c.\n");
+      printf("Recalibrated. The hand is open; place the tool and select c.\n");
     } else {
       fprintf(stderr,
-              "Homing was not verified. Do not start the robot experiment; "
-              "inspect the Franka Hand state.\n");
+              "Recalibration was not verified. Do not start the robot "
+              "experiment; inspect the Franka Hand state.\n");
     }
     return verified;
   } catch (const franka::Exception& e) {
-    fprintf(stderr, "Gripper homing failed: %s\n", e.what());
+    fprintf(stderr, "Gripper recalibration failed: %s\n", e.what());
     return false;
   }
 }
 
-void askStartupRunMode(Parameters& params, Robot& robot) {
+namespace {
+
+// Fetch (grasp = true) or return (grasp = false) the tool at the stored pickup
+// posture. Always travels through q_init so the swept path is the same every
+// time, and leaves the arm at the pickup posture.
+bool runToolPickup(const Parameters& params,
+                   Robot& robot,
+                   const Model& model,
+                   bool grasp,
+                   const std::function<void()>& ensure_q_init) {
+  if (!params.use_tool_pickup) {
+    printf("Tool pickup is not configured. Guide the arm to the tool (g),\n"
+           "press e, paste the printed pose into q_pickup_* in\n"
+           "params/Gripper_Action.txt, and set use_tool_pickup = 1.\n");
+    return false;
+  }
+
+  Gripper gripper(params.robot_ip);
+  const franka::GripperState state = gripper.readOnce();
+  if (grasp && state.is_grasped) {
+    printf("The hand is already holding something (width %.1f mm).\n"
+           "Press b to put it back, or o to release it, before fetching.\n",
+           1000.0 * state.width);
+    return false;
+  }
+  if (!grasp && !state.is_grasped) {
+    printf("The hand does not report a grasp; going to the pickup posture "
+           "and opening anyway.\n");
+  }
+
+  // Stand-off posture: the same pose retreated along -Z_EE, so the last leg
+  // in is a descent along the tool axis instead of a sideways sweep.
+  Array7 q_above{};
+  const RobotState state_now = robot.readOnce();
+  if (!solveStandoffPosture(model, state_now, params.q_pickup,
+                            params.pickup_standoff, q_above)) {
+    printf("Could not solve a stand-off posture %.0f mm back along -Z_EE.\n"
+           "Reduce pickup_standoff or re-measure q_pickup_*.\n",
+           1000.0 * params.pickup_standoff);
+    return false;
+  }
+  int bad_joint = 0;
+  if (!withinJointLimits(q_above, bad_joint)) {
+    printf("The stand-off posture puts joint %d outside its limit. "
+           "Reduce pickup_standoff.\n", bad_joint);
+    return false;
+  }
+
+  printf("\nStand-off %.0f mm back along -Z_EE from the pickup pose:\n",
+         1000.0 * params.pickup_standoff);
+  printf("  q [deg] = [");
+  for (int i = 0; i < 7; ++i) {
+    printf("%s%.1f", i ? ", " : "", 180.0 / M_PI * q_above[i]);
+  }
+  printf("]\n");
+  printf("Path: q_init -> stand-off -> down onto the tool -> %s -> lift.\n",
+         grasp ? "grasp" : "release");
+  printf("Press Enter to run it, anything else to abort: ");
+  fflush(stdout);
+  if (!readChoice().empty()) {
+    printf("Aborted. Nothing was moved.\n");
+    return false;
+  }
+
+  // Open before travelling: the fingers must clear the tool on the way in.
+  // On release the hand is still carrying, so it opens at the holder instead.
+  if (grasp && !openGripper(params, gripper)) {
+    printf("Not moving: the hand did not reach the open width.\n");
+    return false;
+  }
+
+  ensure_q_init();
+  printf("Moving above the tool...\n");
+  MotionGenerator to_above(0.4, q_above);
+  robot.control(to_above);
+
+  printf("Descending onto the tool...\n");
+  MotionGenerator descend(std::max(0.05, params.pickup_descend_speed_factor),
+                          params.q_pickup);
+  robot.control(descend);
+
+  const bool ok = grasp ? graspTool(params, gripper)
+                        : openGripper(params, gripper);
+
+  // Lift straight back to the stand-off either way: leaving the arm down in
+  // the holder would drag the tool sideways on the next motion.
+  printf("Lifting clear of the holder...\n");
+  MotionGenerator lift(std::max(0.05, params.pickup_descend_speed_factor),
+                       q_above);
+  robot.control(lift);
+
+  if (ok) {
+    printf(grasp ? "Tool fetched. The arm waits above the holder.\n"
+                 : "Tool released. The arm waits above the holder.\n");
+  }
+  return ok;
+}
+
+}  // namespace
+
+bool askStartupRunMode(Parameters& params, Robot& robot,
+                       const Model& model) {
   bool q_init_reached = false;
 
   const auto move_to_q_init = [&]() {
@@ -946,9 +1059,8 @@ void askStartupRunMode(Parameters& params, Robot& robot) {
     }
   };
 
-  // One explicit startup choice selects both the start-pose source and the run
-  // mode. The q option remains useful for inspecting q_init before committing
-  // to sequence or hold; open/close also return to this menu.
+  // One choice selects both the start-pose source and the run mode. q, o and c
+  // inspect or set up first and return to this menu.
   while (true) {
     printf("\n=== Startup mode ===\n");
     printf("  s = go to q_init, then run the phase sequence\n");
@@ -958,8 +1070,12 @@ void askStartupRunMode(Parameters& params, Robot& robot) {
     printf("  q = go to q_init, inspect the posture, then choose again\n");
     printf("  o = open the Franka hand now (release/load tool), then choose again\n");
     printf("  c = close/grasp the tool now, then choose again\n");
-    printf("  m = home the hand (opens fully; support/remove the tool first)\n");
-    printf("Choice [s/h/g/q/o/c/m]: ");
+    printf("  r = recalibrate the hand width (opens fully; support the tool)\n");
+    printf("  f = fetch the tool: via q_init, down onto it, grasp, lift\n");
+    printf("  b = put the tool back: same path, releases at the holder\n");
+    printf("  e = stop and quit\n");
+    printf("While a run is going: e+Enter stops, m+Enter comes back here.\n");
+    printf("Choice [s/h/g/q/o/c/r/f/b/e]: ");
 
     const std::string choice = readChoice();
     if (matches(choice, {"s", "sequence"})) {
@@ -999,19 +1115,37 @@ void askStartupRunMode(Parameters& params, Robot& robot) {
       params.startup_gripper_manual = true;
       continue;
     }
-    if (matches(choice, {"m", "home"})) {
+    if (matches(choice, {"r", "recal", "recalibrate"})) {
       try {
         Gripper gripper(params.robot_ip);
         // The synchronous startup menu always presents the full warning before
         // accepting the exact confirmation word.
-        homeGripper(params, gripper, false);
+        recalibrateGripper(params, gripper, false);
       } catch (const franka::Exception& e) {
         fprintf(stderr, "Gripper connection failed: %s\n", e.what());
       }
-      // Homing leaves the fingers open. Do not let the automatic startup
-      // action close them before the operator explicitly selects c.
+      // Recalibration leaves the fingers open. Do not let the automatic
+      // startup action close them before the operator explicitly selects c.
       params.startup_gripper_manual = true;
       continue;
+    }
+    if (matches(choice, {"f", "fetch", "tool"}) ||
+        matches(choice, {"b", "back", "putback"})) {
+      const bool grasp = matches(choice, {"f", "fetch", "tool"});
+      try {
+        if (runToolPickup(params, robot, model, grasp, ensure_q_init)) {
+          // The hand was set deliberately, and the arm is no longer at q_init.
+          params.startup_gripper_manual = true;
+        }
+      } catch (const franka::Exception& e) {
+        fprintf(stderr, "Tool pickup failed: %s\n", e.what());
+      }
+      q_init_reached = false;
+      continue;
+    }
+    if (matches(choice, {"e", "stop", "quit", "exit"})) {
+      printf("Stopping without starting a run.\n");
+      return false;
     }
     if (matches(choice, {"g", "guide", "guiding"})) {
       ensure_q_init();
@@ -1020,10 +1154,10 @@ void askStartupRunMode(Parameters& params, Robot& robot) {
       break;
     }
     if (choice.empty()) {
-      printf("Choose s, h, g, q, o, c, or m explicitly.\n");
+      printf("Choose s, h, g, q, o, c, r, f, b, or e explicitly.\n");
     } else {
-      printf("Unknown startup choice '%s'; choose s, h, g, q, o, c, or m.\n",
-             choice.c_str());
+      printf("Unknown startup choice '%s'; choose s, h, g, q, o, c, r, f, b, "
+             "or e.\n", choice.c_str());
     }
   }
 
@@ -1031,21 +1165,21 @@ void askStartupRunMode(Parameters& params, Robot& robot) {
   // here would be redundant.
   if (params.use_manual_guidance_start) {
     printf("Run mode (s/h) will be chosen at the end of guiding.\n");
-    return;
+    return true;
   }
 
   if (params.use_phase_sequence) {
     printf("Selected: phase sequence. Nullspace mode from parameters: %s.\n",
            nullspaceModeName(params.nullspace_mode));
-    return;
+    return true;
   }
 
-  // Hold is the mode the nullspace terms are studied in, so ask for the mode
-  // here instead of silently taking the configured one. Enter keeps the
-  // parameter-file value.
+  // Hold is where the nullspace terms are studied, so ask for the mode rather
+  // than taking it silently. Enter keeps the parameter-file value.
   (void)selectHoldNullspaceMode(params);
   printf("Selected: hold mode with %s.\n",
          nullspaceModeName(params.nullspace_mode));
+  return true;
 }
 
 bool performStartupGripperAction(const Parameters& params) {
@@ -1058,8 +1192,7 @@ bool performStartupGripperAction(const Parameters& params) {
   try {
     Gripper gripper(params.robot_ip);
     if (params.gripper_grasp_on_tool) {
-      // If the fingers are already closed on the tool from a previous run, keep
-      // the grasp. Re-grasping with no gap left to close into reports failure,
+      // Keep an existing grasp: re-grasping with no gap left reports failure,
       // and re-homing would open the hand and drop the tool.
       const franka::GripperState state = gripper.readOnce();
       const bool already_holding =
@@ -1122,7 +1255,8 @@ bool runManualGuidanceStart(Parameters& params,
     printf("Move the robot by hand. Then:\n");
     printf("  o+Enter = open the gripper\n");
     printf("  c+Enter = close/grasp the tool\n");
-    printf("  home+Enter = home the hand (opens fully; support/remove tool)\n");
+    printf("  recal+Enter = recalibrate the hand width (opens fully)\n");
+    printf("  m+Enter = back to the startup menu\n");
     printf("  s+Enter = start phase sequence from this pose\n");
     printf("  h+Enter = start hold from this pose\n");
     printf("  e+Enter = stop (prints this pose as a q_init_* case)\n");
@@ -1155,8 +1289,8 @@ bool runManualGuidanceStart(Parameters& params,
       openGripper(params, gripper);
     } else if (key == 'c') {
       graspTool(params, gripper);
-    } else if (key == 'm') {
-      homeGripper(params, gripper, true);
+    } else if (key == 'r') {
+      recalibrateGripper(params, gripper, true);
     } else if (key == 's') {
       params.use_phase_sequence = true;
       printf("Selected: phase sequence from the guided pose.\n");

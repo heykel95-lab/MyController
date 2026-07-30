@@ -1,22 +1,13 @@
+// ====================================================================
+// Plane tilt cross-check
+// ====================================================================
+// Read-only, commands no motion. Seat the whole tool face flat on the plane
+// with guiding mode, stop the controller, then run this: it reads the pose
+// once and prints the tilt angles that would make the tool axis the normal.
+//
+// Only as good as how flat the face was seated. It validates the P1--P4
+// calibration (prepare_plane_calibration.py) but never replaces it.
 #include "controller.h"
-
-// Read-only measurement of the physical surface tilt. Commands no motion.
-//
-// This is a quick orientation cross-check obtained by seating the tool face.
-// The calibrated MAIN campaign instead uses P1--P3 plus a held-out P4 through
-// experiments/calibration/prepare_plane_calibration.py, because plane geometry
-// requires a point, a normal and a declared tangent direction.
-//
-// Procedure:
-//   1. Start the controller, choose g (guiding mode), and hand-place the tool
-//      face FLAT on the plane. Take your time -- rock it until it seats on the
-//      whole face, not a corner or an edge.
-//   2. Leave it seated and stop the controller.
-//   3. Run this. It reads the pose once and prints the tilt angles the surface
-//      would need for the tool axis to be its normal.
-//
-// The number it prints is only as good as how flat you seated the face. It can
-// validate the three-point result but must not replace that calibration.
 
 namespace {
 
@@ -34,7 +25,7 @@ void tiltAnglesFromNormal(const Vec3& n, double& a_deg, double& b_deg) {
 int main() {
   try {
     const Parameters params =
-        readParameters({"params/common.txt", "params/sequence.txt"});
+        readParameters(parameterFiles());
 
     printf("Read-only plane measurement. No robot motion is commanded.\n");
     printf("Seat the tool face FLAT on the plane before running this.\n");
