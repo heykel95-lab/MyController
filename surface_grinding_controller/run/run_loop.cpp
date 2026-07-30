@@ -270,6 +270,9 @@ RunResult runControlLoop(Parameters& params,
 
   printf("\n=== Run ===\n");
   printf("phase: %s\n", phaseName(phase));
+  if (phase == ControlPhase::kHold) {
+    printNullspaceLaw(params);
+  }
 
   // ================================================================
   // 3. Control loop: libfranka calls this back at ~1 kHz with the current
@@ -833,6 +836,47 @@ RunResult runControlLoop(Parameters& params,
                       1000.0 * e_p.dot(grind_tangent),
                       f.dot(descend_direction));
       next_debug_time = time + params.debug_period;
+    }
+
+    // Live tuning typed as "d <value>" or "k <value>". Applied only while
+    // holding: changing a gain inside a sequence run would leave the archived
+    // params_effective describing something the robot never commanded.
+    const double damping_request =
+        signals.nullspace_damping_request.exchange(
+            std::numeric_limits<double>::quiet_NaN());
+    const double k_sigma_request =
+        signals.nullspace_k_sigma_request.exchange(
+            std::numeric_limits<double>::quiet_NaN());
+    const double alpha_deg_request =
+        signals.nullspace_alpha_deg_request.exchange(
+            std::numeric_limits<double>::quiet_NaN());
+    const int mode_request = signals.nullspace_mode_request.exchange(-1);
+    if (std::isfinite(damping_request) || std::isfinite(k_sigma_request) ||
+        std::isfinite(alpha_deg_request) || mode_request >= 0) {
+      if (phase == ControlPhase::kHold) {
+        if (std::isfinite(damping_request)) {
+          params.nullspace_damping = damping_request;
+          printf("nullspace damping -> %.3f Nms/rad\n", damping_request);
+        }
+        if (std::isfinite(k_sigma_request)) {
+          params.nullspace_k_sigma = k_sigma_request;
+          printf("nullspace k_sigma -> %.3f Nm\n", k_sigma_request);
+        }
+        if (std::isfinite(alpha_deg_request)) {
+          // Typed in degrees, used in radians.
+          params.nullspace_alpha = alpha_deg_request * M_PI / 180.0;
+          printf("nullspace alpha -> %.3f deg = %.6f rad\n",
+                 alpha_deg_request, params.nullspace_alpha);
+        }
+        if (mode_request >= 0) {
+          params.nullspace_mode = static_cast<NullspaceMode>(mode_request);
+          params.use_nullspace_optimization =
+              params.nullspace_mode != NullspaceMode::kOff;
+        }
+        printNullspaceLaw(params);
+      } else {
+        printf("Ignored: nullspace tuning is only accepted while holding.\n");
+      }
     }
 
     // nullspace_mode controls whether this is active for the whole sequence.

@@ -15,12 +15,7 @@ nullspace_mode = 3
 # --------------------------------------------------------------------
 # Gains
 # --------------------------------------------------------------------
-# Damping of the nullspace velocity [Nms/rad], mode 1 only. There it is the
-# only nullspace torque, so it is tuned on its own.
-nullspace_damping_mode1 = 2.0
-
-# Damping of the nullspace velocity [Nms/rad], mode 3. Works against the sigma
-# push below, so it usually wants a different value from mode 1.
+# Damping of the nullspace velocity [Nms/rad]. Modes 1 and 3.
 nullspace_damping = 2.0
 
 # Sigma push torque [Nm]. Modes 2 and 3. Mode 2 is undamped, so raise it

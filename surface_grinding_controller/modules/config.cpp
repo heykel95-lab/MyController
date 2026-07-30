@@ -346,8 +346,6 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
     p.nullspace_mode = parseNullspaceMode(values["nullspace_mode"], p.nullspace_mode);
   }
   p.use_nullspace_optimization = (p.nullspace_mode != NullspaceMode::kOff);
-  p.nullspace_damping_mode1 =
-      getDouble("nullspace_damping_mode1", p.nullspace_damping_mode1);
   p.nullspace_damping = getDouble("nullspace_damping", p.nullspace_damping);
   p.nullspace_k_sigma = getDouble("nullspace_k_sigma", p.nullspace_k_sigma);
   p.nullspace_alpha = getDouble("nullspace_alpha", p.nullspace_alpha);

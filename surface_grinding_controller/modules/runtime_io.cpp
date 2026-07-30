@@ -461,6 +461,42 @@ void printJointStartEndTableDeg(const Vec7& q_start, const Vec7& q_final) {
   }
 }
 
+void printNullspaceLaw(const Parameters& params) {
+  printf("\n--- nullspace: %s ---\n",
+         nullspaceModeName(params.nullspace_mode));
+  switch (params.nullspace_mode) {
+    case NullspaceMode::kOff:
+      printf("  tau = 0\n");
+      break;
+    case NullspaceMode::kDampingOnly:
+      printf("  tau = -d_null * N_tau * dq            d_null = %.3f Nms/rad\n",
+             params.nullspace_damping);
+      printf("  type: d <Nms/rad>\n");
+      break;
+    case NullspaceMode::kSigmaOnly:
+      printf("  tau = +k_sigma * N_tau * n_best       k_sigma = %.3f Nm\n",
+             params.nullspace_k_sigma);
+      printf("  undamped: it pushes, nothing brakes it\n");
+      printf("  type: k <Nm>, a <deg>\n");
+      break;
+    case NullspaceMode::kDampingAndSigma:
+      printf("  tau = -d_null * N_tau * dq            d_null = %.3f Nms/rad\n",
+             params.nullspace_damping);
+      printf("        +k_sigma * N_tau * n_best       k_sigma = %.3f Nm\n",
+             params.nullspace_k_sigma);
+      printf("  type: d <Nms/rad>, k <Nm>, a <deg>\n");
+      break;
+  }
+  // alpha only decides where sigma is sampled, so it is meaningless in the
+  // modes that never sample it.
+  if (params.nullspace_mode == NullspaceMode::kSigmaOnly ||
+      params.nullspace_mode == NullspaceMode::kDampingAndSigma) {
+    printf("  probe alpha = %.3f deg = %.6f rad (sampling only, not a gain)\n",
+           180.0 / M_PI * params.nullspace_alpha, params.nullspace_alpha);
+  }
+  printf("  type 0/1/2/3 to switch mode.\n");
+}
+
 void printParameters(const Parameters& params) {
   printf("\n=== Setup ===\n");
   printf("run: %s | approach_orient: %s | nullspace: %s\n",
@@ -477,9 +513,7 @@ void printParameters(const Parameters& params) {
       params.nullspace_mode == NullspaceMode::kDampingAndSigma;
   printf("nullspace parameters: d_null=%.3f%s | k_sigma=%.3f Nm%s | "
          "alpha=%.4f rad\n",
-         params.nullspace_mode == NullspaceMode::kDampingOnly
-             ? params.nullspace_damping_mode1
-             : params.nullspace_damping,
+         params.nullspace_damping,
          nullspace_damping_active ? "" : " (inactive)",
          params.nullspace_k_sigma,
          nullspace_sigma_active ? "" : " (inactive)",

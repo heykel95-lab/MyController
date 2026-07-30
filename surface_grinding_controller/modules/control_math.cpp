@@ -507,11 +507,13 @@ void startKeyboardStopThread(const Parameters& params,
     printf("During startup guidance: use s+Enter for sequence or h+Enter for hold.\n");
   }
   printf("During hold: press g+Enter to hand-guide the tool, then p+Enter to recapture and resume hold.\n");
+  printf("During hold: 'd 3.5' damping, 'k 1.2' sigma push, 'a 5' probe alpha [deg],\n");
+  printf("             0/1/2/3 switches the nullspace mode.\n");
   if (params.experiment_duration <= 0.0) {
     printf("experiment_duration <= 0: running indefinitely until e + Enter.\n");
   }
 
-  std::thread keyboard_thread([&stop_requested, &proceed_requested,
+  std::thread keyboard_thread([&signals, &stop_requested, &proceed_requested,
                                &guide_requested, &guidance_menu_key,
                                &guided_hold_selector_pending,
                                &gate_continue, &menu_requested]() {
@@ -524,6 +526,33 @@ void startKeyboardStopThread(const Parameters& params,
       }
       if (!std::getline(std::cin, line)) {
         break;
+      }
+      // "d <value>" and "k <value>" tune the nullspace live while holding.
+      // Checked before the single-letter keys so a bare d or k still falls
+      // through to "unknown".
+      if (line.size() > 1 && (line[0] == 'd' || line[0] == 'D' ||
+                              line[0] == 'k' || line[0] == 'K' ||
+                              line[0] == 'a' || line[0] == 'A')) {
+        double value = 0.0;
+        if (std::sscanf(line.c_str() + 1, "%lf", &value) == 1 &&
+            std::isfinite(value) && value >= 0.0) {
+          if (line[0] == 'd' || line[0] == 'D') {
+            signals.nullspace_damping_request.store(value);
+          } else if (line[0] == 'k' || line[0] == 'K') {
+            signals.nullspace_k_sigma_request.store(value);
+          } else {
+            // alpha is typed in degrees; the loop converts it to radians.
+            signals.nullspace_alpha_deg_request.store(value);
+          }
+          continue;
+        }
+        printf("Expected 'd <Nms/rad>', 'k <Nm>' or 'a <deg>', value >= 0.\n");
+        continue;
+      }
+      if (line.size() == 1 && line[0] >= '0' && line[0] <= '3') {
+        // Live nullspace mode switch while holding.
+        signals.nullspace_mode_request.store(line[0] - '0');
+        continue;
       }
       if (line.empty()) {
         // Bare Enter = continue past a phase gate.
@@ -662,13 +691,8 @@ Vec7 computeNullspaceTorque(
       params.nullspace_mode == NullspaceMode::kDampingAndSigma;
   Vec7 tau_damping = Vec7::Zero();
   if (damping_enabled) {
-    // Mode 1 has its own value: there it is the only nullspace torque, while
-    // in mode 3 it damps the sigma push as well.
-    const double d_null =
-        params.nullspace_mode == NullspaceMode::kDampingOnly
-            ? params.nullspace_damping_mode1
-            : params.nullspace_damping;
-    tau_damping.noalias() = -d_null * dq_nullspace;
+    tau_damping.noalias() =
+        -params.nullspace_damping * dq_nullspace;
   }
   if (params.nullspace_mode == NullspaceMode::kDampingOnly) {
     return tau_damping;

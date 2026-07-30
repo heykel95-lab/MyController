@@ -16,6 +16,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <string>
 #include <thread>
@@ -231,9 +232,6 @@ struct Parameters {
   // Nullspace optimization.
   bool use_nullspace_optimization = true;
   NullspaceMode nullspace_mode = NullspaceMode::kDampingAndSigma;
-  // Mode 1 damps the nullspace on its own, so it is tuned separately from
-  // mode 3, where the damping works against the sigma push.
-  double nullspace_damping_mode1 = 1.0;
   double nullspace_damping = 1.0;
   double nullspace_k_sigma = 0.05;
   double nullspace_alpha = 0.03;
@@ -549,6 +547,20 @@ struct KeyboardSignals {
   std::atomic<bool> gate_continue{false};
   // Starts parked so the first startup menu owns stdin alone.
   std::atomic<bool> menu_requested{true};
+
+  // Live nullspace tuning while holding: "d 3.5" sets the damping, "k 1.2"
+  // the sigma push. NaN means no request is pending; the control loop takes
+  // the value, applies it and clears it back to NaN.
+  std::atomic<double> nullspace_damping_request{
+      std::numeric_limits<double>::quiet_NaN()};
+  std::atomic<double> nullspace_k_sigma_request{
+      std::numeric_limits<double>::quiet_NaN()};
+  // Live sigma probe distance, typed in degrees; the loop converts to the
+  // radians the law uses. NaN means nothing pending.
+  std::atomic<double> nullspace_alpha_deg_request{
+      std::numeric_limits<double>::quiet_NaN()};
+  // Live mode switch: 0..3 typed while holding. -1 means nothing pending.
+  std::atomic<int> nullspace_mode_request{-1};
 };
 
 // Where the coupled spring's pole is measured from. Both the live and the
@@ -737,6 +749,10 @@ void printSpatialGainEigenvalues(const char* label, const Mat6x6& M);
 void printJointStartEndTableDeg(const Vec7& q_start, const Vec7& q_final);
 
 void printParameters(const Parameters& params);
+
+// The active nullspace law and what can be retyped while holding. Printed
+// when a hold starts and whenever the mode is switched live.
+void printNullspaceLaw(const Parameters& params);
 
 void printContactEdgeDebug(const Vec3& offset_ee,
                            const Vec3& p_EE_at_contact,

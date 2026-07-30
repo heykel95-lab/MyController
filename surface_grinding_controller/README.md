@@ -95,6 +95,9 @@ Sequence (s)
 Hold (h)
   Locks the pose it starts from and asks for the nullspace mode 0-3.
   From hold, g+Enter hand-guides and p+Enter re-captures the pose.
+  While holding, "d 3.5", "k 1.2" and "a 5" retune the nullspace damping,
+  the sigma push and the probe alpha (typed in degrees) without stopping the
+  run, and 0/1/2/3 switch the mode.
   Tunes: hold, Nullspace.
 
 Set-up impedance hold (t)
@@ -237,10 +240,9 @@ both:      tau = -d_null * N_tau * dq + k_sigma * sign * N_tau * n
 comparing `sigma_min(q + alpha*n)` against `sigma_min(q - alpha*n)`; `alpha` is
 only the sampling step and does not scale the torque.
 
-Each mode has its own gains: mode 1 uses `nullspace_damping_mode1`, mode 2
-uses `nullspace_k_sigma`, and mode 3 uses `nullspace_damping` together with
-that same `nullspace_k_sigma`. Mode 1's damping is separate because there it
-is the only nullspace torque, while in mode 3 it works against the sigma push.
+Mode 1 uses `nullspace_damping`, mode 2 uses `nullspace_k_sigma`, mode 3 uses
+both — so the isolated terms and the combined response can be tuned
+independently and compared from the same hold pose.
 
 ### Sigma debug output
 
