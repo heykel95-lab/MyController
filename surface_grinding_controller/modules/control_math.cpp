@@ -366,6 +366,66 @@ Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_a
 }
 
 // ====================================================================
+// Control law
+// ====================================================================
+
+Vec6 computeSpringWrench(const Parameters& params,
+                         ControlPhase phase,
+                         const Mat3& Kp,
+                         const Mat3& Dp,
+                         const Mat3& KR,
+                         const Mat3& DR,
+                         const Mat3& R_alignment_target,
+                         const Vec6& dx,
+                         const Vec6& dv,
+                         const ContactReference& contact) {
+  // The set-up spring is also what the menu's t mode holds with, so the
+  // coupled path is reachable from a hold as well as from phase 2.
+  const bool coupled =
+      params.use_coupled_stiffness &&
+      (phase == ControlPhase::kSetUp ||
+       (phase == ControlPhase::kHold && params.hold_with_setup_gains));
+  if (!coupled) {
+    // Two independent springs: force from position error, moment from
+    // orientation error. dv.tail is -omega, so the damping signs match.
+    Vec6 wrench;
+    wrench.head<3>() = Kp * dx.head<3>() + Dp * dv.head<3>();
+    wrench.tail<3>() = KR * dx.tail<3>() + DR * dv.tail<3>();
+    return wrench;
+  }
+
+  Mat6x6 K_tcp;
+  Mat6x6 D_tcp;
+  if (params.coupled_use_block_diagonal) {
+    // Reproduces the decoupled wrench through the 6x6 path: the check that
+    // the path itself is right.
+    K_tcp = blockDiagonal(Kp, KR);
+    D_tcp = blockDiagonal(Dp, DR);
+  } else if (params.coupled_pole_manual) {
+    Vec3 r_c;
+    if (params.coupled_use_direct_rc_surface) {
+      r_c = R_alignment_target * params.coupled_rc_surface;
+    } else {
+      // Legacy convention retained only for archived setup files.
+      const Vec3 edge_ref = params.coupled_pole_freeze_at_contact
+                                ? contact.edge_at_contact
+                                : contact.edge;
+      const Vec3 tcp_ref = params.coupled_pole_freeze_at_contact
+                               ? contact.tcp_at_contact
+                               : contact.tcp;
+      r_c = tcp_ref - (edge_ref + params.coupled_pole_from_edge);
+    }
+    K_tcp = adjointTransformedGain(blockDiagonal(Kp, KR), r_c);
+    D_tcp = adjointTransformedGain(blockDiagonal(Dp, DR), r_c);
+  } else {
+    // This invalid selection is rejected before the control loop.
+    K_tcp = blockDiagonal(Kp, KR);
+    D_tcp = blockDiagonal(Dp, DR);
+  }
+  return K_tcp * dx + D_tcp * dv;
+}
+
+// ====================================================================
 // Robot interaction
 // ====================================================================
 
@@ -488,6 +548,8 @@ void startKeyboardStopThread(const Parameters& params,
         // The full word is the confirmation: recalibrating opens the fingers
         // fully and may drop a tool. It runs after torque control returns.
         guidance_menu_key.store('r');
+      } else if (line == "w" || line == "W") {
+        guidance_menu_key.store('w');
       } else if (line == "s" || line == "S") {
         guidance_menu_key.store('s');
       } else if (line == "h" || line == "H") {
@@ -600,8 +662,13 @@ Vec7 computeNullspaceTorque(
       params.nullspace_mode == NullspaceMode::kDampingAndSigma;
   Vec7 tau_damping = Vec7::Zero();
   if (damping_enabled) {
-    tau_damping.noalias() =
-        -params.nullspace_damping * dq_nullspace;
+    // Mode 1 has its own value: there it is the only nullspace torque, while
+    // in mode 3 it damps the sigma push as well.
+    const double d_null =
+        params.nullspace_mode == NullspaceMode::kDampingOnly
+            ? params.nullspace_damping_mode1
+            : params.nullspace_damping;
+    tau_damping.noalias() = -d_null * dq_nullspace;
   }
   if (params.nullspace_mode == NullspaceMode::kDampingOnly) {
     return tau_damping;

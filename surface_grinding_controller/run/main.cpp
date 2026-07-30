@@ -12,6 +12,8 @@ int main() {
     // 1. Parameters, robot connection, start pose
     // ================================================================
     // One topic per file; see parameterFiles() for the list and load order.
+    // Read once here for the robot connection and the keyboard banner; each
+    // session re-reads the files below.
     const Parameters base_params = readParameters(parameterFiles());
     Robot robot(base_params.robot_ip);
 
@@ -40,7 +42,10 @@ int main() {
     // One session per menu visit. m+Enter during a run comes back here; the
     // second run writes ..._log_s2.csv, so no earlier log is overwritten.
     for (int session = 1;; ++session) {
-      Parameters params = base_params;
+      // Re-read the files each session, not once at startup: a pose saved with
+      // w in guiding mode, or any parameter edited between runs, then takes
+      // effect on the next run without restarting the program.
+      Parameters params = readParameters(parameterFiles());
       if (session > 1) {
         params.csv_file_name = sessionFileName(params.csv_file_name, session);
         params.sigma_debug_csv_file_name =

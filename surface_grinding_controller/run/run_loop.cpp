@@ -21,8 +21,6 @@ RunResult runControlLoop(Parameters& params,
   const Mat3& Dp_approach = gains.Dp_approach;
   const Mat3& KR_approach = gains.KR_approach;
   const Mat3& DR_approach = gains.DR_approach;
-  const Vec3& setup_Kp_active_diag = gains.setup_Kp_active_diag;
-  const Vec3& setup_Dp_active_diag = gains.setup_Dp_active_diag;
   const Mat3& Kp_setup = gains.Kp_setup;
   const Mat3& Dp_setup = gains.Dp_setup;
   const Mat3& KR_setup = gains.KR_setup;
@@ -135,18 +133,7 @@ RunResult runControlLoop(Parameters& params,
   double grind_push = 0.0;
 
   // Auto-damping is cached per phase group.
-  bool approach_damp_computed = false;
-  Mat3 Dp_approach_cached = Dp_approach;
-  Mat3 DR_approach_cached = DR_approach;
-  bool setup_damp_computed = false;
-  Mat3 Dp_setup_cached = Dp_setup;
-  Mat3 DR_setup_cached = DR_setup;
-  bool hold_damp_computed = false;
-  Mat3 Dp_hold_cached = Dp_hold;
-  Mat3 DR_hold_cached = DR_hold;
-  bool pause_damp_computed = false;
-  Mat3 Dp_pause_cached = Dp_pause;
-  Mat3 DR_pause_cached = DR_pause;
+  DampingCache damping = manualDampingCache(gains);
 
   printf("\n=== Start pose ===\n");
   printVec7Deg("q_start", q_start);
@@ -426,12 +413,12 @@ RunResult runControlLoop(Parameters& params,
         gate_grind_passed = false;
         setup_push_start = -params.descend_surface_clearance;
         grind_push = 0.0;
-        hold_damp_computed = false;
-        Dp_hold_cached = Dp_hold;
-        DR_hold_cached = DR_hold;
-        pause_damp_computed = false;
-        Dp_pause_cached = Dp_pause;
-        DR_pause_cached = DR_pause;
+        damping.hold_computed = false;
+        damping.Dp_hold = Dp_hold;
+        damping.DR_hold = DR_hold;
+        damping.pause_computed = false;
+        damping.Dp_pause = Dp_pause;
+        damping.DR_pause = DR_pause;
 
         if (sigma_hold_diagnostics_enabled) {
           SigmaDebugRow recapture_row;
@@ -688,9 +675,9 @@ RunResult runControlLoop(Parameters& params,
         report.R_contact_start = R_contact_start;
         report.contact_force_bias = contact_force_bias;
         report.Kp = Kp_setup;
-        report.Dp = params.setup_auto_damping ? Dp_setup_cached : Dp_setup;
+        report.Dp = params.setup_auto_damping ? damping.Dp_setup : Dp_setup;
         report.KR = KR_setup;
-        report.DR = params.setup_auto_damping ? DR_setup_cached : DR_setup;
+        report.DR = params.setup_auto_damping ? damping.DR_setup : DR_setup;
         reportSetUpResult(params, R_alignment_target, report);
 
         // Grind keeps the final set-up preload.
@@ -758,225 +745,33 @@ RunResult runControlLoop(Parameters& params,
       next_debug_time = time + params.debug_period;
     }
 
-    // ---------------------------------------------------------------
-    // Auto-damping: compute once per phase group and cache.
-    // ---------------------------------------------------------------
-    const bool in_approach = (phase == ControlPhase::kApproachOrient ||
-                              phase == ControlPhase::kApproachDescend);
-    if (!in_approach) {
-      approach_damp_computed = false;
-    }
-    if (!after_contact) {
-      setup_damp_computed = false;
-    }
-    if (phase != ControlPhase::kHold) {
-      hold_damp_computed = false;
-    }
-    if (!pause_hold_active) {
-      pause_damp_computed = false;
-    }
-
-    const bool need_damping_update =
-        (pause_hold_active && params.pause_hold_auto_damping &&
-         !pause_damp_computed) ||
-        (in_approach && params.approach_auto_damping && !approach_damp_computed) ||
-        (after_contact && params.setup_auto_damping && !setup_damp_computed) ||
-        (phase == ControlPhase::kHold && params.hold_auto_damping && !hold_damp_computed);
-    if (need_damping_update) {
-      std::array<double, 49> mass_array = model.mass(state);
-      Map<const Mat7x7> joint_mass(mass_array.data());
-
-      // Manual damping can be either fallback-only or a per-axis floor.
-      auto dampingFloor = [&](const Vec3& manual) {
-        return params.auto_damping_min_from_manual ? manual : Vec3::Zero();
-      };
-      // Print auto/manual damping for tuning.
-      auto reportDamping = [&](const char* label, const char* unit,
-                               const Vec3& computed, const Vec3& manual) {
-        if (!params.print_auto_damping) {
-          return;
-        }
-        printf("%-18s auto=[%7.2f, %7.2f, %7.2f]  manual=[%7.2f, %7.2f, %7.2f] %s%s\n",
-               label,
-               computed(0), computed(1), computed(2),
-               manual(0), manual(1), manual(2), unit,
-               params.auto_damping_min_from_manual ? " (manual = floor)" : "");
-      };
-
-      if (pause_hold_active) {
-        const CartesianInertiaEstimate inertia_base =
-            computeCartesianInertiaEstimate(joint_mass, J, Mat3::Identity());
-        const CartesianInertiaEstimate inertia_task =
-            computeCartesianInertiaEstimate(joint_mass, J, R_alignment_target);
-        if (inertia_base.valid && inertia_task.valid) {
-          const Vec3 unit_critical_Dp = criticalDampingFromStiffness(
-              inertia_base.translational,
-              params.pause_hold_Kp_diag,
-              1.0, Vec3::Zero(), params.auto_damping_max);
-          const Vec3 unit_critical_DR = criticalDampingFromStiffness(
-              inertia_task.rotational,
-              params.pause_hold_KR_diag,
-              1.0, Vec3::Zero(), params.auto_damping_max);
-
-          const Vec3& target_Dp = params.pause_hold_Dp_diag;
-          const Vec3& target_DR = params.pause_hold_DR_diag;
-          const auto fittedFactor = [](const Vec3& unit_critical,
-                                       const Vec3& target) {
-            const double denominator = unit_critical.squaredNorm();
-            return (denominator > 1e-12)
-                       ? unit_critical.dot(target) / denominator
-                       : 1.0;
-          };
-          const double Dp_factor = fittedFactor(unit_critical_Dp, target_Dp);
-          const double DR_factor = fittedFactor(unit_critical_DR, target_DR);
-
-          const Vec3 Dp_diag = criticalDampingFromStiffness(
-              inertia_base.translational,
-              params.pause_hold_Kp_diag,
-              Dp_factor, dampingFloor(target_Dp), params.auto_damping_max);
-          const Vec3 DR_diag = criticalDampingFromStiffness(
-              inertia_task.rotational,
-              params.pause_hold_KR_diag,
-              DR_factor, dampingFloor(target_DR), params.auto_damping_max);
-          Dp_pause_cached = Dp_diag.asDiagonal();
-          DR_pause_cached =
-              makeSpatialGainMatrix(DR_diag, R_alignment_target);
-          printf("pause auto damping: fitted Dp factor=%.3f, DR factor=%.3f\n",
-                 Dp_factor, DR_factor);
-          reportDamping("pause Dp [xyz]", "Ns/m", Dp_diag, target_Dp);
-          reportDamping("pause DR [t1t2n]", "Nms/rad", DR_diag, target_DR);
-        } else {
-          Dp_pause_cached = Dp_pause;
-          DR_pause_cached = DR_pause;
-          printf("pause damping: inertia estimate unavailable, using manual "
-                 "Dp=[%.1f, %.1f, %.1f] Ns/m and DR=[%.1f, %.1f, %.1f] "
-                 "Nms/rad\n",
-                 params.pause_hold_Dp_diag(0), params.pause_hold_Dp_diag(1),
-                 params.pause_hold_Dp_diag(2), params.pause_hold_DR_diag(0),
-                 params.pause_hold_DR_diag(1), params.pause_hold_DR_diag(2));
-        }
-        pause_damp_computed = true;
-      } else if (in_approach) {
-        const CartesianInertiaEstimate inertia =
-            computeCartesianInertiaEstimate(joint_mass, J, R_alignment_target);
-        if (inertia.valid) {
-          const double zeta = params.approach_auto_damping_factor;
-          const Vec3 Dp_diag = criticalDampingFromStiffness(
-              inertia.translational, params.approach_Kp_diag, zeta,
-              dampingFloor(params.approach_Dp_diag), params.auto_damping_max);
-          const Vec3 DR_diag = criticalDampingFromStiffness(
-              inertia.rotational, params.approach_KR_diag, zeta,
-              dampingFloor(params.approach_DR_diag), params.auto_damping_max);
-          Dp_approach_cached = makeSpatialGainMatrix(Dp_diag, R_alignment_target);
-          DR_approach_cached = makeSpatialGainMatrix(DR_diag, R_alignment_target);
-          reportDamping("approach Dp", "Ns/m", Dp_diag, params.approach_Dp_diag);
-          reportDamping("approach DR", "Nms/rad", DR_diag, params.approach_DR_diag);
-          approach_damp_computed = true;
-        }
-      } else if (after_contact) {
-        // Translation uses its selected parameter frame; rotation uses the
-        // surface frame.
-        const CartesianInertiaEstimate inertia_base =
-            computeCartesianInertiaEstimate(joint_mass, J, Mat3::Identity());
-        const CartesianInertiaEstimate inertia_task =
-            computeCartesianInertiaEstimate(joint_mass, J, R_alignment_target);
-        const CartesianInertiaEstimate& inertia_translation =
-            params.setup_translation_surface_frame ? inertia_task : inertia_base;
-        if (inertia_translation.valid && inertia_task.valid) {
-          const double zeta = params.setup_auto_damping_factor;
-          const Vec3 Dp_diag = criticalDampingFromStiffness(
-              inertia_translation.translational, setup_Kp_active_diag, zeta,
-              dampingFloor(setup_Dp_active_diag), params.auto_damping_max);
-          const Vec3 DR_diag = criticalDampingFromStiffness(
-              inertia_task.rotational, params.setup_KR_diag, zeta,
-              dampingFloor(params.setup_DR_diag), params.auto_damping_max);
-          Dp_setup_cached =
-              params.setup_translation_surface_frame
-                  ? makeSpatialGainMatrix(Dp_diag, R_alignment_target)
-                  : Dp_diag.asDiagonal();
-          DR_setup_cached = makeSpatialGainMatrix(DR_diag, R_alignment_target);
-          reportDamping(
-              params.setup_translation_surface_frame
-                  ? "set_up Dp [t1t2n]"
-                  : "set_up Dp [xyz]",
-              "Ns/m", Dp_diag, setup_Dp_active_diag);
-          reportDamping("set_up DR [t1t2n]", "Nms/rad", DR_diag, params.setup_DR_diag);
-          setup_damp_computed = true;
-        }
-      } else {
-        const CartesianInertiaEstimate inertia_base =
-            computeCartesianInertiaEstimate(joint_mass, J, Mat3::Identity());
-        if (inertia_base.valid) {
-          const Vec3& manual_hold_Dp = params.hold_Dp_diag;
-          const Vec3& manual_hold_DR = params.hold_DR_diag;
-          double hold_factor = params.hold_auto_damping_factor;
-          if (params.hold_auto_match_manual_damping) {
-            const Vec3 unit_critical_Dp = criticalDampingFromStiffness(
-                inertia_base.translational,
-                params.hold_Kp_diag,
-                1.0, Vec3::Zero(), params.auto_damping_max);
-            const double denominator = unit_critical_Dp.squaredNorm();
-            if (denominator > 1e-12) {
-              // Least-squares scalar that makes factor*unit_critical_Dp as
-              // close as possible to the manual hold_Dp axes.
-              hold_factor =
-                  unit_critical_Dp.dot(manual_hold_Dp) / denominator;
-            }
-            printf("hold auto damping: fitted factor=%.3f toward "
-                   "Dp=[%.1f, %.1f, %.1f] Ns/m\n",
-                   hold_factor, manual_hold_Dp(0), manual_hold_Dp(1),
-                   manual_hold_Dp(2));
-          }
-          const Vec3 Dp_diag = criticalDampingFromStiffness(
-              inertia_base.translational,
-              params.hold_Kp_diag,
-              hold_factor,
-              dampingFloor(manual_hold_Dp),
-              params.auto_damping_max);
-          const Vec3 DR_diag = criticalDampingFromStiffness(
-              inertia_base.rotational,
-              params.hold_KR_diag,
-              hold_factor,
-              dampingFloor(manual_hold_DR),
-              params.auto_damping_max);
-          Dp_hold_cached = Dp_diag.asDiagonal();
-          DR_hold_cached = DR_diag.asDiagonal();
-          reportDamping("hold Dp", "Ns/m", Dp_diag, manual_hold_Dp);
-          reportDamping("hold DR", "Nms/rad", DR_diag, manual_hold_DR);
-        } else {
-          Dp_hold_cached = Dp_hold;
-          DR_hold_cached = DR_hold;
-          printf("hold damping: inertia estimate unavailable, using manual "
-                 "hold_Dp=[%.1f, %.1f, %.1f] Ns/m and "
-                 "hold_DR=[%.1f, %.1f, %.1f] Nms/rad\n",
-                 params.hold_Dp_diag(0), params.hold_Dp_diag(1),
-                 params.hold_Dp_diag(2), params.hold_DR_diag(0),
-                 params.hold_DR_diag(1), params.hold_DR_diag(2));
-        }
-        hold_damp_computed = true;
-      }
-    }
+    updateAutoDamping(params, gains, model, state, J, phase, after_contact,
+                      pause_hold_active, damping);
 
     const Mat3& Dp_approach_eff =
-        params.approach_auto_damping ? Dp_approach_cached : Dp_approach;
+        params.approach_auto_damping ? damping.Dp_approach : Dp_approach;
     const Mat3& DR_approach_eff =
-        params.approach_auto_damping ? DR_approach_cached : DR_approach;
-    const Mat3& Dp_setup_eff = params.setup_auto_damping ? Dp_setup_cached : Dp_setup;
-    const Mat3& DR_setup_eff = params.setup_auto_damping ? DR_setup_cached : DR_setup;
-    const Mat3& Dp_hold_eff = params.hold_auto_damping ? Dp_hold_cached : Dp_hold;
-    const Mat3& DR_hold_eff = params.hold_auto_damping ? DR_hold_cached : DR_hold;
+        params.approach_auto_damping ? damping.DR_approach : DR_approach;
+    const Mat3& Dp_setup_eff = params.setup_auto_damping ? damping.Dp_setup : Dp_setup;
+    const Mat3& DR_setup_eff = params.setup_auto_damping ? damping.DR_setup : DR_setup;
+    const Mat3& Dp_hold_eff = params.hold_auto_damping ? damping.Dp_hold : Dp_hold;
+    const Mat3& DR_hold_eff = params.hold_auto_damping ? damping.DR_hold : DR_hold;
     const Mat3& Dp_pause_eff =
-        params.pause_hold_auto_damping ? Dp_pause_cached : Dp_pause;
+        params.pause_hold_auto_damping ? damping.Dp_pause : Dp_pause;
     const Mat3& DR_pause_eff =
-        params.pause_hold_auto_damping ? DR_pause_cached : DR_pause;
+        params.pause_hold_auto_damping ? damping.DR_pause : DR_pause;
 
     // ---------------------------------------------------------------
     // Select gains for this phase; gate hold overrides position gains.
     // ---------------------------------------------------------------
-    const Mat3* Kp_phase = &Kp_hold;
-    const Mat3* Dp_phase = &Dp_hold_eff;
-    const Mat3* KR_phase = &KR_hold;
-    const Mat3* DR_phase = &DR_hold_eff;
+    // Hold uses the hold gains, unless the menu's t mode asked for the set-up
+    // impedance instead.
+    const Mat3* Kp_phase = params.hold_with_setup_gains ? &Kp_setup : &Kp_hold;
+    const Mat3* Dp_phase =
+        params.hold_with_setup_gains ? &Dp_setup_eff : &Dp_hold_eff;
+    const Mat3* KR_phase = params.hold_with_setup_gains ? &KR_setup : &KR_hold;
+    const Mat3* DR_phase =
+        params.hold_with_setup_gains ? &DR_setup_eff : &DR_hold_eff;
     switch (phase) {
       case ControlPhase::kApproachOrient:
       case ControlPhase::kApproachDescend:
@@ -1011,39 +806,14 @@ RunResult runControlLoop(Parameters& params,
     dv.head<3>() = desired.pdot_d - pdot;
     dv.tail<3>() = -omega;
 
-    Vec6 wrench;
-    if (phase == ControlPhase::kSetUp && params.use_coupled_stiffness) {
-      Mat6x6 K_tcp;
-      Mat6x6 D_tcp;
-      if (params.coupled_use_block_diagonal) {
-        K_tcp = blockDiagonal(Kp_used, KR_used);
-        D_tcp = blockDiagonal(Dp_used, DR_used);
-      } else if (params.coupled_pole_manual) {
-        Vec3 r_c;
-        if (params.coupled_use_direct_rc_surface) {
-          r_c = R_alignment_target * params.coupled_rc_surface;
-        } else {
-          // Legacy convention retained only for archived setup files.
-          const Vec3 edge_ref =
-              params.coupled_pole_freeze_at_contact
-                  ? first_contact_point
-                  : tool_contact_point;
-          const Vec3 tcp_ref =
-              params.coupled_pole_freeze_at_contact ? first_contact_tcp : p_EE;
-          r_c = tcp_ref - (edge_ref + params.coupled_pole_from_edge);
-        }
-        K_tcp = adjointTransformedGain(blockDiagonal(Kp_used, KR_used), r_c);
-        D_tcp = adjointTransformedGain(blockDiagonal(Dp_used, DR_used), r_c);
-      } else {
-        // This invalid selection is rejected before the control loop.
-        K_tcp = blockDiagonal(Kp_used, KR_used);
-        D_tcp = blockDiagonal(Dp_used, DR_used);
-      }
-      wrench = K_tcp * dx + D_tcp * dv;
-    } else {
-      wrench.head<3>() = Kp_used * e_p + Dp_used * dv.head<3>();
-      wrench.tail<3>() = KR_used * e_R - DR_used * omega;
-    }
+    ContactReference contact;
+    contact.tcp = p_EE;
+    contact.edge = tool_contact_point;
+    contact.tcp_at_contact = first_contact_tcp;
+    contact.edge_at_contact = first_contact_point;
+    const Vec6 wrench =
+        computeSpringWrench(params, phase, Kp_used, Dp_used, KR_used, DR_used,
+                            R_alignment_target, dx, dv, contact);
     const Vec3 f = wrench.head<3>();
     const Vec3 m = wrench.tail<3>();
 

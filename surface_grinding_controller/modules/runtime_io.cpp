@@ -464,7 +464,9 @@ void printJointStartEndTableDeg(const Vec7& q_start, const Vec7& q_final) {
 void printParameters(const Parameters& params) {
   printf("\n=== Setup ===\n");
   printf("run: %s | approach_orient: %s | nullspace: %s\n",
-         params.use_phase_sequence ? "phase sequence" : "hold",
+         params.use_phase_sequence ? "phase sequence"
+         : params.hold_with_setup_gains ? "hold (set-up impedance)"
+                                        : "hold",
          params.use_approach_orient ? "on" : "off",
          nullspaceModeName(params.nullspace_mode));
   const bool nullspace_damping_active =
@@ -475,7 +477,9 @@ void printParameters(const Parameters& params) {
       params.nullspace_mode == NullspaceMode::kDampingAndSigma;
   printf("nullspace parameters: d_null=%.3f%s | k_sigma=%.3f Nm%s | "
          "alpha=%.4f rad\n",
-         params.nullspace_damping,
+         params.nullspace_mode == NullspaceMode::kDampingOnly
+             ? params.nullspace_damping_mode1
+             : params.nullspace_damping,
          nullspace_damping_active ? "" : " (inactive)",
          params.nullspace_k_sigma,
          nullspace_sigma_active ? "" : " (inactive)",
@@ -891,6 +895,64 @@ bool graspTool(const Parameters& params, Gripper& gripper) {
   }
 }
 
+bool saveGuidedPoseAsQInit(const Vec7& q) {
+  const std::string path = "params/Q_Init.txt";
+  std::ifstream input(path);
+  if (!input) {
+    fprintf(stderr, "Could not open %s to save the pose.\n", path.c_str());
+    return false;
+  }
+
+  std::vector<std::string> lines;
+  std::string line;
+  while (std::getline(input, line)) {
+    lines.push_back(line);
+  }
+  input.close();
+
+  // Rewrite the seven saved joints and point q_init_case at them. Every other
+  // line, including the other postures and the comments, is left as it is.
+  int replaced = 0;
+  bool case_set = false;
+  for (std::string& text : lines) {
+    const std::string trimmed = trim(text);
+    if (trimmed.rfind("q_init_case", 0) == 0) {
+      text = "q_init_case = saved_qinit";
+      case_set = true;
+      continue;
+    }
+    for (int i = 0; i < 7; ++i) {
+      const std::string key = "q_init_saved_" + std::to_string(i + 1);
+      if (trimmed.rfind(key + " ", 0) == 0 || trimmed.rfind(key + "=", 0) == 0) {
+        char buffer[64];
+        snprintf(buffer, sizeof(buffer), "%s = %.6f", key.c_str(), q(i));
+        text = buffer;
+        ++replaced;
+        break;
+      }
+    }
+  }
+  if (replaced != 7 || !case_set) {
+    fprintf(stderr,
+            "%s is missing q_init_case or a q_init_saved_* line "
+            "(found %d of 7). Nothing was written.\n",
+            path.c_str(), replaced);
+    return false;
+  }
+
+  std::ofstream output(path);
+  if (!output) {
+    fprintf(stderr, "Could not write %s.\n", path.c_str());
+    return false;
+  }
+  for (const std::string& text : lines) {
+    output << text << "\n";
+  }
+  printf("Saved this pose as q_init_case = saved_qinit in %s.\n", path.c_str());
+  printVec7Deg("saved q1..q7 [deg]", q);
+  return true;
+}
+
 bool recalibrateGripper(const Parameters& params,
                         Gripper& gripper,
                         bool confirmation_already_received) {
@@ -1065,6 +1127,7 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
     printf("\n=== Startup mode ===\n");
     printf("  s = go to q_init, then run the phase sequence\n");
     printf("  h = go to q_init, then hold that pose\n");
+    printf("  t = test the set-up impedance: hold with the set-up K and D\n");
     printf("  g = guiding mode: go to q_init, then hand-guide to your pose;\n");
     printf("      use s+Enter for sequence or h+Enter for hold\n");
     printf("  q = go to q_init, inspect the posture, then choose again\n");
@@ -1075,19 +1138,28 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
     printf("  b = put the tool back: same path, releases at the holder\n");
     printf("  e = stop and quit\n");
     printf("While a run is going: e+Enter stops, m+Enter comes back here.\n");
-    printf("Choice [s/h/g/q/o/c/r/f/b/e]: ");
+    printf("Choice [s/h/t/g/q/o/c/r/f/b/e]: ");
 
     const std::string choice = readChoice();
     if (matches(choice, {"s", "sequence"})) {
       ensure_q_init();
       params.use_manual_guidance_start = false;
       params.use_phase_sequence = true;
+      params.hold_with_setup_gains = false;
       break;
     }
     if (matches(choice, {"h", "hold"})) {
       ensure_q_init();
       params.use_manual_guidance_start = false;
       params.use_phase_sequence = false;
+      params.hold_with_setup_gains = false;
+      break;
+    }
+    if (matches(choice, {"t", "test", "setup"})) {
+      ensure_q_init();
+      params.use_manual_guidance_start = false;
+      params.use_phase_sequence = false;
+      params.hold_with_setup_gains = true;
       break;
     }
     if (matches(choice, {"q", "qinit"})) {
@@ -1154,10 +1226,10 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
       break;
     }
     if (choice.empty()) {
-      printf("Choose s, h, g, q, o, c, r, f, b, or e explicitly.\n");
+      printf("Choose s, h, t, g, q, o, c, r, f, b, or e explicitly.\n");
     } else {
-      printf("Unknown startup choice '%s'; choose s, h, g, q, o, c, r, f, b, "
-             "or e.\n", choice.c_str());
+      printf("Unknown startup choice '%s'; choose s, h, t, g, q, o, c, r, f, "
+             "b, or e.\n", choice.c_str());
     }
   }
 
@@ -1174,8 +1246,20 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
     return true;
   }
 
-  // Hold is where the nullspace terms are studied, so ask for the mode rather
-  // than taking it silently. Enter keeps the parameter-file value.
+  // The t mode exists to reproduce set-up conditions, and a sequence run takes
+  // its nullspace mode from the parameter file without asking. Asking here
+  // would let the two drift apart, so it is not asked.
+  if (params.hold_with_setup_gains) {
+    printf("Selected: hold with the SET-UP gains. Nullspace mode from "
+           "parameters: %s.\n", nullspaceModeName(params.nullspace_mode));
+    if (params.use_coupled_stiffness) {
+      printf("Coupled set-up stiffness is active in this hold.\n");
+    }
+    return true;
+  }
+
+  // Plain hold is where the nullspace terms are studied, so ask for the mode
+  // rather than taking it silently. Enter keeps the parameter-file value.
   (void)selectHoldNullspaceMode(params);
   printf("Selected: hold mode with %s.\n",
          nullspaceModeName(params.nullspace_mode));
@@ -1257,6 +1341,7 @@ bool runManualGuidanceStart(Parameters& params,
     printf("  c+Enter = close/grasp the tool\n");
     printf("  recal+Enter = recalibrate the hand width (opens fully)\n");
     printf("  m+Enter = back to the startup menu\n");
+    printf("  w+Enter = save this pose as q_init (writes params/Q_Init.txt)\n");
     printf("  s+Enter = start phase sequence from this pose\n");
     printf("  h+Enter = start hold from this pose\n");
     printf("  e+Enter = stop (prints this pose as a q_init_* case)\n");
@@ -1291,6 +1376,9 @@ bool runManualGuidanceStart(Parameters& params,
       graspTool(params, gripper);
     } else if (key == 'r') {
       recalibrateGripper(params, gripper, true);
+    } else if (key == 'w') {
+      const RobotState saved_state = robot.readOnce();
+      (void)saveGuidedPoseAsQInit(Map<const Vec7>(saved_state.q.data()));
     } else if (key == 's') {
       params.use_phase_sequence = true;
       printf("Selected: phase sequence from the guided pose.\n");

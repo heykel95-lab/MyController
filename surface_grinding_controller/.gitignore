@@ -1,6 +1,15 @@
+# Build output
+build/
+*.o
+
+# Program and tool binaries
 surface_grinding_controller
 tools/check_tool_offset
 tools/measure_plane
 tools/home_gripper
+tools/capture_plane_point
+tools/capture_tool_axis
+tools/inspect_experiment_config
+
+# Run logs
 *.csv
-*.o

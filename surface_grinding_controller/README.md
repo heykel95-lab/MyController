@@ -7,27 +7,43 @@ is studied.
 
 ## The files
 
-`main.cpp` is the program; one file per step of a run, and the rest are
-supporting modules.
+`run/` is the program, one file per step of a run; `modules/` is what those
+steps call.
 
-| File | Contents |
+| Folder / file | Contents |
 |------|----------|
-| `main.cpp` | Connects the robot, then loops: menu -> run -> report |
-| `run_gains.cpp` | Builds every stiffness and damping matrix from the parameters |
-| `run_loop.cpp` | One run: the phase machine and the 1 kHz control law |
-| `run_report.cpp` | The post-run printout and the CSV |
-| `control_math.cpp` | Mathematics: task frames, spatial gains, nullspace |
-| `runtime_io.cpp` | Menus, gripper actions, debug printing, CSV writing |
-| `config.cpp` | Reads `params/` into one `Parameters` struct |
-| `setup_report.cpp` | The one-shot report printed when set up ends |
+| `run/main.cpp` | Connects the robot, then loops: menu -> run -> report |
+| `run/run_gains.cpp` | Every stiffness and damping matrix, and the auto damping |
+| `run/run_loop.cpp` | One run: the phase machine and the 1 kHz control law |
+| `run/run_report.cpp` | The post-run printout and the CSV |
+| `modules/control_math.cpp` | Mathematics: task frames, gains, control law, nullspace |
+| `modules/runtime_io.cpp` | Menus, gripper actions, debug printing, CSV writing |
+| `modules/config.cpp` | Reads `params/` into one `Parameters` struct |
+| `modules/setup_report.cpp` | The one-shot report printed when set up ends |
 | `controller.h` | Shared types and all declarations |
 | `tools/*.cpp` | Read-only helpers, listed at the end |
-
-Reading it for the first time: `main.cpp` shows the shape of a session in one
-screen, then `run_loop.cpp` is where the control happens.
+| `params/*.txt` | Every tunable value, one topic per file |
+| `build/` | Object files. `make clean` removes it |
 
 `params/*.txt` holds every tunable value, one topic per file. Nothing is
 compiled in: change a number there, not in the source.
+
+```mermaid
+flowchart LR
+  P["params/*.txt"] --> C["config.cpp<br/>readParameters"]
+  C --> S["Parameters"]
+  S --> G["run_gains.cpp<br/>buildRunGains"]
+  S --> L["run_loop.cpp<br/>runControlLoop"]
+  G --> L
+  L -->|"1 kHz torque"| R(("robot"))
+  R -->|"state"| L
+  L --> W["run_report.cpp<br/>writeRunLogs"]
+  W --> CSV["*.csv"]
+```
+
+**Reading it for the first time:** `run/main.cpp` (114 lines) shows the shape
+of a session; `controller.h` shows every type and parameter; `run/run_loop.cpp`
+is where the control happens.
 
 ## Build and run
 
@@ -45,6 +61,7 @@ passes a phase gate.
 ```text
 s  go to q_init, then run the sequence
 h  go to q_init, then hold that pose
+t  hold with the set-up impedance, to test those gains
 g  go to q_init, then hand-guide; pick s or h afterwards
 q  go to q_init and inspect the posture, then choose again
 o  open the hand    c  grasp the tool    r  recalibrate the hand width
@@ -80,6 +97,15 @@ Hold (h)
   From hold, g+Enter hand-guides and p+Enter re-captures the pose.
   Tunes: hold, Nullspace.
 
+Set-up impedance hold (t)
+  The same hold, but commanding what phase 2 commands: setup_Kp/Dp/KR/DR,
+  and the coupled pole spring when use_coupled_stiffness = 1. There is no
+  push ramp -- it holds the captured pose, so the set-up spring can be
+  pushed by hand and measured on its own. Like a sequence run it takes the
+  nullspace mode from Nullspace.txt instead of asking, so the two cannot
+  drift apart.
+  Tunes: SetUp_Phase, Nullspace.
+
 Guiding (g)
   Compliant hand-guidance; the pose you leave becomes the start pose.
   Tunes: guidance.
@@ -87,6 +113,28 @@ Guiding (g)
 
 Every mode also reads `Run_Settings`, `Plane_Definition`, `Tool_Orientation`,
 `Tool_Geometry`, `Q_Init`, `Gripper_Action`, `Auto_Damping` and `safety`.
+
+The sequence is a state machine. Transitions are geometric or timed, never
+force-triggered:
+
+```mermaid
+stateDiagram-v2
+  [*] --> approach_orient: s
+  [*] --> hold: h
+  approach_orient --> approach_descend: after min time,<br/>axis error <= threshold
+  approach_descend --> gate_set_up: contact point<br/>at clearance height
+  approach_descend --> [*]: descend_max_distance<br/>reached first
+  gate_set_up --> set_up: Enter
+  set_up --> gate_grind: after min time,<br/>moment >= threshold,<br/>or timeout
+  gate_grind --> grind: Enter
+  grind --> [*]: e
+  hold --> manual_guide: g
+  manual_guide --> hold: p (re-capture)
+  hold --> [*]: e
+```
+
+The two gates are optional (`pause_before_set_up`, `pause_before_grind`); with
+them off the run passes straight through.
 
 ## Parameter files
 
@@ -189,9 +237,10 @@ both:      tau = -d_null * N_tau * dq + k_sigma * sign * N_tau * n
 comparing `sigma_min(q + alpha*n)` against `sigma_min(q - alpha*n)`; `alpha` is
 only the sampling step and does not scale the torque.
 
-Mode 1 uses `nullspace_damping`, mode 2 uses `nullspace_k_sigma`, mode 3 uses
-both — so the isolated terms and the combined response can be tuned
-independently and compared from the same hold pose.
+Each mode has its own gains: mode 1 uses `nullspace_damping_mode1`, mode 2
+uses `nullspace_k_sigma`, and mode 3 uses `nullspace_damping` together with
+that same `nullspace_k_sigma`. Mode 1's damping is separate because there it
+is the only nullspace torque, while in mode 3 it works against the sigma push.
 
 ### Sigma debug output
 

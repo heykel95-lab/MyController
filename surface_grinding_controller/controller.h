@@ -34,6 +34,10 @@
 
 #include "examples_common.h"
 
+// ====================================================================
+// Types and aliases
+// ====================================================================
+
 using Array6 = std::array<double, 6>;
 using Array7 = std::array<double, 7>;
 using Vec3 = Eigen::Vector3d;
@@ -75,6 +79,10 @@ enum class NullspaceMode {
   kDampingAndSigma = 3
 };
 
+// ====================================================================
+// Parameters -- everything params/*.txt can set
+// ====================================================================
+
 struct Parameters {
   // Robot connection, logging and terminal debug.
   std::string robot_ip = "172.16.0.2";
@@ -110,6 +118,10 @@ struct Parameters {
   // Run mode. Runtime-only: not read from the parameter files, because the
   // startup menu chooses sequence or hold on every run.
   bool use_phase_sequence = true;
+  // Runtime-only: the menu's t choice. Holds the captured pose with the
+  // set-up impedance instead of the hold gains -- the same spring phase 2
+  // commands, including the coupled pole when use_coupled_stiffness = 1.
+  bool hold_with_setup_gains = false;
   // 0 = skip the orient step and start the sequence at the descend step.
   bool use_approach_orient = true;
   bool use_manual_guidance_start = false;
@@ -219,6 +231,9 @@ struct Parameters {
   // Nullspace optimization.
   bool use_nullspace_optimization = true;
   NullspaceMode nullspace_mode = NullspaceMode::kDampingAndSigma;
+  // Mode 1 damps the nullspace on its own, so it is tuned separately from
+  // mode 3, where the damping works against the sigma push.
+  double nullspace_damping_mode1 = 1.0;
   double nullspace_damping = 1.0;
   double nullspace_k_sigma = 0.05;
   double nullspace_alpha = 0.03;
@@ -258,6 +273,10 @@ struct Parameters {
   double collision_force_acc = 80.0;
   double collision_force_nom = 80.0;
 };
+
+// ====================================================================
+// Logging and diagnostics
+// ====================================================================
 
 struct SigmaDiagnostics {
   bool samples_valid = false;
@@ -376,6 +395,10 @@ struct LogData {
   Vec7 tau_cmd;
 };
 
+// ====================================================================
+// Values passed between the modules
+// ====================================================================
+
 struct DesiredMotion {
   Vec3 p_d;
   Vec3 pdot_d;
@@ -415,6 +438,13 @@ struct SetUpReport {
   Mat3 KR = Mat3::Zero();
   Mat3 DR = Mat3::Zero();
 };
+
+// ====================================================================
+// Declarations: modules/
+// ====================================================================
+
+// Leading and trailing whitespace removed. Shared with the parameter parser.
+std::string trim(const std::string& input);
 
 Parameters readParameters(const std::vector<std::string>& filenames);
 
@@ -504,6 +534,10 @@ Mat3 makeToolOrientationForAlignmentTarget(
 
 Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_alignment_target);
 
+// ====================================================================
+// Run state -- one object per thing a run carries
+// ====================================================================
+
 // The keys the operator can press while a run is in progress. One object so
 // the control loop takes a single signals argument instead of seven atomics.
 struct KeyboardSignals {
@@ -515,6 +549,16 @@ struct KeyboardSignals {
   std::atomic<bool> gate_continue{false};
   // Starts parked so the first startup menu owns stdin alone.
   std::atomic<bool> menu_requested{true};
+};
+
+// Where the coupled spring's pole is measured from. Both the live and the
+// frozen-at-contact pair are carried so the wrench code can honour
+// coupled_pole_freeze_at_contact without reaching into the run state.
+struct ContactReference {
+  Vec3 tcp = Vec3::Zero();              // TCP now
+  Vec3 edge = Vec3::Zero();             // controlled contact point now
+  Vec3 tcp_at_contact = Vec3::Zero();   // TCP frozen at first contact
+  Vec3 edge_at_contact = Vec3::Zero();  // contact point frozen at first contact
 };
 
 // Every gain matrix a run uses, all derived from the parameters alone.
@@ -540,6 +584,24 @@ struct RunGains {
   Mat3 DR_pause = Mat3::Zero();
 };
 
+// Auto-damping is computed once per phase entry, not every cycle, and cached
+// here. The manual matrices in RunGains are both the starting values and the
+// fallback when the inertia estimate is unavailable.
+struct DampingCache {
+  bool approach_computed = false;
+  bool setup_computed = false;
+  bool hold_computed = false;
+  bool pause_computed = false;
+  Mat3 Dp_approach = Mat3::Zero();
+  Mat3 DR_approach = Mat3::Zero();
+  Mat3 Dp_setup = Mat3::Zero();
+  Mat3 DR_setup = Mat3::Zero();
+  Mat3 Dp_hold = Mat3::Zero();
+  Mat3 DR_hold = Mat3::Zero();
+  Mat3 Dp_pause = Mat3::Zero();
+  Mat3 DR_pause = Mat3::Zero();
+};
+
 // What one run leaves behind for the report and the CSV.
 struct RunResult {
   bool descend_failed = false;
@@ -556,6 +618,21 @@ void startKeyboardStopThread(const Parameters& params,
                              KeyboardSignals& signals);
 
 void configureCollisionBehavior(Robot& robot, const Parameters& params);
+
+// The commanded Cartesian wrench: a decoupled pair of 3x3 springs, or, during
+// set up with coupled stiffness on, one 6x6 spring moved to the TCP.
+//   dx = [position error; orientation error]
+//   dv = [velocity error; -omega]
+Vec6 computeSpringWrench(const Parameters& params,
+                         ControlPhase phase,
+                         const Mat3& Kp,
+                         const Mat3& Dp,
+                         const Mat3& KR,
+                         const Mat3& DR,
+                         const Mat3& R_alignment_target,
+                         const Vec6& dx,
+                         const Vec6& dv,
+                         const ContactReference& contact);
 
 Vec7 computeNullspaceTorque(
     const Parameters& params,
@@ -575,16 +652,39 @@ bool recalibrateGripper(const Parameters& params,
                         Gripper& gripper,
                         bool confirmation_already_received = false);
 
+// Writes the seven joint values into the saved_qinit block of
+// params/Q_Init.txt and points q_init_case at it. Returns false if the file
+// could not be rewritten; nothing else is touched.
+bool saveGuidedPoseAsQInit(const Vec7& q);
+
 // Returns false when the operator chose to quit instead of starting a run.
 bool askStartupRunMode(Parameters& params, Robot& robot,
                        const Model& model);
 
 bool performStartupGripperAction(const Parameters& params);
 
-// ---- the run, one file each ----
+// ====================================================================
+// Declarations: run/
+// ====================================================================
 
 // run_gains.cpp: all stiffness and damping matrices, from the parameters.
 RunGains buildRunGains(const Parameters& params);
+
+// run_gains.cpp: every cached damping matrix set back to its manual value.
+DampingCache manualDampingCache(const RunGains& gains);
+
+// run_gains.cpp: recompute the damping of whichever phase group just became
+// active, from the task-space inertia. Does nothing on later cycles of the
+// same phase.
+void updateAutoDamping(const Parameters& params,
+                       const RunGains& gains,
+                       const Model& model,
+                       const RobotState& state,
+                       const Mat6x7& J,
+                       ControlPhase phase,
+                       bool after_contact,
+                       bool pause_hold_active,
+                       DampingCache& damping);
 
 // run_loop.cpp: one complete run, from start pose to stop.
 RunResult runControlLoop(Parameters& params,

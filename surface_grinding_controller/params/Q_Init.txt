@@ -40,3 +40,13 @@ q_init_table_4 = -2.273434
 q_init_table_5 = -0.000397
 q_init_table_6 = 2.533846
 q_init_table_7 = 0.745537
+
+# saved_qinit -- written by w+Enter in guiding mode. Saving also sets
+# q_init_case above to saved_qinit, so the next run starts from it.
+q_init_saved_1 = -0.047771
+q_init_saved_2 = 0.315777
+q_init_saved_3 = -0.089546
+q_init_saved_4 = -2.143518
+q_init_saved_5 = 0.306679
+q_init_saved_6 = 2.434032
+q_init_saved_7 = 0.467459
