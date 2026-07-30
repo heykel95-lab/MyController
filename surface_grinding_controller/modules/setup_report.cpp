@@ -126,21 +126,54 @@ void reportSetUpResult(const Parameters& params,
   const Mat6x6 K_tcp = adjointTransformedGain(K_pole, r_c);
   const Mat6x6 D_tcp = adjointTransformedGain(D_pole, r_c);
 
-  printf("\n=== Commanded centre of compliance ===\n");
-  printf("lever convention: r_c = p_TCP - p_c\n");
-  printf("parameterization: %s\n",
-         params.coupled_use_direct_rc_surface
-             ? "direct [tangent1,tangent2,normal]"
-             : "legacy base-frame pole-from-edge");
-  printVec3Mm("  r_c base", r_c);
-  printVec3Mm("  r_c [t1,t2,n]", R_alignment_target.transpose() * r_c);
-  printVec3Mm("  pole_from_edge", pole - edge_ref);
+  // r_c = p_TCP - p_c, the lever the 6x6 spring is built about. The frame it
+  // was commanded in is the one worth reading; the other is the same vector.
+  const Vec3 r_c_surface = R_alignment_target.transpose() * r_c;
+  printf("\n=== Centre of compliance ===\n");
+  if (params.coupled_use_direct_rc_surface) {
+    printVec3Mm("  r_c = p_TCP - p_c [t1,t2,n]", r_c_surface);
+  } else {
+    printVec3Mm("  r_c = p_TCP - p_c [x,y,z]  ", r_c);
+    printVec3Mm("  from pole_from_edge        ", pole - edge_ref);
+  }
 
-  printf("\nK_TCP = Ad^T K_pole Ad  [rows fx..mz | cols tx..rz]:\n");
-  printSpatialGain6("  commanded", K_tcp);
-  printSpatialGainEigenvalues("  K_TCP", K_tcp);
+  // What the TCP actually feels after the shift. Translation is unchanged by
+  // the congruence; rotation picks up skew(r_c)^T Kp skew(r_c), so those
+  // entries are larger than the commanded KR.
+  const Vec3 k_trans = K_tcp.block<3, 3>(0, 0).diagonal();
+  const Vec3 k_rot = K_tcp.block<3, 3>(3, 3).diagonal();
+  const Vec3 d_trans = D_tcp.block<3, 3>(0, 0).diagonal();
+  const Vec3 d_rot = D_tcp.block<3, 3>(3, 3).diagonal();
+  printf("  K_TCP: translation [%.0f, %.0f, %.0f] N/m | "
+         "rotation [%.2f, %.2f, %.2f] Nm/rad\n",
+         k_trans(0), k_trans(1), k_trans(2), k_rot(0), k_rot(1), k_rot(2));
+  printf("         commanded KR was [%.2f, %.2f, %.2f]; the rest is the lever\n",
+         r.KR(0, 0), r.KR(1, 1), r.KR(2, 2));
+  printf("  D_TCP: translation [%.1f, %.1f, %.1f] Ns/m | "
+         "rotation [%.2f, %.2f, %.2f] Nms/rad\n",
+         d_trans(0), d_trans(1), d_trans(2), d_rot(0), d_rot(1), d_rot(2));
 
-  printf("\nD_TCP = Ad^T D_pole Ad:\n");
-  printSpatialGain6("  commanded", D_tcp);
-  printSpatialGainEigenvalues("  D_TCP", D_tcp);
+  // The lever turns force into moment: the largest off-diagonal entry says
+  // how strongly translation and rotation are coupled.
+  const double k_coupling = K_tcp.block<3, 3>(3, 0).cwiseAbs().maxCoeff();
+  const double d_coupling = D_tcp.block<3, 3>(3, 0).cwiseAbs().maxCoeff();
+  printf("  coupling: max |moment per unit translation| = %.1f Nm/m (K), "
+         "%.1f Nms/m (D)\n", k_coupling, d_coupling);
+
+  const Eigen::SelfAdjointEigenSolver<Mat6x6> eig_k(K_tcp);
+  const Eigen::SelfAdjointEigenSolver<Mat6x6> eig_d(D_tcp);
+  printf("  K_TCP eigenvalues %.2f .. %.0f | D_TCP %.2f .. %.0f%s\n",
+         eig_k.eigenvalues().minCoeff(), eig_k.eigenvalues().maxCoeff(),
+         eig_d.eigenvalues().minCoeff(), eig_d.eigenvalues().maxCoeff(),
+         (eig_k.eigenvalues().minCoeff() > 0.0 &&
+          eig_d.eigenvalues().minCoeff() >= -1e-8)
+             ? "  (both positive: valid springs)"
+             : "  *** NOT POSITIVE DEFINITE ***");
+
+  // The full spring, off-diagonals included: the upper-right and lower-left
+  // quadrants are the lever coupling that the diagonals above cannot show.
+  printf("\n");
+  printSpatialGain6("  K_TCP [N/m, Nm/rad | rows fx..mz, cols tx..rz]", K_tcp);
+  printf("\n");
+  printSpatialGain6("  D_TCP [Ns/m, Nms/rad]", D_tcp);
 }

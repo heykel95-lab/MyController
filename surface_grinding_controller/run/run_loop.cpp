@@ -12,7 +12,7 @@
 RunResult runControlLoop(Parameters& params,
                          Robot& robot,
                          const Model& model,
-                         const RunGains& gains,
+                         RunGains gains,  // by value: retuning rebuilds it
                          KeyboardSignals& signals) {
   RunResult result;
   // Named aliases so the loop below reads the same as the gain table.
@@ -270,7 +270,14 @@ RunResult runControlLoop(Parameters& params,
 
   printf("\n=== Run ===\n");
   printf("phase: %s\n", phaseName(phase));
-  if (phase == ControlPhase::kHold) {
+  // The t mode is about the set-up spring; the nullspace belongs to the plain
+  // hold, where it is what is being studied. The set-up block waits until the
+  // auto damping has been fitted, so it can print the values in use.
+  bool setup_law_printed = false;
+  // kManualGuide is the sentinel: it never prints an intro of its own.
+  ControlPhase intro_printed_for = ControlPhase::kManualGuide;
+  bool gate_block_printed = false;
+  if (phase == ControlPhase::kHold && !params.hold_with_setup_gains) {
     printNullspaceLaw(params);
   }
 
@@ -490,7 +497,8 @@ RunResult runControlLoop(Parameters& params,
             std::max(-1.0, std::min(1.0, tool_axis_current.dot(tool_axis_target))));
         const double phase_time = time - phase_start_time;
 
-        if (params.debug_period > 0.0 && time >= next_debug_time) {
+        if (params.debug_period > 0.0 && time >= next_debug_time &&
+            intro_printed_for == phase) {
           const Vec3 e_R_target = applyRotationalAxisMask(
               params, orientationError(R_EE, R_d_alignment_target), R_alignment_target);
           printApproachOrientDebug(phase_time,
@@ -564,7 +572,8 @@ RunResult runControlLoop(Parameters& params,
           }
         }
 
-        if (params.debug_period > 0.0 && time >= next_debug_time && !gate_blocking) {
+        if (params.debug_period > 0.0 && time >= next_debug_time &&
+            !gate_blocking && intro_printed_for == phase) {
           printApproachDescendDebug(phase_time,
                                     1000.0 * distance,
                                     1000.0 * height_above_surface,
@@ -629,7 +638,8 @@ RunResult runControlLoop(Parameters& params,
             edge_from_tcp.cross(external_force - contact_force_bias);
 
         const bool waiting_at_gate = gate_grind_armed && !gate_grind_passed;
-        if (params.debug_period > 0.0 && time >= next_debug_time && !waiting_at_gate) {
+        if (params.debug_period > 0.0 && time >= next_debug_time &&
+            !waiting_at_gate && intro_printed_for == phase) {
           // tip = passive rotation away from the contact orientation.
           printSetUpDebug(phase_time,
                           (180.0 / M_PI) * orientationError(R_EE, R_contact_start).norm(),
@@ -740,7 +750,8 @@ RunResult runControlLoop(Parameters& params,
         applyRotationalAxisMask(params, orientationError(R_EE, R_d_used), R_alignment_target);
 
     if (phase == ControlPhase::kHold && params.print_hold_debug &&
-        params.debug_period > 0.0 && time >= next_debug_time) {
+        params.debug_period > 0.0 && time >= next_debug_time &&
+        intro_printed_for == phase) {
       printHoldDebug(time,
                      (external_force - contact_force_bias).norm(),
                      1000.0 * e_p.norm(),
@@ -822,7 +833,7 @@ RunResult runControlLoop(Parameters& params,
 
     if (phase == ControlPhase::kGrind && params.grind_sweep_enabled &&
         params.print_grind_debug && params.debug_period > 0.0 &&
-        time >= next_debug_time) {
+        time >= next_debug_time && intro_printed_for == phase) {
       // sweep = target offset, track_err = position error, press = force.
       const Vec3 grind_tangent = (params.grind_axis == 2)
                                      ? Vec3(R_alignment_target.col(1))
@@ -853,7 +864,7 @@ RunResult runControlLoop(Parameters& params,
     const int mode_request = signals.nullspace_mode_request.exchange(-1);
     if (std::isfinite(damping_request) || std::isfinite(k_sigma_request) ||
         std::isfinite(alpha_deg_request) || mode_request >= 0) {
-      if (phase == ControlPhase::kHold) {
+      if (phase == ControlPhase::kHold && !params.hold_with_setup_gains) {
         if (std::isfinite(damping_request)) {
           params.nullspace_damping = damping_request;
           printf("nullspace damping -> %.3f Nms/rad\n", damping_request);
@@ -874,11 +885,82 @@ RunResult runControlLoop(Parameters& params,
               params.nullspace_mode != NullspaceMode::kOff;
         }
         printNullspaceLaw(params);
+      } else if (phase == ControlPhase::kHold) {
+        printf("Ignored: the t hold does not tune the nullspace.\n");
       } else {
         printf("Ignored: nullspace tuning is only accepted while holding.\n");
       }
     }
 
+    // Set-up impedance, retuned while the t mode holds. The gain matrices are
+    // built once per run, so they are rebuilt here, and the cached damping is
+    // dropped so the next cycle refits it to the new stiffness.
+    bool setup_impedance_changed = false;
+    for (int i = 0; i < 3; ++i) {
+      const double kp = signals.setup_kp_request[i].exchange(
+          std::numeric_limits<double>::quiet_NaN());
+      const double kr = signals.setup_kr_request[i].exchange(
+          std::numeric_limits<double>::quiet_NaN());
+      const double rc_mm = signals.setup_rc_mm_request[i].exchange(
+          std::numeric_limits<double>::quiet_NaN());
+      if (!std::isfinite(kp) && !std::isfinite(kr) && !std::isfinite(rc_mm)) {
+        continue;
+      }
+      if (phase != ControlPhase::kHold || !params.hold_with_setup_gains) {
+        printf("Ignored: the set-up impedance is only tunable in the t hold.\n");
+        continue;
+      }
+      if (std::isfinite(kp) && kp > 0.0) {
+        if (params.setup_translation_surface_frame) {
+          params.setup_Kp_surface_diag(i) = kp;
+        } else {
+          params.setup_Kp_diag(i) = kp;
+        }
+        setup_impedance_changed = true;
+      }
+      if (std::isfinite(kr) && kr > 0.0) {
+        params.setup_KR_diag(i) = kr;
+        setup_impedance_changed = true;
+      }
+      if (std::isfinite(rc_mm)) {
+        params.coupled_rc_surface(i) = 0.001 * rc_mm;
+        setup_impedance_changed = true;
+      }
+    }
+    if (setup_impedance_changed) {
+      gains = buildRunGains(params);
+      damping = manualDampingCache(gains);
+      setup_law_printed = false;  // reprinted with the new gains
+    }
+    // The gate's stiff lock gets the same treatment as a phase: one block on
+    // its first cycle.
+    if (pause_hold_active && !gate_block_printed) {
+      printGateHold(params, damping);
+      gate_block_printed = true;
+    }
+    if (!pause_hold_active) {
+      gate_block_printed = false;
+    }
+
+    // One intro per phase, on its first cycle. It sits after
+    // updateAutoDamping, so the damping it reports is already fitted: no
+    // waiting and no timing logic are involved.
+    if (intro_printed_for != phase) {
+      printPhaseIntro(params, damping, phase);
+      intro_printed_for = phase;
+    }
+
+    const bool wants_setup_block =
+        phase == ControlPhase::kSetUp ||
+        (phase == ControlPhase::kHold && params.hold_with_setup_gains);
+    if (wants_setup_block && !setup_law_printed) {
+      printSetUpImpedanceLaw(params, damping,
+                             phase == ControlPhase::kHold);
+      setup_law_printed = true;
+    }
+    if (!wants_setup_block) {
+      setup_law_printed = false;  // print it again on the next entry
+    }
     // nullspace_mode controls whether this is active for the whole sequence.
     SigmaDiagnostics sigma_diagnostics;
     const Vec7 tau_nullspace =
@@ -987,6 +1069,7 @@ RunResult runControlLoop(Parameters& params,
         debug_row.sigma = sigma_diagnostics;
         debug_row.tau_task_norm = tau_task.norm();
         debug_row.tau_nullspace_norm = tau_nullspace.norm();
+        debug_row.nullspace_damping = params.nullspace_damping;
         debug_row.tau_cmd_norm = tau_cmd.norm();
         debug_row.peak_nullspace_speed =
             peak_sigma_nullspace_speed;
@@ -1048,6 +1131,7 @@ RunResult runControlLoop(Parameters& params,
       row.push = push_log;
       row.sigma = sigma_diagnostics;
       row.tau_nullspace_norm = tau_nullspace.norm();
+      row.nullspace_damping = params.nullspace_damping;
       row.tau_cmd = tau_cmd;
 
       log_write_index = (log_write_index + 1) % max_log_rows;
@@ -1095,6 +1179,7 @@ RunResult runControlLoop(Parameters& params,
         stop_row.sigma = sigma_diagnostics;
         stop_row.tau_task_norm = tau_task.norm();
         stop_row.tau_nullspace_norm = tau_nullspace.norm();
+        stop_row.nullspace_damping = params.nullspace_damping;
         stop_row.tau_cmd_norm = tau_cmd.norm();
         stop_row.peak_nullspace_speed =
             std::max(peak_sigma_nullspace_speed,

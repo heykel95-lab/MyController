@@ -7,12 +7,12 @@ is studied.
 
 ## The files
 
-`run/` is the program, one file per step of a run; `modules/` is what those
-steps call.
+`main.cpp` is the entry point; `run/` is what one run does, one file per step;
+`modules/` is what those steps call.
 
 | Folder / file | Contents |
 |------|----------|
-| `run/main.cpp` | Connects the robot, then loops: menu -> run -> report |
+| `main.cpp` | Connects the robot, then loops: menu -> run -> report |
 | `run/run_gains.cpp` | Every stiffness and damping matrix, and the auto damping |
 | `run/run_loop.cpp` | One run: the phase machine and the 1 kHz control law |
 | `run/run_report.cpp` | The post-run printout and the CSV |
@@ -24,6 +24,7 @@ steps call.
 | `tools/*.cpp` | Read-only helpers, listed at the end |
 | `params/*.txt` | Every tunable value, one topic per file |
 | `build/` | Object files. `make clean` removes it |
+| `logs/` | The CSVs a run writes. Created on the first write |
 
 `params/*.txt` holds every tunable value, one topic per file. Nothing is
 compiled in: change a number there, not in the source.
@@ -106,7 +107,8 @@ Set-up impedance hold (t)
   push ramp -- it holds the captured pose, so the set-up spring can be
   pushed by hand and measured on its own. Like a sequence run it takes the
   nullspace mode from Nullspace.txt instead of asking, so the two cannot
-  drift apart.
+  drift apart. While it holds, "kp3 900" [N/m], "kr1 8" [Nm/rad] and
+  "r1 -40" (the pole, in mm) retune the spring and rebuild it in place.
   Tunes: SetUp_Phase, Nullspace.
 
 Guiding (g)

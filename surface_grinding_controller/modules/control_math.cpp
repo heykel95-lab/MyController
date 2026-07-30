@@ -491,7 +491,7 @@ bool solveStandoffPosture(const Model& model,
   return false;
 }
 
-void startKeyboardStopThread(const Parameters& params,
+void startKeyboardStopThread(const Parameters& /*params*/,
                              KeyboardSignals& signals) {
   std::atomic<bool>& stop_requested = signals.stop_requested;
   std::atomic<bool>& proceed_requested = signals.proceed_requested;
@@ -502,16 +502,9 @@ void startKeyboardStopThread(const Parameters& params,
   std::atomic<bool>& gate_continue = signals.gate_continue;
   std::atomic<bool>& menu_requested = signals.menu_requested;
 
-  printf("Press e+Enter to stop the controller, or m+Enter for the menu.\n");
-  if (params.use_manual_guidance_start) {
-    printf("During startup guidance: use s+Enter for sequence or h+Enter for hold.\n");
-  }
-  printf("During hold: press g+Enter to hand-guide the tool, then p+Enter to recapture and resume hold.\n");
-  printf("During hold: 'd 3.5' damping, 'k 1.2' sigma push, 'a 5' probe alpha [deg],\n");
-  printf("             0/1/2/3 switches the nullspace mode.\n");
-  if (params.experiment_duration <= 0.0) {
-    printf("experiment_duration <= 0: running indefinitely until e + Enter.\n");
-  }
+  // One line only. What can be typed in a given mode is printed by that
+  // mode's own block, where it is in context.
+  printf("keys: e stop | m menu | g hand-guide\n");
 
   std::thread keyboard_thread([&signals, &stop_requested, &proceed_requested,
                                &guide_requested, &guidance_menu_key,
@@ -527,6 +520,30 @@ void startKeyboardStopThread(const Parameters& params,
       if (!std::getline(std::cin, line)) {
         break;
       }
+      // Set-up impedance for the t mode: "kp2 1500", "kr3 40", "r1 -20".
+      // Checked before the single-letter keys, which would otherwise swallow
+      // the leading k.
+      {
+        int index = 0;
+        double value = 0.0;
+        std::array<std::atomic<double>, 3>* target = nullptr;
+        if (std::sscanf(line.c_str(), "kp%d %lf", &index, &value) == 2) {
+          target = &signals.setup_kp_request;
+        } else if (std::sscanf(line.c_str(), "kr%d %lf", &index, &value) == 2) {
+          target = &signals.setup_kr_request;
+        } else if (std::sscanf(line.c_str(), "r%d %lf", &index, &value) == 2) {
+          target = &signals.setup_rc_mm_request;
+        }
+        if (target != nullptr) {
+          if (index >= 1 && index <= 3 && std::isfinite(value)) {
+            (*target)[index - 1].store(value);
+          } else {
+            printf("Index must be 1, 2 or 3 and the value finite.\n");
+          }
+          continue;
+        }
+      }
+
       // "d <value>" and "k <value>" tune the nullspace live while holding.
       // Checked before the single-letter keys so a bare d or k still falls
       // through to "unknown".
@@ -601,12 +618,11 @@ void startKeyboardStopThread(const Parameters& params,
 void configureCollisionBehavior(Robot& robot, const Parameters& params) {
   setDefaultBehavior(robot);
 
+  // Silent in the normal case; the surprising one is worth a line.
   if (!params.use_custom_collision_behavior) {
-    printf("Collision: default thresholds.\n");
+    printf("Collision: Franka default thresholds (safety.txt is off).\n");
     return;
   }
-
-  printf("Collision: custom thresholds.\n");
 
   const Array7 collision_torque_acc = filledArray7(params.collision_torque_acc);
   const Array7 collision_torque_nom = filledArray7(params.collision_torque_nom);

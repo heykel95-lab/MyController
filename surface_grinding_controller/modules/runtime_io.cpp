@@ -6,6 +6,10 @@
 // control law lives here.
 #include "controller.h"
 
+#include <cerrno>
+#include <cstring>
+#include <sys/stat.h>
+
 // ====================================================================
 // CSV logging
 // ====================================================================
@@ -56,9 +60,27 @@ const char* sigmaDebugEventName(SigmaDebugEvent event) {
 
 }  // namespace
 
+namespace {
+
+// Creates the directory a log path points into, so csv_file_name can carry a
+// folder without every caller having to make it first.
+void ensureParentDirectory(const std::string& path) {
+  const std::size_t slash = path.find_last_of('/');
+  if (slash == std::string::npos || slash == 0) {
+    return;
+  }
+  const std::string dir = path.substr(0, slash);
+  if (mkdir(dir.c_str(), 0755) != 0 && errno != EEXIST) {
+    fprintf(stderr, "Could not create %s: %s\n", dir.c_str(), strerror(errno));
+  }
+}
+
+}  // namespace
+
 void writeLogToCsv(
     const std::vector<LogData>& log_data,
     const std::string& csv_file_name) {
+  ensureParentDirectory(csv_file_name);
   std::ofstream log_file(csv_file_name);
 
   log_file << "time,phase,"
@@ -100,7 +122,7 @@ void writeLogToCsv(
            << "sigma_dominant_joint,sigma_dominant_fraction,"
            << "nullspace_velocity_dominant_joint,"
            << "nullspace_velocity_dominant_fraction,sigma_Jn_norm,"
-           << "tau_nullspace_norm,"
+           << "tau_nullspace_norm,nullspace_damping,"
            << "tau_cmd_1,tau_cmd_2,tau_cmd_3,tau_cmd_4,tau_cmd_5,tau_cmd_6,tau_cmd_7"
            << "\n";
 
@@ -154,6 +176,7 @@ void writeLogToCsv(
              << row.sigma.dominant_velocity_fraction << ","
              << row.sigma.jacobian_null_residual << ","
              << row.tau_nullspace_norm << ","
+             << row.nullspace_damping << ","
              << row.tau_cmd(0) << "," << row.tau_cmd(1) << ","
              << row.tau_cmd(2) << "," << row.tau_cmd(3) << ","
              << row.tau_cmd(4) << "," << row.tau_cmd(5) << ","
@@ -165,6 +188,7 @@ void writeLogToCsv(
 bool writeSigmaDebugToCsv(
     const std::vector<SigmaDebugRow>& debug_data,
     const std::string& csv_file_name) {
+  ensureParentDirectory(csv_file_name);
   std::ofstream out(csv_file_name);
   if (!out) {
     fprintf(stderr, "Could not open sigma debug CSV: %s\n",
@@ -190,6 +214,7 @@ bool writeSigmaDebugToCsv(
       << "cartesian_speed_mm_s,angular_speed_deg_s,"
       << "command_force_norm_N,command_moment_norm_Nm,"
       << "tau_task_norm_Nm,tau_nullspace_norm_Nm,tau_cmd_norm_Nm,"
+      << "nullspace_damping_Nms_rad,"
       << "external_force_delta_norm_N,"
       << "external_moment_delta_norm_Nm,"
       << "external_joint_torque_delta_norm_Nm,"
@@ -311,6 +336,7 @@ bool writeSigmaDebugToCsv(
         << row.tau_task_norm << ","
         << row.tau_nullspace_norm << ","
         << row.tau_cmd_norm << ","
+        << row.nullspace_damping << ","
         << row.external_force_delta.norm() << ","
         << row.external_moment_delta.norm() << ","
         << row.external_joint_torque_delta.norm() << ","
@@ -461,6 +487,68 @@ void printJointStartEndTableDeg(const Vec7& q_start, const Vec7& q_final) {
   }
 }
 
+void printSetUpImpedanceLaw(const Parameters& params,
+                            const DampingCache& damping,
+                            bool tunable) {
+  const bool surface = params.setup_translation_surface_frame;
+  const Vec3& kp = surface ? params.setup_Kp_surface_diag : params.setup_Kp_diag;
+  printf("\n--- set-up impedance ---\n");
+  if (params.use_coupled_stiffness) {
+    printf("  wrench = K_TCP*dx + D_TCP*dv, K_TCP = Ad(r_c)^T*blkdiag(Kp,KR)*Ad(r_c)\n");
+  } else {
+    printf("  f = Kp*e_p + Dp*de,   m = KR*e_R + DR*dw   (decoupled)\n");
+  }
+  const Vec3& dp = surface ? params.setup_Dp_surface_diag : params.setup_Dp_diag;
+  const char* frame = surface ? "[t1,t2,n]" : "[x,y,z]  ";
+  printf("  Kp %s  = [%8.1f, %8.1f, %8.1f] N/m\n",
+         frame, kp(0), kp(1), kp(2));
+  if (!params.setup_auto_damping) {
+    printf("  Dp %s  = [%8.1f, %8.1f, %8.1f] Ns/m\n",
+           frame, dp(0), dp(1), dp(2));
+  } else if (damping.setup_damping_valid) {
+    printf("  Dp %s  = [%8.1f, %8.1f, %8.1f] Ns/m   auto\n",
+           frame, damping.setup_Dp_used(0), damping.setup_Dp_used(1),
+           damping.setup_Dp_used(2));
+  } else {
+    printf("  Dp %s  = auto, refit at the first cycle\n", frame);
+  }
+  printf("  KR [t1,t2,n]  = [%8.1f, %8.1f, %8.1f] Nm/rad\n",
+         params.setup_KR_diag(0), params.setup_KR_diag(1),
+         params.setup_KR_diag(2));
+  if (!params.setup_auto_damping) {
+    printf("  DR [t1,t2,n]  = [%8.1f, %8.1f, %8.1f] Nms/rad\n",
+           params.setup_DR_diag(0), params.setup_DR_diag(1),
+           params.setup_DR_diag(2));
+  } else if (damping.setup_damping_valid) {
+    printf("  DR [t1,t2,n]  = [%8.1f, %8.1f, %8.1f] Nms/rad   auto\n",
+           damping.setup_DR_used(0), damping.setup_DR_used(1),
+           damping.setup_DR_used(2));
+  } else {
+    printf("  DR [t1,t2,n]  = auto, refit at the first cycle\n");
+  }
+  if (params.use_coupled_stiffness && params.coupled_use_direct_rc_surface) {
+    printf("  r_c [t1,t2,n] = [%8.1f, %8.1f, %8.1f] mm   centre of compliance\n",
+           1000.0 * params.coupled_rc_surface(0),
+           1000.0 * params.coupled_rc_surface(1),
+           1000.0 * params.coupled_rc_surface(2));
+  } else if (params.use_coupled_stiffness &&
+             params.coupled_pole_freeze_at_contact) {
+    // Legacy convention, frozen: with no contact yet the reference and the TCP
+    // coincide, so r_c = -coupled_pole_from_edge in the base frame.
+    printf("  r_c [x,y,z]   = [%8.1f, %8.1f, %8.1f] mm   centre of compliance\n",
+           -1000.0 * params.coupled_pole_from_edge(0),
+           -1000.0 * params.coupled_pole_from_edge(1),
+           -1000.0 * params.coupled_pole_from_edge(2));
+  } else if (params.use_coupled_stiffness) {
+    printf("  r_c           = tracks the live contact edge each cycle\n"
+           "                  (legacy pole_from_edge, not frozen)\n");
+  }
+  if (tunable) {
+    printf("\n  To command Kp, KR and the centre of compliance, type:\n");
+    printf("    kp1..kp3 <N/m>    kr1..kr3 <Nm/rad>    r1..r3 <mm>\n");
+  }
+}
+
 void printNullspaceLaw(const Parameters& params) {
   printf("\n--- nullspace: %s ---\n",
          nullspaceModeName(params.nullspace_mode));
@@ -497,116 +585,91 @@ void printNullspaceLaw(const Parameters& params) {
   printf("  type 0/1/2/3 to switch mode.\n");
 }
 
-void printParameters(const Parameters& params) {
-  printf("\n=== Setup ===\n");
-  printf("run: %s | approach_orient: %s | nullspace: %s\n",
-         params.use_phase_sequence ? "phase sequence"
-         : params.hold_with_setup_gains ? "hold (set-up impedance)"
-                                        : "hold",
-         params.use_approach_orient ? "on" : "off",
-         nullspaceModeName(params.nullspace_mode));
-  const bool nullspace_damping_active =
-      params.nullspace_mode == NullspaceMode::kDampingOnly ||
-      params.nullspace_mode == NullspaceMode::kDampingAndSigma;
-  const bool nullspace_sigma_active =
-      params.nullspace_mode == NullspaceMode::kSigmaOnly ||
-      params.nullspace_mode == NullspaceMode::kDampingAndSigma;
-  printf("nullspace parameters: d_null=%.3f%s | k_sigma=%.3f Nm%s | "
-         "alpha=%.4f rad\n",
-         params.nullspace_damping,
-         nullspace_damping_active ? "" : " (inactive)",
-         params.nullspace_k_sigma,
-         nullspace_sigma_active ? "" : " (inactive)",
-         params.nullspace_alpha);
-  printf("hold [xyz]: Kp=[%.1f, %.1f, %.1f] N/m | "
-         "KR=[%.1f, %.1f, %.1f] Nm/rad | damping=%s",
-         params.hold_Kp_diag(0), params.hold_Kp_diag(1), params.hold_Kp_diag(2),
-         params.hold_KR_diag(0), params.hold_KR_diag(1), params.hold_KR_diag(2),
-         params.hold_auto_damping ? "auto translation+rotation" : "manual");
-  if (params.hold_auto_damping) {
-    if (params.hold_auto_match_manual_damping) {
-      printf(" (factor fitted online toward Dp=[%.1f, %.1f, %.1f] Ns/m)\n",
-             params.hold_Dp_diag(0), params.hold_Dp_diag(1),
-             params.hold_Dp_diag(2));
-    } else {
-      printf(" (factor %.2f)\n", params.hold_auto_damping_factor);
-    }
-  } else {
-    printf(" (Dp=[%.1f, %.1f, %.1f] Ns/m, DR=[%.1f, %.1f, %.1f] Nms/rad)\n",
-           params.hold_Dp_diag(0), params.hold_Dp_diag(1),
-           params.hold_Dp_diag(2), params.hold_DR_diag(0),
-           params.hold_DR_diag(1), params.hold_DR_diag(2));
+void printPhaseIntro(const Parameters& params,
+                     const DampingCache& damping,
+                     ControlPhase phase) {
+  switch (phase) {
+    case ControlPhase::kApproachOrient:
+    case ControlPhase::kApproachDescend:
+      printf("  Kp=[%.0f, %.0f, %.0f] N/m  KR=[%.0f, %.0f, %.0f] Nm/rad  [t1,t2,n]\n",
+             params.approach_Kp_diag(0), params.approach_Kp_diag(1),
+             params.approach_Kp_diag(2), params.approach_KR_diag(0),
+             params.approach_KR_diag(1), params.approach_KR_diag(2));
+      if (params.approach_auto_damping && damping.approach_damping_valid) {
+        printf("  Dp=[%.1f, %.1f, %.1f] Ns/m  DR=[%.2f, %.2f, %.2f] Nms/rad"
+               "  auto (factor %.2f)\n",
+               damping.approach_Dp_used(0), damping.approach_Dp_used(1),
+               damping.approach_Dp_used(2), damping.approach_DR_used(0),
+               damping.approach_DR_used(1), damping.approach_DR_used(2),
+               params.approach_auto_damping_factor);
+      } else if (params.approach_auto_damping) {
+        printf("  Dp, DR = auto (factor %.2f), fitted at the first cycle\n",
+               params.approach_auto_damping_factor);
+      } else {
+        printf("  Dp=[%.0f, %.0f, %.0f] Ns/m  DR=[%.1f, %.1f, %.1f] Nms/rad\n",
+               params.approach_Dp_diag(0), params.approach_Dp_diag(1),
+               params.approach_Dp_diag(2), params.approach_DR_diag(0),
+               params.approach_DR_diag(1), params.approach_DR_diag(2));
+      }
+      if (phase == ControlPhase::kApproachDescend) {
+        printf("  descend to %.0f mm clearance at %.3f m/s\n",
+               1000.0 * params.descend_surface_clearance, params.descend_speed);
+      }
+      break;
+    case ControlPhase::kGrind:
+      if (params.grind_sweep_enabled) {
+        printf("  sweep along tangent%d, %.0f mm at %.2f Hz. Impedance as set up.\n",
+               params.grind_axis, 1000.0 * params.grind_amplitude_m,
+               params.grind_frequency_hz);
+      } else {
+        printf("  free-slide press hold. Impedance as set up.\n");
+      }
+      break;
+    case ControlPhase::kHold:
+      if (params.hold_with_setup_gains) {
+        break;  // the set-up impedance block covers it
+      }
+      printf("  Kp=[%.0f, %.0f, %.0f] N/m  KR=[%.0f, %.0f, %.0f] Nm/rad  [x,y,z]\n",
+             params.hold_Kp_diag(0), params.hold_Kp_diag(1),
+             params.hold_Kp_diag(2), params.hold_KR_diag(0),
+             params.hold_KR_diag(1), params.hold_KR_diag(2));
+      if (params.hold_auto_damping && damping.hold_damping_valid) {
+        printf("  Dp=[%.1f, %.1f, %.1f] Ns/m  DR=[%.2f, %.2f, %.2f] Nms/rad  auto\n",
+               damping.hold_Dp_used(0), damping.hold_Dp_used(1),
+               damping.hold_Dp_used(2), damping.hold_DR_used(0),
+               damping.hold_DR_used(1), damping.hold_DR_used(2));
+      } else if (!params.hold_auto_damping) {
+        printf("  Dp=[%.0f, %.0f, %.0f] Ns/m  DR=[%.1f, %.1f, %.1f] Nms/rad\n",
+               params.hold_Dp_diag(0), params.hold_Dp_diag(1),
+               params.hold_Dp_diag(2), params.hold_DR_diag(0),
+               params.hold_DR_diag(1), params.hold_DR_diag(2));
+      }
+      break;
+    case ControlPhase::kSetUp:
+    case ControlPhase::kManualGuide:
+      break;  // these print their own block
   }
-  printf("manual_guidance_start: %s | manual_damping=%.2f\n",
-         params.use_manual_guidance_start ? "on" : "off",
-         params.manual_guidance_damping);
-  printf("descend: clearance=%.1f mm | speed=%.3f m/s | max_distance=%.0f mm\n",
-         1000.0 * params.descend_surface_clearance,
-         params.descend_speed,
-         1000.0 * params.descend_max_distance);
-  const double nominal_setup_distance =
-      std::abs(params.setup_push_end + params.descend_surface_clearance);
-  const double nominal_setup_ramp_time =
-      (std::abs(params.setup_push_speed) > 1e-12)
-          ? nominal_setup_distance / std::abs(params.setup_push_speed)
-          : 0.0;
-  printf("alignment push: start=captured | end=%+.0f mm | speed=%.3f m/s | "
-         "ramp_time~=%.1f s | timeout=%.1f s | moment_threshold=%.1f Nm\n",
-         1000.0 * params.setup_push_end,
-         std::abs(params.setup_push_speed),
-         nominal_setup_ramp_time,
-         params.setup_timeout,
-         params.setup_moment_threshold);
-  if (params.setup_timeout > 0.0 &&
-      nominal_setup_ramp_time > params.setup_timeout) {
-    printf("  note: alignment timeout occurs before the configured push end "
-           "(unless the captured start is closer).\n");
+}
+
+void printGateHold(const Parameters& params, const DampingCache& damping) {
+  printf("  gate hold: Kp=[%.0f, %.0f, %.0f] N/m [x,y,z]  "
+         "KR=[%.0f, %.0f, %.0f] Nm/rad [t1,t2,n]\n",
+         params.pause_hold_Kp_diag(0), params.pause_hold_Kp_diag(1),
+         params.pause_hold_Kp_diag(2), params.pause_hold_KR_diag(0),
+         params.pause_hold_KR_diag(1), params.pause_hold_KR_diag(2));
+  if (params.pause_hold_auto_damping && damping.pause_damping_valid) {
+    printf("             Dp=[%.1f, %.1f, %.1f] Ns/m  "
+           "DR=[%.2f, %.2f, %.2f] Nms/rad  auto\n",
+           damping.pause_Dp_used(0), damping.pause_Dp_used(1),
+           damping.pause_Dp_used(2), damping.pause_DR_used(0),
+           damping.pause_DR_used(1), damping.pause_DR_used(2));
+  } else if (!params.pause_hold_auto_damping) {
+    printf("             Dp=[%.0f, %.0f, %.0f] Ns/m  "
+           "DR=[%.1f, %.1f, %.1f] Nms/rad\n",
+           params.pause_hold_Dp_diag(0), params.pause_hold_Dp_diag(1),
+           params.pause_hold_Dp_diag(2), params.pause_hold_DR_diag(0),
+           params.pause_hold_DR_diag(1), params.pause_hold_DR_diag(2));
   }
-  printf("grind: %s | axis=tangent%d | amplitude=%.0f mm | frequency=%.2f Hz\n",
-         params.grind_sweep_enabled ? "sweep" : "free-slide hold",
-         params.grind_axis == 2 ? 2 : 1,
-         1000.0 * params.grind_amplitude_m,
-         params.grind_frequency_hz);
-  printf("set-up translation: frame=%s | Kp=[%.1f, %.1f, %.1f] N/m\n",
-         params.setup_translation_surface_frame ? "surface [t1,t2,n]" : "base [x,y,z]",
-         params.setup_translation_surface_frame ? params.setup_Kp_surface_diag(0)
-                                                : params.setup_Kp_diag(0),
-         params.setup_translation_surface_frame ? params.setup_Kp_surface_diag(1)
-                                                : params.setup_Kp_diag(1),
-         params.setup_translation_surface_frame ? params.setup_Kp_surface_diag(2)
-                                                : params.setup_Kp_diag(2));
-  printf("coupled stiffness: apply=%s | pole=%s\n",
-         params.use_coupled_stiffness ? "on" : "off",
-         params.coupled_use_block_diagonal
-             ? "block-diagonal (no coupling)"
-             : (params.coupled_pole_manual ? "commanded" : "invalid"));
-  if (params.coupled_pole_manual && params.coupled_use_direct_rc_surface) {
-    printf("  r_c=p_TCP-p_c [t1,t2,n] = [%+.1f, %+.1f, %+.1f] mm\n",
-           1000.0 * params.coupled_rc_surface(0),
-           1000.0 * params.coupled_rc_surface(1),
-           1000.0 * params.coupled_rc_surface(2));
-  }
-  printf("gates: pause_before_set_up=%s | pause_auto_damping=%s | "
-         "pause_before_grind=%s | debug_period=%.2f s\n",
-         params.pause_before_set_up ? "on" : "off",
-         params.pause_hold_auto_damping ? "on" : "off",
-         params.pause_before_grind ? "on" : "off",
-         params.debug_period);
-  printf("surface-plane normal=[%+.3f, %+.3f, %+.3f] | tilt a(x)=%.1f deg, b(y)=%.1f deg (from angles)\n",
-         params.alignment_target_normal(0),
-         params.alignment_target_normal(1),
-         params.alignment_target_normal(2),
-         params.alignment_target_tilt_angle_deg,
-         params.alignment_target_tilt_angle_y_deg);
-  printf("tool-axis command offset: tangent1=%+.1f deg | tangent2=%+.1f deg\n",
-         params.tool_target_offset_tangent1_deg,
-         params.tool_target_offset_tangent2_deg);
-  printf("tool face: %.0f x %.0f mm | center offset EE=[%+.1f, %+.1f, %+.1f] mm\n",
-         2000.0 * params.tool_contact_half_width_ee.norm(),
-         2000.0 * params.tool_contact_half_length_ee.norm(),
-         1000.0 * params.tool_contact_face_center_ee(0),
-         1000.0 * params.tool_contact_face_center_ee(1),
-         1000.0 * params.tool_contact_face_center_ee(2));
 }
 
 void printContactEdgeDebug(const Vec3& offset_ee,
@@ -1142,7 +1205,15 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
   bool q_init_reached = false;
 
   const auto move_to_q_init = [&]() {
-    printf("Moving to q_init...\n");
+    const Vec7 q_init = Map<const Vec7>(params.q_init.data());
+    printf("Moving to q_init (%s)\n", params.q_init_case.c_str());
+    printVec7Deg("  q1..q7 [deg]", q_init);
+    // Also as stored in Q_Init.txt, so the pose can be compared or pasted.
+    printf("  %s = [", params.q_init_case.c_str());
+    for (int i = 0; i < 7; ++i) {
+      printf("%s%.6f", i ? ", " : "", q_init(i));
+    }
+    printf("] rad\n");
     MotionGenerator motion_generator(0.4, params.q_init);
     robot.control(motion_generator);
     printf("q_init reached.\n");
@@ -1176,6 +1247,7 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
 
     const std::string choice = readChoice();
     if (matches(choice, {"s", "sequence"})) {
+      printf("\n=== Phase sequence mode ===\n");
       ensure_q_init();
       params.use_manual_guidance_start = false;
       params.use_phase_sequence = true;
@@ -1274,9 +1346,9 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
     return true;
   }
 
+  // A sequence takes its nullspace mode from the parameter file. The selector
+  // below belongs to the plain hold only.
   if (params.use_phase_sequence) {
-    printf("Selected: phase sequence. Nullspace mode from parameters: %s.\n",
-           nullspaceModeName(params.nullspace_mode));
     return true;
   }
 

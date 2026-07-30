@@ -43,7 +43,7 @@ print_sigma_debug = 0
 
 # Separate 20 Hz file for guide/recapture events, raw q/dq, contamination and
 # sigma response. Buffered during control and written after the stop.
-sigma_debug_csv_file_name = surface_grinding_controller_sigma_debug.csv
+sigma_debug_csv_file_name = logs/surface_grinding_controller_sigma_debug.csv
 
 # Sample period [s] and buffer capacity.
 sigma_debug_log_period = 0.05

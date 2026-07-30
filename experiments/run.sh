@@ -270,10 +270,13 @@ set +o pipefail
 
 echo "controller_exit: $STATUS" >> "$OUT/meta.txt"
 
+# The controller writes its CSVs under logs/. The bare $SGC glob is kept so a
+# run made with an older build, which wrote beside the binary, is still picked
+# up rather than silently left behind.
 shopt -s nullglob
 MOVED=0
 SKIPPED=0
-for f in "$SGC"/*.csv; do
+for f in "$SGC"/logs/*.csv "$SGC"/*.csv; do
   if [ "$f" -nt "$STAMP" ]; then
     mv "$f" "$OUT/"
     MOVED=$((MOVED + 1))

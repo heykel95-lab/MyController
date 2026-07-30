@@ -19,7 +19,8 @@ robot_ip = 172.16.0.2
 # 0.0 = run until e+Enter. Otherwise stop after this time [s].
 experiment_duration = 0.0
 
-csv_file_name = surface_grinding_controller_log.csv
+# Written under logs/, which is created if missing.
+csv_file_name = logs/surface_grinding_controller_log.csv
 
 # Log one row every n control cycles.
 log_every_n_cycles = 1

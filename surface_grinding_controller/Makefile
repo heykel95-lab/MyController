@@ -2,16 +2,18 @@
 # This uses the local working libfranka build:
 # /home/hm-panda/libfranka/build/libfranka.so.0.7
 #
-# Layout: run/ is the program, modules/ is what it calls, tools/ are the
-# read-only helpers. Object files go to build/; the binaries stay where they
-# are run from.
+# Layout: main.cpp is the entry point, run/ is what one run does, modules/ is
+# what those steps call, tools/ are the read-only helpers. Object files go to
+# build/; the binaries stay where they are run from.
 
 CXX := g++
 TARGET := surface_grinding_controller
 BUILD := build
 
-# run/: the program, in the order it executes.
-MAIN_SRC := run/main.cpp
+# The entry point sits at the top level so it is the first file a reader sees.
+MAIN_SRC := main.cpp
+
+# run/: what one run does, in the order it happens.
 RUN_SRCS := run/run_gains.cpp \
             run/run_loop.cpp \
             run/run_report.cpp

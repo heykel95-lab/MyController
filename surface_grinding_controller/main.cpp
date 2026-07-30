@@ -65,8 +65,6 @@ int main() {
       // The menu is done with stdin: let the keyboard thread read again.
       signals.menu_requested.store(false);
 
-      printParameters(params);
-
       if (params.use_phase_sequence && params.use_coupled_stiffness &&
           !params.coupled_use_block_diagonal && !params.coupled_pole_manual) {
         fprintf(stderr,

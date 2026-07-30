@@ -12,4 +12,5 @@ tools/capture_tool_axis
 tools/inspect_experiment_config
 
 # Run logs
+logs/
 *.csv

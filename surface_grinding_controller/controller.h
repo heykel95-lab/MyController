@@ -340,6 +340,9 @@ struct SigmaDebugRow {
   SigmaDiagnostics sigma;
   double tau_task_norm = 0.0;
   double tau_nullspace_norm = 0.0;
+  // Logged because it can be retuned live while holding, and the archived
+  // params_effective would then no longer describe the run.
+  double nullspace_damping = 0.0;
   double tau_cmd_norm = 0.0;
 
   // Peaks accumulated between compact samples so brief pushes are not lost.
@@ -390,6 +393,7 @@ struct LogData {
 
   SigmaDiagnostics sigma;
   double tau_nullspace_norm;
+  double nullspace_damping;
   Vec7 tau_cmd;
 };
 
@@ -561,6 +565,23 @@ struct KeyboardSignals {
       std::numeric_limits<double>::quiet_NaN()};
   // Live mode switch: 0..3 typed while holding. -1 means nothing pending.
   std::atomic<int> nullspace_mode_request{-1};
+
+  // Live set-up impedance, for the t mode: kp1..3 [N/m], kr1..3 [Nm/rad] and
+  // the pole r1..3 [mm], indexed [tangent1, tangent2, normal]. NaN = pending
+  // nothing. Retuning these rebuilds the gain matrices.
+  std::array<std::atomic<double>, 3> setup_kp_request;
+  std::array<std::atomic<double>, 3> setup_kr_request;
+  std::array<std::atomic<double>, 3> setup_rc_mm_request;
+
+  // Atomics are not copy-initializable, so the arrays are cleared here.
+  KeyboardSignals() {
+    const double none = std::numeric_limits<double>::quiet_NaN();
+    for (int i = 0; i < 3; ++i) {
+      setup_kp_request[i].store(none);
+      setup_kr_request[i].store(none);
+      setup_rc_mm_request[i].store(none);
+    }
+  }
 };
 
 // Where the coupled spring's pole is measured from. Both the live and the
@@ -612,6 +633,20 @@ struct DampingCache {
   Mat3 DR_hold = Mat3::Zero();
   Mat3 Dp_pause = Mat3::Zero();
   Mat3 DR_pause = Mat3::Zero();
+  // The set-up damping actually commanded, per axis in the frame it was
+  // computed in, so it can be reported once instead of twice.
+  bool setup_damping_valid = false;
+  Vec3 setup_Dp_used = Vec3::Zero();
+  Vec3 setup_DR_used = Vec3::Zero();
+  bool approach_damping_valid = false;
+  Vec3 approach_Dp_used = Vec3::Zero();
+  Vec3 approach_DR_used = Vec3::Zero();
+  bool pause_damping_valid = false;
+  Vec3 pause_Dp_used = Vec3::Zero();
+  Vec3 pause_DR_used = Vec3::Zero();
+  bool hold_damping_valid = false;
+  Vec3 hold_Dp_used = Vec3::Zero();
+  Vec3 hold_DR_used = Vec3::Zero();
 };
 
 // What one run leaves behind for the report and the CSV.
@@ -702,7 +737,7 @@ void updateAutoDamping(const Parameters& params,
 RunResult runControlLoop(Parameters& params,
                          Robot& robot,
                          const Model& model,
-                         const RunGains& gains,
+                         RunGains gains,  // by value: live retuning rebuilds it
                          KeyboardSignals& signals);
 
 // run_report.cpp: the post-run printout and the CSV.
@@ -748,7 +783,20 @@ void printSpatialGainEigenvalues(const char* label, const Mat6x6& M);
 
 void printJointStartEndTableDeg(const Vec7& q_start, const Vec7& q_final);
 
-void printParameters(const Parameters& params);
+// The gains a phase commands, printed as it starts. The set-up phase and
+// the t hold print printSetUpImpedanceLaw instead.
+void printPhaseIntro(const Parameters& params,
+                     const DampingCache& damping,
+                     ControlPhase phase);
+
+// The stiff lock held at a phase gate, printed with the gate message.
+void printGateHold(const Parameters& params, const DampingCache& damping);
+
+// The set-up impedance the t mode commands, and what can be retyped while it
+// holds. Printed when that hold starts and after every change.
+void printSetUpImpedanceLaw(const Parameters& params,
+                            const DampingCache& damping,
+                            bool tunable);
 
 // The active nullspace law and what can be retyped while holding. Printed
 // when a hold starts and whenever the mode is switched live.

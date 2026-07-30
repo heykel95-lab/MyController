@@ -123,17 +123,6 @@ void updateAutoDamping(const Parameters& params,
       return params.auto_damping_min_from_manual ? manual : Vec3::Zero();
     };
     // Print auto/manual damping for tuning.
-    auto reportDamping = [&](const char* label, const char* unit,
-                             const Vec3& computed, const Vec3& manual) {
-      if (!params.print_auto_damping) {
-        return;
-      }
-      printf("%-18s auto=[%7.2f, %7.2f, %7.2f]  manual=[%7.2f, %7.2f, %7.2f] %s%s\n",
-             label,
-             computed(0), computed(1), computed(2),
-             manual(0), manual(1), manual(2), unit,
-             params.auto_damping_min_from_manual ? " (manual = floor)" : "");
-    };
 
     if (pause_hold_active) {
       const CartesianInertiaEstimate inertia_base =
@@ -173,10 +162,10 @@ void updateAutoDamping(const Parameters& params,
         damping.Dp_pause = Dp_diag.asDiagonal();
         damping.DR_pause =
             makeSpatialGainMatrix(DR_diag, gains.R_alignment_target);
-        printf("pause auto damping: fitted Dp factor=%.3f, DR factor=%.3f\n",
-               Dp_factor, DR_factor);
-        reportDamping("pause Dp [xyz]", "Ns/m", Dp_diag, target_Dp);
-        reportDamping("pause DR [t1t2n]", "Nms/rad", DR_diag, target_DR);
+        // Reported once by the gate block.
+        damping.pause_Dp_used = Dp_diag;
+        damping.pause_DR_used = DR_diag;
+        damping.pause_damping_valid = true;
       } else {
         damping.Dp_pause = gains.Dp_pause;
         damping.DR_pause = gains.DR_pause;
@@ -201,8 +190,10 @@ void updateAutoDamping(const Parameters& params,
             dampingFloor(params.approach_DR_diag), params.auto_damping_max);
         damping.Dp_approach = makeSpatialGainMatrix(Dp_diag, gains.R_alignment_target);
         damping.DR_approach = makeSpatialGainMatrix(DR_diag, gains.R_alignment_target);
-        reportDamping("approach Dp", "Ns/m", Dp_diag, params.approach_Dp_diag);
-        reportDamping("approach DR", "Nms/rad", DR_diag, params.approach_DR_diag);
+        // Reported by the phase intro, once, instead of mid-stream here.
+        damping.approach_Dp_used = Dp_diag;
+        damping.approach_DR_used = DR_diag;
+        damping.approach_damping_valid = true;
         damping.approach_computed = true;
       }
     } else if (use_setup_branch) {
@@ -227,12 +218,10 @@ void updateAutoDamping(const Parameters& params,
                 ? makeSpatialGainMatrix(Dp_diag, gains.R_alignment_target)
                 : Dp_diag.asDiagonal();
         damping.DR_setup = makeSpatialGainMatrix(DR_diag, gains.R_alignment_target);
-        reportDamping(
-            params.setup_translation_surface_frame
-                ? "set_up Dp [t1t2n]"
-                : "set_up Dp [xyz]",
-            "Ns/m", Dp_diag, gains.setup_Dp_active_diag);
-        reportDamping("set_up DR [t1t2n]", "Nms/rad", DR_diag, params.setup_DR_diag);
+        damping.setup_Dp_used = Dp_diag;
+        damping.setup_DR_used = DR_diag;
+        damping.setup_damping_valid = true;
+        // Reported by the set-up impedance block, once.
         damping.setup_computed = true;
       }
     } else {
@@ -273,8 +262,9 @@ void updateAutoDamping(const Parameters& params,
             params.auto_damping_max);
         damping.Dp_hold = Dp_diag.asDiagonal();
         damping.DR_hold = DR_diag.asDiagonal();
-        reportDamping("hold Dp", "Ns/m", Dp_diag, manual_hold_Dp);
-        reportDamping("hold DR", "Nms/rad", DR_diag, manual_hold_DR);
+        damping.hold_Dp_used = Dp_diag;
+        damping.hold_DR_used = DR_diag;
+        damping.hold_damping_valid = true;
       } else {
         damping.Dp_hold = gains.Dp_hold;
         damping.DR_hold = gains.DR_hold;
