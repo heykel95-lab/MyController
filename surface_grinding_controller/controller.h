@@ -508,6 +508,10 @@ bool openGripper(const Parameters& params, Gripper& gripper);
 
 bool graspTool(const Parameters& params, Gripper& gripper);
 
+bool homeGripper(const Parameters& params,
+                 Gripper& gripper,
+                 bool confirmation_already_received = false);
+
 void askStartupRunMode(Parameters& params, Robot& robot);
 
 bool performStartupGripperAction(const Parameters& params);

@@ -248,6 +248,7 @@ non-finite / non-positive result).
 | `tools/capture_plane_point.cpp` | Read-only P1--P4 capture for a named physical plane |
 | `tools/capture_tool_axis.cpp` | Read-only T1--T4 physical tool-normal capture |
 | `tools/inspect_experiment_config.cpp` | Offline frame/gain/sign preflight |
+| `tools/home_gripper.cpp` | Explicit Franka Hand homing with a tool-drop warning |
 
 ## Build and run
 
@@ -255,6 +256,12 @@ non-finite / non-positive result).
 make
 ./surface_grinding_controller
 ```
+
+The startup menu provides `o` to open, `c` to grasp, and `m` to home the
+Franka Hand. Homing requires the exact confirmation word `home`, opens the
+fingers fully, and must be used only while the tool is supported or removed.
+During startup guidance, type the full word `home`. Open and grasp actions
+verify the reported finger width instead of accepting a silent success result.
 
 `make check_tool_offset` builds `tools/check_tool_offset`, a read-only helper
 that prints the configured `F_T_EE` / `EE_T_K` transforms without commanding

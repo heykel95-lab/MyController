@@ -407,6 +407,11 @@ void startKeyboardStopThread(
         guidance_menu_key.store('o');
       } else if (line == "c" || line == "C") {
         guidance_menu_key.store('c');
+      } else if (line == "home" || line == "HOME") {
+        // The full word is the confirmation: homing opens the fingers fully
+        // and may drop a tool. runManualGuidanceStart performs the action only
+        // after torque control has returned.
+        guidance_menu_key.store('m');
       } else if (line == "s" || line == "S") {
         guidance_menu_key.store('s');
       } else if (line == "h" || line == "H") {

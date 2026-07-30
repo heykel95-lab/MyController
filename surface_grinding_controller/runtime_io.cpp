@@ -812,10 +812,30 @@ bool selectHoldNullspaceMode(Parameters& params,
 
 bool openGripper(const Parameters& params, Gripper& gripper) {
   try {
+    const franka::GripperState before = gripper.readOnce();
     printf("Opening gripper to %.1f mm...\n", 1000.0 * params.gripper_open_width);
     const bool opened = gripper.move(params.gripper_open_width, params.gripper_open_speed);
-    printf(opened ? "Gripper opened.\n" : "Gripper open command returned false.\n");
-    return opened;
+    const franka::GripperState after = gripper.readOnce();
+    const double width_tolerance = 0.002;
+    const bool calibration_supports_target =
+        after.max_width + width_tolerance >= params.gripper_open_width;
+    const bool target_reached =
+        after.width + width_tolerance >= params.gripper_open_width;
+    const bool verified =
+        opened && calibration_supports_target && target_reached;
+
+    printf("Gripper width: %.1f -> %.1f mm (reported max %.1f mm).\n",
+           1000.0 * before.width,
+           1000.0 * after.width,
+           1000.0 * after.max_width);
+    if (verified) {
+      printf("Gripper opened and width verified.\n");
+    } else {
+      fprintf(stderr,
+              "Gripper did not reach the requested open width. Support/remove "
+              "the tool and select m/home to home the hand.\n");
+    }
+    return verified;
   } catch (const franka::Exception& e) {
     fprintf(stderr, "Gripper open failed: %s\n", e.what());
     return false;
@@ -824,6 +844,7 @@ bool openGripper(const Parameters& params, Gripper& gripper) {
 
 bool graspTool(const Parameters& params, Gripper& gripper) {
   try {
+    const franka::GripperState before = gripper.readOnce();
     printf("Grasping tool: width %.1f mm, force %.1f N...\n",
            1000.0 * params.gripper_grasp_width, params.gripper_grasp_force);
     // epsilon_inner/outer set how far the final width may fall short of /
@@ -832,11 +853,78 @@ bool graspTool(const Parameters& params, Gripper& gripper) {
         params.gripper_grasp_width, params.gripper_grasp_speed,
         params.gripper_grasp_force, params.gripper_grasp_epsilon_inner,
         params.gripper_grasp_epsilon_outer);
-    printf(grasped ? "Gripper closed on the tool.\n"
-                   : "Gripper grasp returned false (tool not held within tolerance).\n");
-    return grasped;
+    const franka::GripperState after = gripper.readOnce();
+    const bool width_in_band =
+        after.width >=
+            params.gripper_grasp_width - params.gripper_grasp_epsilon_inner &&
+        after.width <=
+            params.gripper_grasp_width + params.gripper_grasp_epsilon_outer;
+    const bool verified = grasped && after.is_grasped && width_in_band;
+
+    printf("Gripper width: %.1f -> %.1f mm | grasped flag: %s.\n",
+           1000.0 * before.width,
+           1000.0 * after.width,
+           after.is_grasped ? "yes" : "no");
+    if (verified) {
+      printf("Gripper closed on the tool and grasp verified.\n");
+    } else {
+      fprintf(stderr,
+              "Tool grasp was not verified. Support the tool, check its "
+              "placement, and select m/home if the fingers did not travel.\n");
+    }
+    return verified;
   } catch (const franka::Exception& e) {
     fprintf(stderr, "Gripper grasp failed: %s\n", e.what());
+    return false;
+  }
+}
+
+bool homeGripper(const Parameters& params,
+                 Gripper& gripper,
+                 bool confirmation_already_received) {
+  try {
+    const franka::GripperState before = gripper.readOnce();
+    printf("\n=== Franka Hand homing ===\n");
+    printf("Current width: %.1f mm | reported max: %.1f mm | grasped: %s\n",
+           1000.0 * before.width,
+           1000.0 * before.max_width,
+           before.is_grasped ? "yes" : "no");
+    printf("Homing opens the fingers completely. A held tool WILL FALL.\n");
+    printf("Support the tool by hand or remove it before continuing.\n");
+
+    if (!confirmation_already_received) {
+      printf("Type  home  and press Enter to continue, anything else to abort: ");
+      fflush(stdout);
+      if (readChoice() != "home") {
+        printf("Homing aborted. Nothing was moved.\n");
+        return false;
+      }
+    } else {
+      printf("Explicit home command received; starting homing.\n");
+    }
+
+    const bool homed = gripper.homing();
+    const franka::GripperState after = gripper.readOnce();
+    const double width_tolerance = 0.002;
+    const bool calibration_supports_target =
+        after.max_width + width_tolerance >= params.gripper_open_width;
+    const bool opened =
+        after.width + width_tolerance >= params.gripper_open_width;
+    const bool verified = homed && calibration_supports_target && opened;
+
+    printf("After homing: width %.1f mm | reported max %.1f mm.\n",
+           1000.0 * after.width,
+           1000.0 * after.max_width);
+    if (verified) {
+      printf("Homing verified. The hand is open; place the tool and select c.\n");
+    } else {
+      fprintf(stderr,
+              "Homing was not verified. Do not start the robot experiment; "
+              "inspect the Franka Hand state.\n");
+    }
+    return verified;
+  } catch (const franka::Exception& e) {
+    fprintf(stderr, "Gripper homing failed: %s\n", e.what());
     return false;
   }
 }
@@ -870,7 +958,8 @@ void askStartupRunMode(Parameters& params, Robot& robot) {
     printf("  q = go to q_init, inspect the posture, then choose again\n");
     printf("  o = open the Franka hand now (release/load tool), then choose again\n");
     printf("  c = close/grasp the tool now, then choose again\n");
-    printf("Choice [s/h/g/q/o/c]: ");
+    printf("  m = home the hand (opens fully; support/remove the tool first)\n");
+    printf("Choice [s/h/g/q/o/c/m]: ");
 
     const std::string choice = readChoice();
     if (matches(choice, {"s", "sequence"})) {
@@ -910,6 +999,20 @@ void askStartupRunMode(Parameters& params, Robot& robot) {
       params.startup_gripper_manual = true;
       continue;
     }
+    if (matches(choice, {"m", "home"})) {
+      try {
+        Gripper gripper(params.robot_ip);
+        // The synchronous startup menu always presents the full warning before
+        // accepting the exact confirmation word.
+        homeGripper(params, gripper, false);
+      } catch (const franka::Exception& e) {
+        fprintf(stderr, "Gripper connection failed: %s\n", e.what());
+      }
+      // Homing leaves the fingers open. Do not let the automatic startup
+      // action close them before the operator explicitly selects c.
+      params.startup_gripper_manual = true;
+      continue;
+    }
     if (matches(choice, {"g", "guide", "guiding"})) {
       ensure_q_init();
       params.use_manual_guidance_start = true;
@@ -917,9 +1020,9 @@ void askStartupRunMode(Parameters& params, Robot& robot) {
       break;
     }
     if (choice.empty()) {
-      printf("Choose s, h, g, q, o, or c explicitly.\n");
+      printf("Choose s, h, g, q, o, c, or m explicitly.\n");
     } else {
-      printf("Unknown startup choice '%s'; choose s, h, g, q, o, or c.\n",
+      printf("Unknown startup choice '%s'; choose s, h, g, q, o, c, or m.\n",
              choice.c_str());
     }
   }
@@ -956,6 +1059,7 @@ bool performStartupGripperAction(const Parameters& params) {
       // and re-homing would open the hand and drop the tool.
       const franka::GripperState state = gripper.readOnce();
       const bool already_holding =
+          state.is_grasped &&
           state.width >= params.gripper_grasp_width - params.gripper_grasp_epsilon_inner &&
           state.width <= params.gripper_grasp_width + params.gripper_grasp_epsilon_outer;
       if (already_holding) {
@@ -1014,6 +1118,7 @@ bool runManualGuidanceStart(Parameters& params,
     printf("Move the robot by hand. Then:\n");
     printf("  o+Enter = open the gripper\n");
     printf("  c+Enter = close/grasp the tool\n");
+    printf("  home+Enter = home the hand (opens fully; support/remove tool)\n");
     printf("  s+Enter = start phase sequence from this pose\n");
     printf("  h+Enter = start hold from this pose\n");
     printf("  e+Enter = stop (prints this pose as a q_init_* case)\n");
@@ -1046,6 +1151,8 @@ bool runManualGuidanceStart(Parameters& params,
       openGripper(params, gripper);
     } else if (key == 'c') {
       graspTool(params, gripper);
+    } else if (key == 'm') {
+      homeGripper(params, gripper, true);
     } else if (key == 's') {
       params.use_phase_sequence = true;
       printf("Selected: phase sequence from the guided pose.\n");
