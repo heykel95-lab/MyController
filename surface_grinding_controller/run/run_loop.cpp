@@ -135,6 +135,7 @@ RunResult runControlLoop(Parameters& params,
   bool gate_grind_armed = false;
   bool gate_grind_passed = false;
   double gate_grind_paused_time = 0.0;  // frozen push ramp while gated
+  bool setup_reported = false;          // the result prints once, at phase end
 
   // The preload frozen when the set-up phase ends; grind presses with it.
   double setup_push_start = -params.descend_surface_clearance;
@@ -440,6 +441,7 @@ RunResult runControlLoop(Parameters& params,
         gate_grind_armed = false;
         gate_grind_passed = false;
         gate_grind_paused_time = 0.0;
+        setup_reported = false;
         setup_push_start = -params.descend_surface_clearance;
         grind_push = 0.0;
         damping.hold_computed = false;
@@ -708,6 +710,33 @@ RunResult runControlLoop(Parameters& params,
           break;
         }
 
+        // Reported the moment set up ends, before the gate rather than beyond
+        // it. The result belongs to the phase that just finished: the operator
+        // reads it to decide at the gate, its phase time is the press and not
+        // the wait, and stopping at the gate no longer discards it.
+        if (!setup_reported) {
+          setup_reported = true;
+          SetUpReport report;
+          report.stopped_on_moment = stopped_on_moment;
+          report.phase_time = phase_time;
+          report.force_delta_norm = force_delta_norm;
+          report.moment_delta_norm = moment_delta_norm;
+          report.p_EE = p_EE;
+          report.R_EE = R_EE;
+          report.tool_contact_point = tool_contact_point;
+          report.external_force = external_force;
+          report.contact_moment_at_edge = contact_moment_at_edge;
+          report.first_contact_tcp = first_contact_tcp;
+          report.first_contact_point = first_contact_point;
+          report.R_contact_start = R_contact_start;
+          report.contact_force_bias = contact_force_bias;
+          report.Kp = Kp_setup;
+          report.Dp = params.setup_auto_damping ? damping.Dp_setup : Dp_setup;
+          report.KR = KR_setup;
+          report.DR = params.setup_auto_damping ? damping.DR_setup : DR_setup;
+          reportSetUpResult(params, R_alignment_target, report);
+        }
+
         if (params.pause_before_grind && !gate_grind_passed) {
           if (!gate_grind_armed) {
             gate_grind_armed = true;
@@ -715,40 +744,14 @@ RunResult runControlLoop(Parameters& params,
             printf("\n[GATE] Set up finished (holding the pressed pose). Press "
                    "Enter to start the grind (e+Enter stops).\n");
           }
-          // A stop releases the gate rather than being ignored by it. Set up
-          // has already finished here, so its result is a measurement the run
-          // made: quitting at the gate must still report it, or the trial is
-          // discarded for a keystroke that arrived after the work was done.
-          if (!signals.gate_continue.load() && !signals.stop_requested.load()) {
+          if (!signals.gate_continue.load()) {
             gate_grind_paused_time += period.toSec();
             break;  // keep pressing, at the preload reached, while waiting
           }
           gate_grind_passed = true;
-          const bool stopped_at_gate = !signals.gate_continue.load();
           signals.gate_continue.store(false);
-          printf(stopped_at_gate ? "[GATE] Stop requested; reporting set up.\n"
-                                 : "[GATE] Continuing to grind.\n");
+          printf("[GATE] Continuing to grind.\n");
         }
-
-        SetUpReport report;
-        report.stopped_on_moment = stopped_on_moment;
-        report.phase_time = phase_time;
-        report.force_delta_norm = force_delta_norm;
-        report.moment_delta_norm = moment_delta_norm;
-        report.p_EE = p_EE;
-        report.R_EE = R_EE;
-        report.tool_contact_point = tool_contact_point;
-        report.external_force = external_force;
-        report.contact_moment_at_edge = contact_moment_at_edge;
-        report.first_contact_tcp = first_contact_tcp;
-        report.first_contact_point = first_contact_point;
-        report.R_contact_start = R_contact_start;
-        report.contact_force_bias = contact_force_bias;
-        report.Kp = Kp_setup;
-        report.Dp = params.setup_auto_damping ? damping.Dp_setup : Dp_setup;
-        report.KR = KR_setup;
-        report.DR = params.setup_auto_damping ? damping.DR_setup : DR_setup;
-        reportSetUpResult(params, R_alignment_target, report);
 
         // Grind keeps the final set-up preload.
         grind_push = push;
