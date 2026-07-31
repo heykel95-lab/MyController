@@ -275,6 +275,12 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
               p.constrain_rotation_about_alignment_tangent2);
 
   // ---- phase 1: approach ----
+  p.disturbance_cues_enabled =
+      getBool("disturbance_cues_enabled", p.disturbance_cues_enabled);
+  p.disturbance_push_time =
+      getDouble("disturbance_push_time", p.disturbance_push_time);
+  p.disturbance_release_time =
+      getDouble("disturbance_release_time", p.disturbance_release_time);
   p.approach_orient_min_time =
       getDouble("approach_orient_min_time", p.approach_orient_min_time);
   p.approach_orient_error_threshold =

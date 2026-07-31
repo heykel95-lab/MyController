@@ -1,0 +1,12 @@
+run_id:   MAIN_F1_nullspace_damping
+repeats:  3
+
+plane profile: horizontal
+
+tool profile: grinding_tool
+
+purpose:
+  Null-space mode 1 under a scripted hold disturbance: projected damping only.
+
+pass criterion:
+  Compare recovery, Cartesian task drift, joint motion and the smallest singular value against the other mode. A difference attributable to the bias requires the task drift to stay within its registered limit in both modes.

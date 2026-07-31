@@ -136,6 +136,8 @@ RunResult runControlLoop(Parameters& params,
   bool gate_grind_passed = false;
   double gate_grind_paused_time = 0.0;  // frozen push ramp while gated
   bool setup_reported = false;          // the result prints once, at phase end
+  bool disturb_push_cued = false;       // scripted disturbance cues, once each
+  bool disturb_release_cued = false;
 
   // The preload frozen when the set-up phase ends; grind presses with it.
   double setup_push_start = -params.descend_surface_clearance;
@@ -473,6 +475,43 @@ RunResult runControlLoop(Parameters& params,
         printf("phase: %s\n", phaseName(phase));
       }
       return Torques(tau_array);
+    }
+
+    // ---------------------------------------------------------------
+    // Scripted operator disturbance.
+    // ---------------------------------------------------------------
+    // Printed on a clock the run owns, so the push lands at the same time in
+    // every repetition. The cue is an instruction: when the hand actually
+    // arrived, and how hard, is not observable from here, which is why the
+    // logged event marks the cue and not the load.
+    if (params.disturbance_cues_enabled && phase == ControlPhase::kHold) {
+      const auto cue = [&](const char* text, SigmaDebugEvent event) {
+        printf("\n>>> %s  (t = %.1f s)\n", text, time);
+        fflush(stdout);
+        if (sigma_hold_diagnostics_enabled) {
+          SigmaDebugRow row;
+          row.run_time = time;
+          row.phase_time = time - phase_start_time;
+          row.segment_id = sigma_debug_segment_id;
+          row.event = event;
+          row.q = q_current;
+          row.dq = dq;
+          row.pdot = pdot;
+          row.omega = omega;
+          row.joint_contact = joint_contact;
+          row.cartesian_contact = cartesian_contact;
+          appendSigmaDebugRow(row);
+        }
+      };
+      if (!disturb_push_cued && time >= params.disturbance_push_time) {
+        disturb_push_cued = true;
+        cue("PUSH THE ARM NOW", SigmaDebugEvent::kDisturbCuePush);
+      }
+      if (!disturb_release_cued && time >= params.disturbance_release_time) {
+        disturb_release_cued = true;
+        cue("RELEASE - do not touch until the run ends",
+            SigmaDebugEvent::kDisturbCueRelease);
+      }
     }
 
     // Use the pre-transition phase so the selected edge locks on contact.

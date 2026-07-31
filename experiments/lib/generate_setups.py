@@ -508,6 +508,34 @@ for name, axis_offset_deg, edge_mm in (("y_long", 0.0, 120), ("x_short", -90.0, 
     )
 
 
+# Case F: the null-space comparison. This is a hold experiment, not a contact
+# sequence: the arm holds one pose while the operator displaces it on a cue the
+# run prints, and the recovery is what is compared. Mode 1 is projected
+# null-space damping alone; mode 3 adds the smallest-singular-value bias. The
+# cue times and the run duration are fixed so every repetition sees the same
+# disturbance schedule, and the two modes differ in nothing else.
+for mode, name in ((1, "damping"), (3, "damping_sigma")):
+    add(
+        f"MAIN_F{mode}_nullspace_{name}",
+        f"Null-space mode {mode} under a scripted hold disturbance: "
+        f"{'projected damping only' if mode == 1 else 'projected damping plus the singular-value bias'}.",
+        "Compare recovery, Cartesian task drift, joint motion and the smallest "
+        "singular value against the other mode. A difference attributable to "
+        "the bias requires the task drift to stay within its registered limit "
+        "in both modes.",
+        [
+            ("nullspace_mode", f"{mode}"),
+            ("disturbance_cues_enabled", "1"),
+            ("disturbance_push_time", "5.0"),
+            ("disturbance_release_time", "8.0"),
+            # Cue, displace, release, then an unassisted recovery window.
+            ("experiment_duration", "30.0"),
+            ("print_sigma_debug", "1"),
+        ],
+        repeats=3,
+    )
+
+
 # Compact absolute-orientation validation on the separately calibrated tilted
 # plane. These reproduce the three baseline angle cases from horizontal Case A.
 # A final tuned condition is added only after horizontal Cases A--D select it.
@@ -769,6 +797,14 @@ def write_setups():
                 f.write("# (nominal configuration, no overrides)\n")
             for key, value in overrides:
                 f.write(f"{key} = {value}\n")
+
+        # Which startup key drives this setup. Case F holds a pose and is
+        # driven with h; every contact case runs the sequence with s. The
+        # runner and the unattended driver both read this rather than guessing
+        # from the run id.
+        startup_mode = "h" if run_id.startswith("MAIN_F") else "s"
+        with open(os.path.join(d, "startup_mode.txt"), "w") as f:
+            f.write(startup_mode + "\n")
 
         with open(os.path.join(d, "about.txt"), "w") as f:
             f.write(f"run_id:   {run_id}\n")

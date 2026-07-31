@@ -21,13 +21,27 @@ import threading
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUN_SH = os.path.join(HERE, "..", "run.sh")
 
-# (prompt fragment, what to send). Order is the order they occur in a run.
-REPLIES = [
-    (b"Press Enter to recover and configure the robot.", b"\n"),
-    (b"Choice [s/h/t/g/q/o/c/r/f/b/e]: ", b"s\n"),
-    (b"[GATE] Reached", b"\n"),      # start the set-up press
-    (b"[GATE] Set up finished", b"e\n"),  # result has printed by here; stop
-]
+def replies_for(run_id):
+    """Prompt fragment to answer, and what to send.
+
+    The startup key comes from the setup rather than being assumed: a contact
+    case runs the sequence with s, and Case F holds a pose with h. A hold run
+    ends on its own experiment duration, so the gate answers are simply never
+    matched.
+    """
+    mode = b"s"
+    path = os.path.join(HERE, "..", "setups", run_id, "startup_mode.txt")
+    if os.path.isfile(path):
+        with open(path) as f:
+            first = f.read().strip()
+        if first in ("s", "h"):
+            mode = first.encode()
+    return [
+        (b"Press Enter to recover and configure the robot.", b"\n"),
+        (b"Choice [s/h/t/g/q/o/c/r/f/b/e]: ", mode + b"\n"),
+        (b"[GATE] Reached", b"\n"),      # start the set-up press
+        (b"[GATE] Set up finished", b"e\n"),  # result has printed; stop
+    ]
 
 # A trial is about a minute of robot motion plus archiving; well past that and
 # something is waiting on input this script does not know how to answer.
@@ -38,6 +52,8 @@ def main():
     if len(sys.argv) < 3:
         sys.exit("usage: auto_drive.py <run_id> <repeat_index>")
     run_id, repeat = sys.argv[1], sys.argv[2]
+
+    replies = replies_for(run_id)
 
     proc = subprocess.Popen(
         [RUN_SH, run_id, repeat],
@@ -66,7 +82,7 @@ def main():
             out.write(chunk)
             out.flush()
             buf += chunk
-            for pattern, reply in REPLIES:
+            for pattern, reply in replies:
                 at = buf.find(pattern)
                 if at < 0:
                     continue

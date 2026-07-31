@@ -48,3 +48,18 @@ sigma_debug_csv_file_name = logs/surface_grinding_controller_sigma_debug.csv
 # Sample period [s] and buffer capacity.
 sigma_debug_log_period = 0.05
 max_sigma_debug_rows = 20000
+
+# --------------------------------------------------------------------
+# Scripted operator disturbance -- hold experiments only
+# --------------------------------------------------------------------
+# The controller prints a cue and marks it in the sigma log, so the push
+# lands at the same time in every repetition instead of whenever the
+# operator happened to react. The cue records the instruction; when the
+# hand arrived and how hard it pushed is not observable from the robot.
+# 1 = print the cues during hold.
+disturbance_cues_enabled = 0
+
+# Cue times measured from the start of the run [s]. The run then holds
+# undisturbed until experiment_duration, which is the recovery window.
+disturbance_push_time = 5.0
+disturbance_release_time = 8.0

@@ -47,21 +47,32 @@ RUN_IDS=(
   MAIN_D3_t2_rc_face_centre
   MAIN_E1_tilt_about_y_long
   MAIN_E1_tilt_about_x_short
+  MAIN_F1_nullspace_damping
+  MAIN_F3_nullspace_damping_sigma
 )
 
 repeats_for() {
   case "$1" in
-    MAIN_A*|MAIN_B*|MAIN_C*|MAIN_D*|MAIN_E*) echo 3 ;;
+    MAIN_A*|MAIN_B*|MAIN_C*|MAIN_D*|MAIN_E*|MAIN_F*) echo 3 ;;
     *) echo 0 ;;
   esac
 }
 
+# What proves a trial ran to completion depends on what it was. A contact case
+# must have pressed, which the set-up result block records. A hold case never
+# presses; it must instead have reached the end of its scripted disturbance,
+# which the release cue records.
 repeat_complete() {
-  local run_dir="$1"
+  local run_dir="$1" run_id marker
+  run_id="$(basename "$(dirname "$run_dir")")"
+  marker='^=== Set-up result ===$'
+  if [ "$(cat "$HERE/setups/$run_id/startup_mode.txt" 2>/dev/null)" = "h" ]; then
+    marker='RELEASE'
+  fi
   [ -d "$run_dir" ] &&
     [ -s "$run_dir/surface_grinding_controller_log.csv" ] &&
     grep -q '^controller_exit: 0$' "$run_dir/meta.txt" 2>/dev/null &&
-    grep -q '^=== Set-up result ===$' "$run_dir/terminal.log" 2>/dev/null
+    grep -q "$marker" "$run_dir/terminal.log" 2>/dev/null
 }
 
 show_status() {
@@ -128,7 +139,7 @@ run_case() {
 
   run_ids="$(case_run_ids "$letter")"
   if [ -z "$run_ids" ]; then
-    echo "No case $letter in this runner. Cases present: A, B, C, D, E." >&2
+    echo "No case $letter in this runner. Cases present: A, B, C, D, E, F." >&2
     return 2
   fi
 
@@ -227,7 +238,7 @@ case "${1:-status}" in
     ;;
   case)
     if [ $# -lt 2 ]; then
-      echo "usage: $(basename "$0") case <A|B|C|D|E> [auto]" >&2
+      echo "usage: $(basename "$0") case <A|B|C|D|E|F> [auto]" >&2
       exit 2
     fi
     run_case "$2" "${3:-}" || exit $?
@@ -235,7 +246,7 @@ case "${1:-status}" in
     ;;
   next)
     if ! next_trial="$(find_next)"; then
-      echo "Cases A--E are complete."
+      echo "Cases A--F are complete."
       exit 0
     fi
     read -r run_id repeat_index <<< "$next_trial"
@@ -248,7 +259,7 @@ case "${1:-status}" in
     show_status
     ;;
   *)
-    echo "usage: $(basename "$0") [status|next|case <A|B|C|D|E> [auto]]" >&2
+    echo "usage: $(basename "$0") [status|next|case <A|B|C|D|E|F> [auto]]" >&2
     exit 2
     ;;
 esac
