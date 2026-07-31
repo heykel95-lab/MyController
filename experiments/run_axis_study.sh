@@ -150,9 +150,10 @@ run_case() {
   echo ""
   echo "Each trial is driven by hand as usual. Between trials the loop stops"
   echo "so the tool and workpiece can be reset."
-  printf "Type  go  to start, anything else to abort: "
-  read -r answer
-  if [ "$answer" != "go" ]; then
+  printf "Press Enter to start, anything else to abort: "
+  # A closed or piped stdin makes read fail with an empty answer, which must
+  # not read as the bare Enter that starts a robot trial.
+  if ! read -r answer || [ -n "$answer" ]; then
     echo "Aborted. Nothing was run."
     return 0
   fi
@@ -183,8 +184,7 @@ run_case() {
     if [ "$done_count" -lt "${#pending[@]}" ]; then
       echo ""
       printf "Trial archived. Reset the setup, then press Enter for the next one (q quits): "
-      read -r answer
-      if [ "$answer" = "q" ]; then
+      if ! read -r answer || [ "$answer" = "q" ]; then
         echo "Stopped after $done_count trial(s)."
         refresh_derived
         return 0
