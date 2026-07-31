@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""Drive one trial of run.sh without an operator at the keyboard.
+
+usage: auto_drive.py <run_id> <repeat_index>
+
+The controller asks for input at four points. This answers each one the moment
+its prompt appears, with exactly what a hand at the keyboard would type, so the
+protocol is the one the archived trials already used -- gates included. What
+changes is only that the gate waits become instant and identical every trial
+rather than however long the operator took.
+
+Reading is by chunk, not by line: the startup menu prompt ends in ": " with no
+newline, so a line-based reader blocks on it forever.
+"""
+
+import os
+import subprocess
+import sys
+import threading
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+RUN_SH = os.path.join(HERE, "..", "run.sh")
+
+# (prompt fragment, what to send). Order is the order they occur in a run.
+REPLIES = [
+    (b"Press Enter to recover and configure the robot.", b"\n"),
+    (b"Choice [s/h/t/g/q/o/c/r/f/b/e]: ", b"s\n"),
+    (b"[GATE] Reached", b"\n"),      # start the set-up press
+    (b"[GATE] Set up finished", b"e\n"),  # result has printed by here; stop
+]
+
+# A trial is about a minute of robot motion plus archiving; well past that and
+# something is waiting on input this script does not know how to answer.
+TRIAL_TIMEOUT_S = 600
+
+
+def main():
+    if len(sys.argv) < 3:
+        sys.exit("usage: auto_drive.py <run_id> <repeat_index>")
+    run_id, repeat = sys.argv[1], sys.argv[2]
+
+    proc = subprocess.Popen(
+        [RUN_SH, run_id, repeat],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+
+    timed_out = threading.Event()
+
+    def watchdog():
+        if not timed_out.wait(TRIAL_TIMEOUT_S):
+            pass
+    timer = threading.Timer(TRIAL_TIMEOUT_S, lambda: (timed_out.set(),
+                                                      proc.kill()))
+    timer.daemon = True
+    timer.start()
+
+    out = sys.stdout.buffer
+    buf = b""
+    try:
+        while True:
+            chunk = os.read(proc.stdout.fileno(), 4096)
+            if not chunk:
+                break
+            out.write(chunk)
+            out.flush()
+            buf += chunk
+            for pattern, reply in REPLIES:
+                at = buf.find(pattern)
+                if at < 0:
+                    continue
+                try:
+                    proc.stdin.write(reply)
+                    proc.stdin.flush()
+                except (BrokenPipeError, ValueError):
+                    pass
+                # Drop through the match so the same prompt cannot fire twice.
+                buf = buf[at + len(pattern):]
+                break
+            if len(buf) > 8192:
+                buf = buf[-4096:]
+    finally:
+        timer.cancel()
+        try:
+            proc.stdin.close()
+        except (BrokenPipeError, ValueError):
+            pass
+        proc.wait()
+
+    if timed_out.is_set():
+        sys.stderr.write(
+            "\nauto_drive: %s/r%02d exceeded %d s and was killed. It was "
+            "probably waiting on a prompt this script does not answer.\n"
+            % (run_id, int(repeat), TRIAL_TIMEOUT_S))
+        return 1
+    return proc.returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main())

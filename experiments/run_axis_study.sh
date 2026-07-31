@@ -111,6 +111,7 @@ refresh_derived() {
 # hand: the loop only sequences them and stops the moment one does not archive.
 run_case() {
   local letter="$1"
+  local auto="${2:-}"
   local run_ids repeats i repeat_tag run_dir
   local -a pending=()
 
@@ -148,8 +149,14 @@ run_case() {
     echo "  $run_id / $(printf 'r%02d' "$i")"
   done
   echo ""
-  echo "Each trial is driven by hand as usual. Between trials the loop stops"
-  echo "so the tool and workpiece can be reset."
+  if [ "$auto" = "auto" ]; then
+    echo "UNATTENDED: each trial is driven by lib/auto_drive.py, which answers"
+    echo "the prompts and moves straight to the next one. The robot runs the"
+    echo "whole case without stopping. Stay at the e-stop."
+  else
+    echo "Each trial is driven by hand as usual. Between trials the loop stops"
+    echo "so the tool and workpiece can be reset."
+  fi
   printf "Press Enter to start, anything else to abort: "
   # A closed or piped stdin makes read fail with an empty answer, which must
   # not read as the bare Enter that starts a robot trial.
@@ -166,7 +173,13 @@ run_case() {
     echo "=================================================================="
     echo "Case $letter trial $done_count of ${#pending[@]}: $run_id / $(printf 'r%02d' "$i")"
     echo "=================================================================="
-    if ! "$HERE/run.sh" "$run_id" "$i"; then
+    local trial_failed=0
+    if [ "$auto" = "auto" ]; then
+      python3 "$HERE/lib/auto_drive.py" "$run_id" "$i" || trial_failed=1
+    else
+      "$HERE/run.sh" "$run_id" "$i" || trial_failed=1
+    fi
+    if [ "$trial_failed" -ne 0 ]; then
       echo "" >&2
       echo "Trial $run_id/$(printf 'r%02d' "$i") did not archive. Stopping the case." >&2
       refresh_derived
@@ -181,7 +194,7 @@ run_case() {
       refresh_derived
       return 1
     fi
-    if [ "$done_count" -lt "${#pending[@]}" ]; then
+    if [ "$done_count" -lt "${#pending[@]}" ] && [ "$auto" != "auto" ]; then
       echo ""
       printf "Trial archived. Reset the setup, then press Enter for the next one (q quits): "
       if ! read -r answer || [ "$answer" = "q" ]; then
@@ -203,10 +216,10 @@ case "${1:-status}" in
     ;;
   case)
     if [ $# -lt 2 ]; then
-      echo "usage: $(basename "$0") case <A|B|C>" >&2
+      echo "usage: $(basename "$0") case <A|B|C> [auto]" >&2
       exit 2
     fi
-    run_case "$2" || exit $?
+    run_case "$2" "${3:-}" || exit $?
     show_status
     ;;
   next)
@@ -224,7 +237,7 @@ case "${1:-status}" in
     show_status
     ;;
   *)
-    echo "usage: $(basename "$0") [status|next|case <A|B|C>]" >&2
+    echo "usage: $(basename "$0") [status|next|case <A|B|C> [auto]]" >&2
     exit 2
     ;;
 esac
