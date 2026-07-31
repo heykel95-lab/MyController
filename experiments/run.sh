@@ -264,7 +264,12 @@ touch "$STAMP"
 
 cd "$SGC" || exit 1
 set -o pipefail
-./surface_grinding_controller 2>&1 | tee "$OUT/terminal.log"
+# glibc only line-buffers stdout when it is a terminal. Piped into tee, as
+# here, it is not, so printf falls back to full block buffering and output
+# sits unwritten until the buffer fills or the process exits -- confirmed:
+# 0 lines visible for 2+ seconds of a piped 8-line/2.4s test, all 8 arriving
+# together at exit. stdbuf forces line buffering regardless of the pipe.
+stdbuf -oL -eL ./surface_grinding_controller 2>&1 | tee "$OUT/terminal.log"
 STATUS=$?
 set +o pipefail
 
