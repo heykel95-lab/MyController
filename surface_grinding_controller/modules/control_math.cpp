@@ -379,8 +379,21 @@ Mat3 makeToolOrientationForAlignmentTarget(
                           tool_axis_target) *
                       zero_reference.normalized();
   const Vec3 current_unit = current.normalized();
-  const double twist = std::atan2(
+  double twist = std::atan2(
       tool_axis_target.dot(current_unit.cross(target)), current_unit.dot(target));
+
+  // A rectangular face centred on the tool axis maps onto itself every half
+  // turn, so the commanded angle and that angle plus 180 deg put the same edge
+  // on the surface. Take the representative nearest the start pose: the far one
+  // is a different wrist posture, and q7 does not always have the travel for it.
+  const Vec3 axis_ee =
+      normalizedOrFallback(params.tool_axis_ee, Vec3(0.0, 0.0, 1.0));
+  const Vec3 face_center_off_axis =
+      params.tool_contact_face_center_ee -
+      params.tool_contact_face_center_ee.dot(axis_ee) * axis_ee;
+  if (face_center_off_axis.norm() <= 1e-6) {
+    twist -= M_PI * std::round(twist / M_PI);
+  }
   return Eigen::AngleAxisd(twist, tool_axis_target) * R_axis;
 }
 
