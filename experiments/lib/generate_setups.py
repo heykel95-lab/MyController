@@ -232,7 +232,12 @@ MAIN_COMMON = [
     # one at the same angle. 90 deg puts the long axis along t2, so the short
     # edge leads. Pinned here so every MAIN run records it.
     ("command_tool_twist", "1"),
-    ("tool_target_offset_normal_deg", "90.0"),
+    # 115.05 and not 90: the angle is measured from tangent1, and the
+    # calibrated plane's tangent1 is the projected P1->P2 probe direction,
+    # 25.05 deg round from the +X tangent1 in params/. 115.05 in the
+    # calibrated frame puts the face where 90 puts it in the nominal one, so
+    # the campaign presents the same physical orientation as a direct run.
+    ("tool_target_offset_normal_deg", "115.05"),
 ]
 
 
