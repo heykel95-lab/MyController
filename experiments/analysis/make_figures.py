@@ -132,6 +132,8 @@ def errorbar_from_buckets(ax, buckets, label, color, marker="o"):
     return bool(plotted)
 
 
+# Figures carry no internal title: the thesis caption identifies each one, and
+# a title inside the axes repeats it on the page.
 def figure_legend(fig, ax, ncol=3):
     """One legend under a multi-panel figure.
 
@@ -303,7 +305,6 @@ def fig_main_initial_angle(rows):
     ax.set_xlabel("measured initial tool-plane angle [deg]")
     ax.set_ylabel("excited-axis error removed [deg]")
     ax.legend()
-    ax.set_title("Case A: initial-angle response", fontsize=10)
     return save(fig, "MAIN_A_angle.pdf")
 
 
@@ -341,7 +342,6 @@ def fig_main_rotational_stiffness(rows):
         ax.set_xlabel(r"excited-axis $K_R$ [Nm/rad]")
         ax.set_ylabel(ylabel)
     axes[0].legend()
-    fig.suptitle("Case B: rotational stiffness", fontsize=10)
     return save(fig, "MAIN_B_KR.pdf")
 
 
@@ -380,7 +380,6 @@ def fig_main_translational_stiffness(rows):
         ax.set_xlabel(r"cross-direction $K_p$ [N/m]")
         ax.set_ylabel(ylabel)
     figure_legend(fig, axes[0])
-    fig.suptitle("Case C: translational stiffness", fontsize=10)
     return save(fig, "MAIN_C_KP.pdf")
 
 
@@ -423,7 +422,6 @@ def fig_main_interaction(rows):
         ax.set_title(rf"$t_{axis}$ excitation", fontsize=9)
     axes[0].set_ylabel("excited-axis error removed [deg]")
     figure_legend(fig, axes[0])
-    fig.suptitle(r"Case C: $K_R$--$K_p$ interaction", fontsize=10)
     return save(fig, "MAIN_C_interaction.pdf")
 
 
@@ -483,11 +481,6 @@ def fig_main_compliance_centre(rows):
         ax.set_xlabel("commanded perpendicular lever component [mm]")
         ax.set_ylabel(ylabel)
     figure_legend(fig, axes[0], ncol=4)
-    fig.suptitle(
-        r"Case D: commanded centre of compliance, "
-        r"$r_c=p_{\mathrm{TCP}}-p_c$",
-        fontsize=10,
-    )
     return save(fig, "MAIN_D_CoC.pdf")
 
 
@@ -557,7 +550,6 @@ def fig_main_tool_axis_tilt(rows):
     ax.set_ylabel("alignment error removed [deg]")
     ax.axhline(0.0, color="0.45", linewidth=1)
     ax.legend(ncol=2, fontsize=7)
-    ax.set_title(r"Case E: 10 deg tilt about surface vs tool axes", fontsize=10)
     return save(fig, "MAIN_E_tool_axis.pdf")
 
 
