@@ -391,7 +391,13 @@ Mat3 makeToolOrientationForAlignmentTarget(
   const Vec3 face_center_off_axis =
       params.tool_contact_face_center_ee -
       params.tool_contact_face_center_ee.dot(axis_ee) * axis_ee;
-  if (face_center_off_axis.norm() <= 1e-6) {
+  // Measured against the face, not in absolute terms: a calibrated tool axis
+  // is a fraction of a degree off Z_EE, which already puts the centre of a
+  // face 20 mm down the axis a tenth of a millimetre off it. That is not a
+  // broken symmetry; a face mounted off to one side is.
+  const double face_scale = std::min(params.tool_contact_half_width_ee.norm(),
+                                     params.tool_contact_half_length_ee.norm());
+  if (face_center_off_axis.norm() <= 0.05 * face_scale) {
     twist -= M_PI * std::round(twist / M_PI);
   }
   return Eigen::AngleAxisd(twist, tool_axis_target) * R_axis;
