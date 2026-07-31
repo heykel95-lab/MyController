@@ -35,18 +35,50 @@ EXP = os.path.normpath(os.path.join(HERE, ".."))
 METRICS = os.path.join(EXP, "derived", "metrics.csv")
 FIGURES = os.path.join(EXP, "figures")
 
+# Text is matched to the thesis rather than to matplotlib's defaults. usetex
+# is deliberately not used: it needs dvipng for the Agg backend and dvipng is
+# not installed, and it would make every figure depend on a preamble kept
+# somewhere else. Naming the same faces gets the same look without that.
+#
+#   "latex" -- Latin Modern Roman with Computer Modern maths, the face plain
+#              LaTeX sets when the preamble loads no font package.
+#   "times" -- Liberation Serif, the installed metric-compatible Times face,
+#              with STIX maths. This is what newtxtext or mathptmx give.
+#
+# Switch here if the thesis loads a font package; nothing else needs changing.
+FONT_STYLE = "latex"
+
+_FONT_STYLES = {
+    "latex": {
+        "font.serif": ["Latin Modern Roman", "CMU Serif", "cmr10",
+                       "DejaVu Serif"],
+        "mathtext.fontset": "cm",
+    },
+    "times": {
+        "font.serif": ["Liberation Serif", "Times New Roman", "Times",
+                       "Nimbus Roman"],
+        "mathtext.fontset": "stix",
+    },
+}
+
 plt.rcParams.update({
     "font.family": "serif",
-    # Liberation Serif is the installed metric-compatible Times New Roman face
-    # on the robot computer. Keep the proprietary family names as fallbacks.
-    "font.serif": ["Liberation Serif", "Times New Roman", "Times", "Nimbus Roman"],
-    "mathtext.fontset": "stix",
     "pdf.fonttype": 42,
     "ps.fonttype": 42,
     "font.size": 9,
     "axes.grid": True,
     "grid.alpha": 0.3,
+    # One legend everywhere: no box, no shadow, the same size relative to the
+    # body text, and tight enough not to crowd the data.
+    "legend.frameon": False,
+    "legend.fontsize": 8,
+    "legend.handlelength": 1.6,
+    "legend.handletextpad": 0.5,
+    "legend.labelspacing": 0.3,
+    "legend.columnspacing": 1.2,
+    "legend.borderaxespad": 0.4,
 })
+plt.rcParams.update(_FONT_STYLES[FONT_STYLE])
 
 
 def load_metrics(path):
@@ -69,6 +101,9 @@ def fnum(row, key):
         return np.nan
 
 
+EXCLUDED_LABEL = "excluded (data flag)"
+
+
 def errorbar_from_buckets(ax, buckets, label, color, marker="o"):
     xs = sorted(k for k in buckets if not np.isnan(k))
     if not xs:
@@ -84,12 +119,31 @@ def errorbar_from_buckets(ax, buckets, label, color, marker="o"):
     if plotted:
         ax.errorbar(plotted, means, yerr=errs, marker=marker, capsize=3,
                     label=label, color=color, linewidth=1.5)
-    # Excluded runs drawn hollow so nothing is hidden.
+    # Excluded runs drawn hollow so nothing is hidden. Labelled once per axes,
+    # so the legend says what a hollow marker is instead of leaving it to a
+    # caption the figure may get separated from.
+    labelled = any(h.get_label() == EXCLUDED_LABEL for h in ax.get_lines())
     for x in xs:
         for v in buckets[x]["bad"]:
             ax.plot(x, v, marker="o", mfc="none", mec="0.6", ms=5,
-                    linestyle="none")
+                    linestyle="none",
+                    label=None if labelled else EXCLUDED_LABEL)
+            labelled = True
     return bool(plotted)
+
+
+def figure_legend(fig, ax, ncol=3):
+    """One legend under a multi-panel figure.
+
+    An in-axes legend on a narrow subplot lands on the y label or the data.
+    Below the figure it belongs to every panel at once, which is what a shared
+    series list means anyway, and bbox_inches="tight" keeps it in the crop.
+    """
+    handles, labels = ax.get_legend_handles_labels()
+    if not handles:
+        return
+    fig.legend(handles, labels, loc="lower center", ncol=ncol,
+               bbox_to_anchor=(0.5, -0.04), fontsize=8)
 
 
 def save(fig, name):
@@ -132,6 +186,7 @@ def fig_a2_stiffness(rows):
         errorbar_from_buckets(ax, buckets, "measured", "C0")
         ax.set_xlabel(r"$K_{R,t_1}=K_{R,t_2}$ [Nm/rad]")
         ax.set_ylabel(ylabel)
+    figure_legend(fig, axes[0])
     fig.suptitle("Rotational stiffness sweep", fontsize=10)
     return save(fig, "A2_stiffness_sweep.pdf")
 
@@ -168,7 +223,7 @@ def fig_d_axis_stiffness(rows):
         errorbar_from_buckets(ax, t2, r"$t_2$ excitation", "C1", marker="s")
         ax.set_xlabel(r"excited-axis $K_R$ [Nm/rad]")
         ax.set_ylabel(ylabel)
-    axes[0].legend(frameon=False)
+    figure_legend(fig, axes[0])
     fig.suptitle("Axis-specific rotational stiffness", fontsize=10)
     return save(fig, "D_axis_stiffness.pdf")
 
@@ -208,7 +263,7 @@ def fig_d_initial_angle(rows):
         )
     ax.set_xlabel("initial tool-plane angle [deg]")
     ax.set_ylabel("physical-plane improvement [deg]")
-    ax.legend(frameon=False)
+    ax.legend()
     ax.set_title("D0/D3: initial-angle response", fontsize=10)
     return save(fig, "D_initial_angle.pdf")
 
@@ -247,7 +302,7 @@ def fig_main_initial_angle(rows):
     ax.axhline(0.0, color="0.45", linewidth=1)
     ax.set_xlabel("measured initial tool-plane angle [deg]")
     ax.set_ylabel("excited-axis error removed [deg]")
-    ax.legend(frameon=False)
+    ax.legend()
     ax.set_title("Case A: initial-angle response", fontsize=10)
     return save(fig, "MAIN_A_angle.pdf")
 
@@ -285,7 +340,7 @@ def fig_main_rotational_stiffness(rows):
             )
         ax.set_xlabel(r"excited-axis $K_R$ [Nm/rad]")
         ax.set_ylabel(ylabel)
-    axes[0].legend(frameon=False)
+    axes[0].legend()
     fig.suptitle("Case B: rotational stiffness", fontsize=10)
     return save(fig, "MAIN_B_KR.pdf")
 
@@ -324,7 +379,7 @@ def fig_main_translational_stiffness(rows):
         ax.set_xscale("log")
         ax.set_xlabel(r"cross-direction $K_p$ [N/m]")
         ax.set_ylabel(ylabel)
-    axes[0].legend(frameon=False)
+    figure_legend(fig, axes[0])
     fig.suptitle("Case C: translational stiffness", fontsize=10)
     return save(fig, "MAIN_C_KP.pdf")
 
@@ -367,7 +422,7 @@ def fig_main_interaction(rows):
         ax.set_xlabel(rf"$K_{{R,t_{axis}}}$ [Nm/rad]")
         ax.set_title(rf"$t_{axis}$ excitation", fontsize=9)
     axes[0].set_ylabel("excited-axis error removed [deg]")
-    axes[0].legend(frameon=False)
+    figure_legend(fig, axes[0])
     fig.suptitle(r"Case C: $K_R$--$K_p$ interaction", fontsize=10)
     return save(fig, "MAIN_C_interaction.pdf")
 
@@ -405,10 +460,29 @@ def fig_main_compliance_centre(rows):
                 rf"$t_{axis}$ error; perpendicular lever",
                 color, marker=marker,
             )
+        # D3 has no perpendicular lever to sit on the x axis: its pole is
+        # 20 mm along the tool axis, off the tangent plane the sweep lives in.
+        # Drawn as a level rather than a point, so the comparison against the
+        # r_c = 0 runs is readable without inventing an x position for it.
+        for axis, prefix, color in ((1, "MAIN_D3_t1_", "C0"),
+                                    (2, "MAIN_D3_t2_", "C1")):
+            vals = [
+                fnum(row, f"align_t{axis}_improve_deg"
+                     if key == "axis_improvement" else key)
+                for row in selected
+                if row["run_id"].startswith(prefix) and not data_suspect(row)
+            ]
+            vals = [v for v in vals if not np.isnan(v)]
+            if vals:
+                ax.axhline(
+                    float(np.mean(vals)), color=color, linewidth=1.1,
+                    linestyle=":",
+                    label=rf"$t_{axis}$ error; pole at face centre",
+                )
         ax.axhline(0.0, color="0.45", linewidth=1)
         ax.set_xlabel("commanded perpendicular lever component [mm]")
         ax.set_ylabel(ylabel)
-    axes[0].legend(frameon=False)
+    figure_legend(fig, axes[0], ncol=4)
     fig.suptitle(
         r"Case D: commanded centre of compliance, "
         r"$r_c=p_{\mathrm{TCP}}-p_c$",
@@ -434,6 +508,57 @@ def data_suspect(row):
     """True if the run's numbers are untrustworthy, not merely its provenance."""
     flags = {f.split("(")[0] for f in row.get("flags", "").split(";") if f}
     return bool(flags - PROVENANCE_FLAGS)
+
+
+def fig_main_tool_axis_tilt(rows):
+    """Does the t1/t2 asymmetry belong to the plane or to the tool face?
+
+    A2 and A4 tilt about the surface tangents; E1 tilts the same 10 deg about
+    the tool's own axes, which the commanded twist puts 25 deg away from them.
+    If the difference tracks the tool axes the asymmetry is the 40 x 120 mm
+    face; if it tracks the surface axes it is the plane.
+    """
+    groups = [
+        (r"about $t_1$", ("MAIN_A2_",), 1, "C0"),
+        (r"about $t_2$", ("MAIN_A4_",), 2, "C1"),
+        (r"about $Y_{EE}$ (120 mm edge)", ("MAIN_E1_tilt_about_y_long",), None, "C2"),
+        (r"about $X_{EE}$ (40 mm edge)", ("MAIN_E1_tilt_about_x_short",), None, "C3"),
+    ]
+    labels, means, errs, colors = [], [], [], []
+    for label, prefixes, axis, color in groups:
+        vals = []
+        for row in rows:
+            if not any(row["run_id"].startswith(p) for p in prefixes):
+                continue
+            if data_suspect(row):
+                continue
+            # A tool-axis tilt lands on both surface axes at once, so the
+            # scalar gain is the only measure common to all four groups.
+            v = fnum(row, "align_gain_deg")
+            if not np.isnan(v):
+                vals.append(v)
+        if not vals:
+            continue
+        labels.append(label)
+        means.append(float(np.mean(vals)))
+        errs.append(float(np.std(vals, ddof=1)) if len(vals) > 1 else 0.0)
+        colors.append(color)
+    if not means:
+        return None
+
+    fig, ax = plt.subplots(figsize=(5.6, 3.4))
+    xs = np.arange(len(means))
+    for i, (x, m, e, c, lb) in enumerate(zip(xs, means, errs, colors, labels)):
+        ax.bar(x, m, yerr=e, capsize=3, color=c, width=0.6,
+               edgecolor="0.25", linewidth=0.6, label=lb)
+    ax.set_xticks(xs)
+    ax.set_xticklabels(["surface\n$t_1$", "surface\n$t_2$",
+                        "tool\n$Y_{EE}$", "tool\n$X_{EE}$"][:len(means)])
+    ax.set_ylabel("alignment error removed [deg]")
+    ax.axhline(0.0, color="0.45", linewidth=1)
+    ax.legend(ncol=2, fontsize=7)
+    ax.set_title(r"Case E: 10 deg tilt about surface vs tool axes", fontsize=10)
+    return save(fig, "MAIN_E_tool_axis.pdf")
 
 
 def fig_plane_validation(rows):
@@ -503,7 +628,7 @@ def fig_plane_validation(rows):
     for ax in axes:
         ax.set_xticks(x_base)
         ax.set_xticklabels([definition[0] for definition in definitions])
-    axes[0].legend(frameon=False)
+    axes[0].legend()
     fig.suptitle("Horizontal primary and tilted validation", fontsize=10)
     return save(fig, "PLANE_validation.pdf")
 
@@ -677,6 +802,7 @@ def fig_c2_nullspace(rows):
         ax.set_ylabel(ylabel)
     axes[1].axhline(0.0, color="0.3", linewidth=1)
     axes[1].set_title("must stay near zero", fontsize=8)
+    figure_legend(fig, axes[0])
     fig.suptitle("C2/C3: null-space modes and task invariance", fontsize=10)
     return save(fig, "C2_nullspace_modes.pdf")
 
@@ -699,6 +825,7 @@ def fig_g2_convergence(rows):
     errorbar_from_buckets(ax, buckets, "final tip", "C0")
     ax.set_xlabel("set-up phase duration [s]")
     ax.set_ylabel("final tip angle [deg]")
+    ax.legend()
     ax.set_title("G2: is 4 s long enough to reach equilibrium?", fontsize=10)
     return save(fig, "G2_equilibrium.pdf")
 
@@ -721,6 +848,7 @@ def main():
         fig_main_translational_stiffness,
         fig_main_interaction,
         fig_main_compliance_centre,
+        fig_main_tool_axis_tilt,
         fig_plane_validation,
         fig_b_pole_axis,
         fig_b_pole_surface,
