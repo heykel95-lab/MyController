@@ -67,6 +67,7 @@ plt.rcParams.update({
     "ps.fonttype": 42,
     "font.size": 9,
     "axes.grid": True,
+    "axes.grid.axis": "y",
     "grid.alpha": 0.3,
     # One legend everywhere: no box, no shadow, the same size relative to the
     # body text, and tight enough not to crowd the data.
@@ -132,19 +133,19 @@ def errorbar_from_buckets(ax, buckets, label, color, marker="o"):
     return bool(plotted)
 
 
-def log_ticks_at(ax, values):
-    """Label a log axis only where a setting was tested.
+def sweep_axis(ax, values, pad=0.12):
+    """A linear sweep axis ticked only where a setting was tested.
 
-    A log scale otherwise fills the decade with minor labels -- 3x10^2, 4x10^2,
-    6x10^2 -- which collide with each other and with the major ones at the
-    printed width. The tested settings are the only meaningful positions.
+    Three settings do not justify a log scale, and a log decade fills itself
+    with minor labels that collide at the printed width. Linear spacing with
+    ticks at the tested values shows the spacing of the sample honestly and
+    leaves the grid to the horizontal lines.
     """
-    ax.set_xscale("log")
     ticks = sorted(set(values))
+    span = ticks[-1] - ticks[0]
+    ax.set_xlim(ticks[0] - pad * span, ticks[-1] + pad * span)
     ax.set_xticks(ticks)
-    ax.set_xticklabels([f"{int(round(v))}" for v in ticks])
-    ax.set_xticks([], minor=True)
-    ax.tick_params(axis="x", which="minor", length=0)
+    ax.set_xticklabels([f"{v:g}" for v in ticks])
 
 
 # Figures carry no internal title: the thesis caption identifies each one, and
@@ -354,9 +355,7 @@ def fig_main_rotational_stiffness(rows):
             errorbar_from_buckets(
                 ax, buckets, rf"$t_{axis}$ excitation", color, marker=marker
             )
-        # Ticks at the settings that were tested, so the reader sees which
-        # values the response is drawn through.
-        ax.set_xticks([5, 15, 50])
+        sweep_axis(ax, (5, 15, 50))
         ax.set_xlabel(r"excited-axis $K_R$ [Nm/rad]")
         ax.set_ylabel(ylabel)
     figure_legend(fig, axes[0])
@@ -394,7 +393,7 @@ def fig_main_translational_stiffness(rows):
             errorbar_from_buckets(
                 ax, buckets, rf"$t_{axis}$ excitation", color, marker=marker
             )
-        log_ticks_at(ax, (300.0, 800.0, 2000.0))
+        sweep_axis(ax, (300.0, 800.0, 2000.0))
         ax.set_xlabel(r"cross-direction $K_p$ [N/m]")
         ax.set_ylabel(ylabel)
     figure_legend(fig, axes[0])
@@ -495,7 +494,12 @@ def fig_main_compliance_centre(rows):
                     linestyle=":",
                     label=rf"$t_{axis}$ error; pole at face centre",
                 )
-        ax.axhline(0.0, color="0.45", linewidth=1)
+        # Zero means "no correction" for the improvement panel only. On the
+        # load and time panels it forces the axis down to zero and squashes the
+        # data into a corner.
+        if key == "axis_improvement":
+            ax.axhline(0.0, color="0.45", linewidth=1)
+        sweep_axis(ax, (-60, 0, 60))
         ax.set_xlabel("commanded perpendicular lever component [mm]")
         ax.set_ylabel(ylabel)
     figure_legend(fig, axes[0], ncol=4)
