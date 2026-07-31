@@ -13,8 +13,9 @@
 # after its trial; `case` does it once at the end, since extraction re-parses
 # every archived run and takes about a minute.
 #
-# Case D is deliberately absent. Its gain values are selected only after the
-# A--C screening results have been reviewed.
+# Case D was enabled on 2026-07-31, once A--C were complete and its gains had
+# been selected from them. See the note above the Case D block in
+# lib/generate_setups.py for what the screening chose and why.
 
 set -u
 
@@ -36,11 +37,17 @@ RUN_IDS=(
   MAIN_C2_KPt1_0300
   MAIN_C2_KPt1_0800
   MAIN_C2_interaction_KR50_KP300
+  MAIN_D1_t1_rc_t2_m060
+  MAIN_D1_t1_rc_t2_p000
+  MAIN_D1_t1_rc_t2_p060
+  MAIN_D2_t2_rc_t1_m060
+  MAIN_D2_t2_rc_t1_p000
+  MAIN_D2_t2_rc_t1_p060
 )
 
 repeats_for() {
   case "$1" in
-    MAIN_A*|MAIN_B*|MAIN_C*) echo 3 ;;
+    MAIN_A*|MAIN_B*|MAIN_C*|MAIN_D*) echo 3 ;;
     *) echo 0 ;;
   esac
 }
@@ -117,7 +124,7 @@ run_case() {
 
   run_ids="$(case_run_ids "$letter")"
   if [ -z "$run_ids" ]; then
-    echo "No case $letter in this runner. Cases present: A, B, C." >&2
+    echo "No case $letter in this runner. Cases present: A, B, C, D." >&2
     return 2
   fi
 
@@ -216,7 +223,7 @@ case "${1:-status}" in
     ;;
   case)
     if [ $# -lt 2 ]; then
-      echo "usage: $(basename "$0") case <A|B|C> [auto]" >&2
+      echo "usage: $(basename "$0") case <A|B|C|D> [auto]" >&2
       exit 2
     fi
     run_case "$2" "${3:-}" || exit $?
@@ -224,7 +231,7 @@ case "${1:-status}" in
     ;;
   next)
     if ! next_trial="$(find_next)"; then
-      echo "Cases A--C are complete. Analyse them before generating the final Case-D gains."
+      echo "Cases A--D are complete."
       exit 0
     fi
     read -r run_id repeat_index <<< "$next_trial"
@@ -237,7 +244,7 @@ case "${1:-status}" in
     show_status
     ;;
   *)
-    echo "usage: $(basename "$0") [status|next|case <A|B|C> [auto]]" >&2
+    echo "usage: $(basename "$0") [status|next|case <A|B|C|D> [auto]]" >&2
     exit 2
     ;;
 esac

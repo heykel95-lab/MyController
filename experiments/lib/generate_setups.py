@@ -388,8 +388,14 @@ for rc_t1_mm in (-40, 40):
         repeats=1,
     )
 
-# Case D coarse centre-of-compliance sweep. These are generated now for
-# traceability but must not be run until Cases A--C select the gains.
+# Case D coarse centre-of-compliance sweep. Gains fixed 2026-07-31 from the
+# completed A--C screening, as the conventions require before D runs:
+# K_R = 5 N m/rad, which was best or tied at every condition and fell
+# monotonically as it rose (t1 0.64/0.57/0.49, t2 1.59/1.58/1.14 for 5/15/50);
+# and the cross-matched K_P = 300 N/m, the campaign's best result (t2 1.79 deg,
+# 21 % removed) and within 0.06 deg of the best on t1. The pole is swept at the
+# most responsive condition, where a centre-of-compliance effect is most
+# visible. Paired per axis exactly as Case C paired them.
 for axis in (1, 2):
     rc_axis = 2 if axis == 1 else 1
     for rc_mm in (-60, 0, 60):
@@ -398,6 +404,8 @@ for axis in (1, 2):
             pair for pair in main_gain_overrides(
                 10.0 if axis == 1 else 0.0,
                 10.0 if axis == 2 else 0.0,
+                kp_t1=300.0 if axis == 2 else 2000.0,
+                kp_t2=300.0 if axis == 1 else 2000.0,
             )
             if pair[0] != "use_coupled_stiffness"
         ] + [
