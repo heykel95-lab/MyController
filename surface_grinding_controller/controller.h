@@ -827,7 +827,7 @@ void printContactEdgeDebug(const Vec3& offset_ee,
 
 void printApproachOrientDebug(double phase_time,
                               double axis_error_deg,
-                              double rot_error_deg);
+                              double spin_error_deg);
 
 void printApproachDescendDebug(double phase_time,
                                double distance_mm,

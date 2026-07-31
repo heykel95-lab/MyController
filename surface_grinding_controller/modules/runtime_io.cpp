@@ -687,9 +687,9 @@ void printContactEdgeDebug(const Vec3& offset_ee,
 
 void printApproachOrientDebug(double phase_time,
                               double axis_error_deg,
-                              double rot_error_deg) {
-  printf("orient:     t=%5.1f s | axis_err=%5.1f deg | rot_err=%5.1f deg\n",
-         phase_time, axis_error_deg, rot_error_deg);
+                              double spin_error_deg) {
+  printf("orient:     t=%5.1f s | axis_err=%5.1f deg | spin_err=%5.1f deg\n",
+         phase_time, axis_error_deg, spin_error_deg);
 }
 
 void printApproachDescendDebug(double phase_time,

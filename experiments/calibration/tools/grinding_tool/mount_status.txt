@@ -1,1 +1,1 @@
-play2
+rigid

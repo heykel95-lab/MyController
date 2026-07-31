@@ -515,11 +515,16 @@ RunResult runControlLoop(Parameters& params,
         const double tool_axis_error = std::acos(
             std::max(-1.0, std::min(1.0, tool_axis_current.dot(tool_axis_target))));
         const double phase_time = time - phase_start_time;
-        const double rotation_error =
+        // Split into the surface frame: the normal component is the spin about
+        // the tool axis, the part axis_err cannot see. Kept separate because
+        // the mounted system settles near 1.5 deg of axis error, so a combined
+        // norm would never clear a 2 deg gate however well the spin converged.
+        const Vec3 e_R_orient =
+            R_alignment_target.transpose() *
             applyRotationalAxisMask(
                 params, orientationError(R_EE, R_d_alignment_target),
-                R_alignment_target)
-                .norm();
+                R_alignment_target);
+        const double spin_error = std::abs(e_R_orient(2));
 
         // Rotate the commanded frame toward the target at no more than
         // approach_orient_max_rate. The spring then sees a small standing
@@ -540,16 +545,15 @@ RunResult runControlLoop(Parameters& params,
             intro_printed_for == phase) {
           printApproachOrientDebug(phase_time,
                                    (180.0 / M_PI) * tool_axis_error,
-                                   (180.0 / M_PI) * rotation_error);
+                                   (180.0 / M_PI) * spin_error);
           next_debug_time = time + params.debug_period;
         }
 
-        // axis_err covers the two tilts only. With the spin commanded as well
-        // the target is a full frame, so wait for the whole rotation error.
+        // Each commanded degree of freedom clears the same gate on its own.
         const bool orientation_reached =
-            params.command_tool_twist
-                ? rotation_error <= params.approach_orient_error_threshold
-                : tool_axis_error <= params.approach_orient_error_threshold;
+            tool_axis_error <= params.approach_orient_error_threshold &&
+            (!params.command_tool_twist ||
+             spin_error <= params.approach_orient_error_threshold);
         if (phase_time >= params.approach_orient_min_time &&
             orientation_reached) {
           phase = ControlPhase::kApproachDescend;
@@ -557,9 +561,9 @@ RunResult runControlLoop(Parameters& params,
           next_debug_time = time;
           contact_force_bias = external_force;
           contact_moment_bias = external_moment;
-          printf("\nOrientation reached: axis_err=%.1f deg | rot_err=%.1f deg\n",
+          printf("\nOrientation reached: axis_err=%.1f deg | spin_err=%.1f deg\n",
                  (180.0 / M_PI) * tool_axis_error,
-                 (180.0 / M_PI) * rotation_error);
+                 (180.0 / M_PI) * spin_error);
           printf("phase: %s\n", phaseName(phase));
         }
         break;  // desired stays at p_start: rotate without moving the TCP

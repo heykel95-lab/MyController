@@ -184,3 +184,25 @@ After horizontal Cases A--D, the compact tilted-plane baseline validation is:
 It repeats the \(0^\circ\), \(10^\circ\) about \(t_1\), and \(10^\circ\) about
 \(t_2\) baseline-gain conditions. A final tuned condition is generated only
 after the horizontal campaign selects its gains and compliance centre.
+
+## Mount status decision, 2026-07-31
+
+`grinding_tool` is declared `rigid` although the holder retains a small
+rotational play about \(Y_{EE}\), on the order of the 2 degrees the runner's
+`play2` option describes. The experimenter's judgement is that the mount is as
+fixed as this fixture can be made and that no mount is perfectly rigid.
+
+The consequence is recorded here rather than left implicit in the profile file.
+`tool-play` is a data flag: it removes a run from every mean and every figure,
+so declaring `play2` would have archived the whole A--F campaign without
+producing a single plotted point. Declaring `rigid` keeps the campaign
+analysable, and the residual play is an unquantified contribution to the
+alignment uncertainty that the reported figures do not carry.
+
+The play cannot be calibrated out. It is not observable from the robot EE pose
+and it can change during contact, which is why the conventions above refuse to
+fold it into the stated uncertainty. It also cannot be steered away from the
+measurement: play about \(Y_{EE}\) tilts the tool axis along \(t_1\) when the
+commanded spin puts the face long axis on \(t_2\), and along \(t_2\) when the
+spin is zero, so it lands on the measured component of one half of Case A
+either way.
