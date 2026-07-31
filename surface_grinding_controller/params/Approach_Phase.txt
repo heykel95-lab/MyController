@@ -17,6 +17,11 @@ approach_orient_min_time = 0.5
 # Tool-axis error at which it switches to descend [rad].
 approach_orient_error_threshold = 0.035
 
+# Slew rate for the commanded orientation [deg/s]. Without it the whole
+# rotation is a step at t = 0; a commanded spin about the tool axis can be
+# most of a half turn and trips the power limit against approach_KR.
+approach_orient_max_rate_deg = 20.0
+
 # --------------------------------------------------------------------
 # Impedance (orient and descend)
 # --------------------------------------------------------------------

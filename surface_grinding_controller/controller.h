@@ -168,6 +168,10 @@ struct Parameters {
   // Phase 1: approach (orient, then descend).
   double approach_orient_min_time = 0.5;
   double approach_orient_error_threshold = 0.03;
+  // Slew rate for the commanded orientation [deg/s]. The target is otherwise a
+  // step at t=0, and a commanded spin about the tool axis can be most of a
+  // half turn, which trips the power limit against the approach KR.
+  double approach_orient_max_rate_deg = 20.0;
   // One impedance for both approach steps, in [tangent1, tangent2, normal].
   Vec3 approach_Kp_diag = Vec3(150.0, 150.0, 150.0);
   Vec3 approach_KR_diag = Vec3(90.0, 90.0, 8.0);

@@ -279,6 +279,8 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
       getDouble("approach_orient_min_time", p.approach_orient_min_time);
   p.approach_orient_error_threshold =
       getDouble("approach_orient_error_threshold", p.approach_orient_error_threshold);
+  p.approach_orient_max_rate_deg =
+      getDouble("approach_orient_max_rate_deg", p.approach_orient_max_rate_deg);
   p.approach_Kp_diag = getVec3Task("approach_Kp", p.approach_Kp_diag);
   p.approach_KR_diag = getVec3Task("approach_KR", p.approach_KR_diag);
   p.approach_Dp_diag = getVec3Task("approach_Dp", p.approach_Dp_diag);

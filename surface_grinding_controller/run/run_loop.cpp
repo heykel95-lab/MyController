@@ -120,6 +120,13 @@ RunResult runControlLoop(Parameters& params,
   Mat3 R_contact_start = R_d_alignment_target;
   Vec3 active_tool_contact_offset_ee = params.tool_contact_face_center_ee;
 
+  // Orientation the orient step actually commands. The full target is a step
+  // the moment the run starts, and a large one -- a commanded spin about the
+  // tool axis can be most of a half turn -- trips the power limit against the
+  // approach KR. Slewed from the start pose at a bounded rate instead.
+  Mat3 R_orient_start = R_d;
+  Mat3 R_orient_command = R_d_alignment_target;
+
   // Gate state. Each gate arms once, then blocks until a bare Enter.
   bool gate_set_up_armed = false;
   bool gate_set_up_passed = false;
@@ -405,6 +412,9 @@ RunResult runControlLoop(Parameters& params,
         q_start = q_current;
         R_d_alignment_target =
             makeToolOrientationForAlignmentTarget(params, R_alignment_target, R_d);
+        // The slew restarts from the hand-placed pose, not the original one.
+        R_orient_start = R_d;
+        R_orient_command = R_d;
         surface_point_runtime =
             params.use_start_as_surface_point ? p_start : params.surface_point;
         contact_force_bias = external_force;
@@ -510,6 +520,21 @@ RunResult runControlLoop(Parameters& params,
                 params, orientationError(R_EE, R_d_alignment_target),
                 R_alignment_target)
                 .norm();
+
+        // Rotate the commanded frame toward the target at no more than
+        // approach_orient_max_rate. The spring then sees a small standing
+        // error instead of the whole rotation at once.
+        {
+          const Eigen::AngleAxisd to_target(R_d_alignment_target *
+                                            R_orient_start.transpose());
+          const double reachable =
+              (M_PI / 180.0) * params.approach_orient_max_rate_deg * phase_time;
+          const double commanded =
+              std::min(std::abs(to_target.angle()), std::max(0.0, reachable));
+          R_orient_command =
+              Mat3(Eigen::AngleAxisd(commanded, to_target.axis())) *
+              R_orient_start;
+        }
 
         if (params.debug_period > 0.0 && time >= next_debug_time &&
             intro_printed_for == phase) {
@@ -765,9 +790,11 @@ RunResult runControlLoop(Parameters& params,
     // Cartesian errors
     // ---------------------------------------------------------------
     const Vec3 e_p = desired.p_d - p_EE;
-    const Mat3& R_d_used = after_contact ? R_contact_start
-                         : (phase == ControlPhase::kHold) ? R_d
-                                                          : R_d_alignment_target;
+    const Mat3& R_d_used =
+        after_contact ? R_contact_start
+        : (phase == ControlPhase::kHold) ? R_d
+        : (phase == ControlPhase::kApproachOrient) ? R_orient_command
+                                                   : R_d_alignment_target;
     const Vec3 e_R =
         applyRotationalAxisMask(params, orientationError(R_EE, R_d_used), R_alignment_target);
 
