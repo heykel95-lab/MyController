@@ -45,11 +45,13 @@ RUN_IDS=(
   MAIN_D2_t2_rc_t1_p060
   MAIN_D3_t1_rc_face_centre
   MAIN_D3_t2_rc_face_centre
+  MAIN_E1_tilt_about_y_long
+  MAIN_E1_tilt_about_x_short
 )
 
 repeats_for() {
   case "$1" in
-    MAIN_A*|MAIN_B*|MAIN_C*|MAIN_D*) echo 3 ;;
+    MAIN_A*|MAIN_B*|MAIN_C*|MAIN_D*|MAIN_E*) echo 3 ;;
     *) echo 0 ;;
   esac
 }
@@ -126,7 +128,7 @@ run_case() {
 
   run_ids="$(case_run_ids "$letter")"
   if [ -z "$run_ids" ]; then
-    echo "No case $letter in this runner. Cases present: A, B, C, D." >&2
+    echo "No case $letter in this runner. Cases present: A, B, C, D, E." >&2
     return 2
   fi
 
@@ -225,7 +227,7 @@ case "${1:-status}" in
     ;;
   case)
     if [ $# -lt 2 ]; then
-      echo "usage: $(basename "$0") case <A|B|C|D> [auto]" >&2
+      echo "usage: $(basename "$0") case <A|B|C|D|E> [auto]" >&2
       exit 2
     fi
     run_case "$2" "${3:-}" || exit $?
@@ -233,7 +235,7 @@ case "${1:-status}" in
     ;;
   next)
     if ! next_trial="$(find_next)"; then
-      echo "Cases A--D are complete."
+      echo "Cases A--E are complete."
       exit 0
     fi
     read -r run_id repeat_index <<< "$next_trial"
@@ -246,7 +248,7 @@ case "${1:-status}" in
     show_status
     ;;
   *)
-    echo "usage: $(basename "$0") [status|next|case <A|B|C|D> [auto]]" >&2
+    echo "usage: $(basename "$0") [status|next|case <A|B|C|D|E> [auto]]" >&2
     exit 2
     ;;
 esac

@@ -198,6 +198,11 @@ for case in ("tilted_tool", "tilted_close", "table"):
 # These runs use surface-frame translational gains and null-space damping only.
 # The sigma bias is reintroduced later as its own matched control rather than
 # being allowed to influence every contact-alignment trial.
+# Angle from tangent1 to the face long axis. 115.05 and not 90 because the
+# calibrated tangent1 is the projected P1->P2 probe direction, 25.05 deg round
+# from the [1,0,0] tangent1 in params/.
+MAIN_TWIST_DEG = 115.05
+
 MAIN_COMMON = [
     ("use_coupled_stiffness", "0"),
     # The approach controller settles near 1.5 deg under the mounted-tool load;
@@ -237,7 +242,7 @@ MAIN_COMMON = [
     # 25.05 deg round from the +X tangent1 in params/. 115.05 in the
     # calibrated frame puts the face where 90 puts it in the nominal one, so
     # the campaign presents the same physical orientation as a direct run.
-    ("tool_target_offset_normal_deg", "115.05"),
+    ("tool_target_offset_normal_deg", f"{MAIN_TWIST_DEG}"),
 ]
 
 
@@ -246,8 +251,11 @@ def main_gain_overrides(angle_t1=0.0, angle_t2=0.0, kr_t1=5.0,
                         q_init_case="horizontal_table_search"):
     return MAIN_COMMON + [
         ("q_init_case", q_init_case),
-        ("tool_target_offset_tangent1_deg", f"{angle_t1:.1f}"),
-        ("tool_target_offset_tangent2_deg", f"{angle_t2:.1f}"),
+        # Two decimals: a tilt about a tool axis resolves to values like
+        # -4.23 / 9.06, and rounding those to one decimal swings the tilt axis
+        # by a quarter of a degree, against a repeatability floor of 0.05.
+        ("tool_target_offset_tangent1_deg", f"{angle_t1:.2f}"),
+        ("tool_target_offset_tangent2_deg", f"{angle_t2:.2f}"),
         ("setup_KR_tangent1", f"{kr_t1:.1f}"),
         ("setup_KR_tangent2", f"{kr_t2:.1f}"),
         ("setup_Kp_surface_tangent1", f"{kp_t1:.1f}"),
@@ -470,6 +478,32 @@ for axis in (1, 2):
         "ignores; no difference means the normal offset does not matter and "
         "only the tangential lever does.",
         overrides,
+        repeats=3,
+    )
+
+
+# Case E: tilt about the tool's own axes rather than the surface's. The
+# commanded twist puts the 120 mm long axis 25.05 deg away from t2, so every
+# tilt so far has tipped the long and short axes together in some mixture and
+# none has tipped one alone. That leaves the campaign unable to say whether
+# t2 correcting more than t1 is a property of the plane or of a face three
+# times longer than it is wide. A tilt about a tool axis is the same command
+# resolved onto the surface axes it is oblique to.
+TOOL_TILT_DEG = 10.0
+for name, axis_offset_deg, edge_mm in (("y_long", 0.0, 120), ("x_short", -90.0, 40)):
+    a = math.radians(MAIN_TWIST_DEG + axis_offset_deg)
+    t1_deg = TOOL_TILT_DEG * math.cos(a)
+    t2_deg = TOOL_TILT_DEG * math.sin(a)
+    add(
+        f"MAIN_E1_tilt_about_{name}",
+        f"Tilt {TOOL_TILT_DEG:.0f} deg about the tool's own "
+        f"{name.split('_')[0].upper()}_EE axis, so the {edge_mm} mm edge leads. "
+        f"Resolved onto the surface axes as t1 {t1_deg:+.2f}, t2 {t2_deg:+.2f} deg.",
+        "Compare against A2 and A4, which tilt the same 10 deg about the "
+        "surface axes. If the t1/t2 asymmetry follows the tool axes rather "
+        "than the surface ones, it is the face aspect ratio and not the plane. "
+        "Also the campaign's first negative commanded tilt component.",
+        main_gain_overrides(t1_deg, t2_deg),
         repeats=3,
     )
 

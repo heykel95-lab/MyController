@@ -1,0 +1,12 @@
+run_id:   MAIN_E1_tilt_about_y_long
+repeats:  3
+
+plane profile: horizontal
+
+tool profile: grinding_tool
+
+purpose:
+  Tilt 10 deg about the tool's own Y_EE axis, so the 120 mm edge leads. Resolved onto the surface axes as t1 -4.23, t2 +9.06 deg.
+
+pass criterion:
+  Compare against A2 and A4, which tilt the same 10 deg about the surface axes. If the t1/t2 asymmetry follows the tool axes rather than the surface ones, it is the face aspect ratio and not the plane. Also the campaign's first negative commanded tilt component.
