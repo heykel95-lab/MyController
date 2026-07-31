@@ -1,0 +1,172 @@
+
+Press Enter to recover and configure the robot.
+Robot recovered or already ready.
+keys: e stop | m menu | g hand-guide
+
+=== Startup mode ===
+  s = run the phase sequence from q_init
+  h = hold the q_init pose
+  t = hold with the set-up impedance
+  g = hand-guide the start pose
+  q = go to q_init and inspect
+  o = open the hand now
+  c = grasp the tool now
+  r = recalibrate hand width, fingers empty
+  f = fetch the tool from the holder
+  b = put the tool back
+  e = stop and quit
+While a run is going: e+Enter stops, m+Enter comes back here.
+Choice [s/h/t/g/q/o/c/r/f/b/e]: 
+=== Phase sequence mode ===
+Moving to q_init (horizontal_table_search)
+  q1..q7 [deg] = [0.8, 12.1, -0.5, -130.9, -0.2, 142.9, 44.7] deg
+  horizontal_table_search = [0.014777, 0.210911, -0.009320, -2.284835, -0.002725, 2.493410, 0.780694] rad
+q_init reached.
+
+=== Start pose ===
+q_start = [0.8, 12.1, -0.5, -130.9, -0.2, 142.9, 44.7] deg
+p_start = [531.3, 2.4, 156.8] mm
+
+=== Run ===
+phase: approach_orient
+  Kp=[150, 150, 150] N/m  KR=[90, 90, 90] Nm/rad  [t1,t2,n]
+  Dp=[126.5, 103.6, 128.3] Ns/m  DR=[13.45, 15.79, 2.01] Nms/rad  auto (factor 1.90)
+orient:     t=  0.0 s | axis_err= 11.1 deg | spin_err=  0.8 deg
+orient:     t=  0.2 s | axis_err= 10.4 deg | spin_err=  0.9 deg
+orient:     t=  0.4 s | axis_err=  7.7 deg | spin_err=  0.5 deg
+orient:     t=  0.6 s | axis_err=  4.1 deg | spin_err=  0.1 deg
+orient:     t=  0.8 s | axis_err=  2.4 deg | spin_err=  0.2 deg
+orient:     t=  1.0 s | axis_err=  2.2 deg | spin_err=  0.2 deg
+orient:     t=  1.2 s | axis_err=  2.1 deg | spin_err=  0.2 deg
+orient:     t=  1.4 s | axis_err=  2.1 deg | spin_err=  0.2 deg
+orient:     t=  1.6 s | axis_err=  2.1 deg | spin_err=  0.2 deg
+orient:     t=  1.8 s | axis_err=  2.0 deg | spin_err=  0.2 deg
+orient:     t=  2.0 s | axis_err=  2.0 deg | spin_err=  0.1 deg
+
+Orientation reached: axis_err=2.0 deg | spin_err=0.1 deg
+phase: approach_descend
+  Kp=[150, 150, 150] N/m  KR=[90, 90, 90] Nm/rad  [t1,t2,n]
+  Dp=[126.5, 103.6, 128.3] Ns/m  DR=[13.45, 15.79, 2.01] Nms/rad  auto (factor 1.90)
+  descend to 20 mm clearance at 0.100 m/s
+descend:    t=  0.0 s | distance=   0.1 mm | height=+132.5 mm (target 20.0) | force=  0.0 N
+descend:    t=  0.2 s | distance=  20.2 mm | height=+122.1 mm (target 20.0) | force=  0.7 N
+descend:    t=  0.4 s | distance=  40.3 mm | height=+105.9 mm (target 20.0) | force=  0.3 N
+descend:    t=  0.6 s | distance=  60.4 mm | height= +88.8 mm (target 20.0) | force=  1.2 N
+descend:    t=  0.8 s | distance=  80.5 mm | height= +71.5 mm (target 20.0) | force=  0.1 N
+descend:    t=  1.0 s | distance= 100.6 mm | height= +54.7 mm (target 20.0) | force=  2.5 N
+descend:    t=  1.2 s | distance= 120.7 mm | height= +38.2 mm (target 20.0) | force=  1.6 N
+descend:    t=  1.4 s | distance= 140.8 mm | height= +21.1 mm (target 20.0) | force=  2.1 N
+
+[GATE] Reached 20 mm above the plane. Press Enter to start the set-up press (e+Enter stops).
+  gate hold: Kp=[5000, 5000, 5000] N/m [x,y,z]  KR=[90, 90, 90] Nm/rad [t1,t2,n]
+             Dp=[206.6, 151.1, 242.8] Ns/m  DR=[11.04, 14.38, 2.49] Nms/rad  auto
+[GATE] Continuing to the set-up press.
+
+Clearance reached: distance=142.2 mm | height=19.8 mm | target=20.0 mm | force=2.2 N (not used for the switch)
+offset_ee = [-20.0, -60.0, 20.0] mm
+p_EE_at_contact = [529.7, -6.8, 47.6] mm
+contact_point = [510.0, 49.1, -1.1] mm
+edge_offset_base = [-19.7, 55.9, -48.8] mm
+phase: set_up
+
+--- set-up impedance ---
+  wrench = K_TCP*dx + D_TCP*dv, K_TCP = Ad(r_c)^T*blkdiag(Kp,KR)*Ad(r_c)
+  Kp [t1,t2,n]  = [  2000.0,   2000.0,    800.0] N/m
+  Dp [t1,t2,n]  = [   224.5,    178.7,    170.7] Ns/m   auto
+  KR [t1,t2,n]  = [     5.0,      5.0,     50.0] Nm/rad
+  DR [t1,t2,n]  = [     1.4,      1.9,      1.0] Nms/rad   auto
+  r_c [t1,t2,n] = [     0.0,      0.0,      0.0] mm   centre of compliance
+set_up:     t=  0.0 s | tip=  0.0 deg | F=  0.1 N | M=  0.0 Nm (limit 150.0) | edge= 19.8 mm
+set_up:     t=  0.2 s | tip=  0.6 deg | F=  1.7 N | M=  1.0 Nm (limit 150.0) | edge= 11.3 mm
+set_up:     t=  0.4 s | tip=  1.2 deg | F=  1.6 N | M=  1.2 Nm (limit 150.0) | edge=  4.6 mm
+set_up:     t=  0.6 s | tip=  1.3 deg | F= 13.3 N | M=  7.9 Nm (limit 150.0) | edge=  2.6 mm
+set_up:     t=  0.8 s | tip=  1.3 deg | F= 20.9 N | M= 11.9 Nm (limit 150.0) | edge=  2.5 mm
+set_up:     t=  1.0 s | tip=  1.3 deg | F= 28.8 N | M= 16.1 Nm (limit 150.0) | edge=  2.4 mm
+set_up:     t=  1.2 s | tip=  1.3 deg | F= 36.8 N | M= 20.4 Nm (limit 150.0) | edge=  2.4 mm
+set_up:     t=  1.4 s | tip=  1.4 deg | F= 44.8 N | M= 24.7 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  1.6 s | tip=  1.4 deg | F= 52.8 N | M= 28.9 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  1.8 s | tip=  1.3 deg | F= 47.3 N | M= 25.9 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  2.0 s | tip=  1.3 deg | F= 47.0 N | M= 25.8 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  2.2 s | tip=  1.3 deg | F= 47.1 N | M= 25.8 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  2.4 s | tip=  1.3 deg | F= 47.1 N | M= 25.8 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  2.6 s | tip=  1.3 deg | F= 47.0 N | M= 25.8 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  2.8 s | tip=  1.3 deg | F= 46.8 N | M= 25.7 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  3.0 s | tip=  1.3 deg | F= 47.1 N | M= 25.9 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  3.2 s | tip=  1.3 deg | F= 46.8 N | M= 25.7 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  3.4 s | tip=  1.3 deg | F= 46.9 N | M= 25.7 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  3.6 s | tip=  1.3 deg | F= 46.8 N | M= 25.7 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  3.8 s | tip=  1.3 deg | F= 46.8 N | M= 25.7 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  4.0 s | tip=  1.3 deg | F= 46.8 N | M= 25.7 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  4.2 s | tip=  1.3 deg | F= 46.8 N | M= 25.7 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  4.4 s | tip=  1.3 deg | F= 46.7 N | M= 25.7 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  4.6 s | tip=  1.3 deg | F= 46.9 N | M= 25.7 Nm (limit 150.0) | edge=  2.3 mm
+set_up:     t=  4.8 s | tip=  1.3 deg | F= 46.7 N | M= 25.7 Nm (limit 150.0) | edge=  2.3 mm
+
+=== Set-up result ===
+stop: time | t=5.0 s | tip=1.3 deg | F=46.7 N | M=25.6 Nm
+edge_from_contact = [-2.1, +0.2, +0.8] mm | norm=2.3 mm
+tcp_from_contact  = [+17.7, -56.4, +29.1] mm | norm=65.9 mm
+alignment: before=7.03 deg | after=6.48 deg | gain=+0.55 deg
+alignment components [t1,t2,n] deg: before=[-7.02,+0.47,+0.00] | after=[-6.28,+1.60,+0.00]
+
+=== Set-up surface-frame breakdown ===
+frame: alignment-target [tangent1, tangent2, normal]
+force        [N]      = [    -3.87,     +0.65,    -46.49]
+tcp_disp     [mm]     = [    +1.54,     -0.72,    -19.74]
+edge_disp    [mm]     = [    +1.87,     -1.05,     +0.74]
+Kp_eff=F/tcp [N/m]    = [  -2516.4,    -907.0,    2355.4]
+moment@edge  [Nm]     = [   -13.56,    -23.07,     +0.57]
+tip_angle    [deg]    = [    +0.73,     +1.12,     +0.19]
+KR_eff=M/ang [Nm/rad] = [  -1060.7,   -1182.6,     173.6]
+
+=== Centre of compliance ===
+  r_c = p_TCP - p_c [t1,t2,n] = [0.0, 0.0, 0.0] mm
+  K_TCP: translation [2000, 1999, 801] N/m | rotation [5.01, 5.03, 49.95] Nm/rad
+         commanded KR was [5.01, 5.03, 49.95]; the rest is the lever
+  D_TCP: translation [216.3, 186.9, 170.7] Ns/m | rotation [1.52, 1.80, 1.03] Nms/rad
+  coupling: max |moment per unit translation| = 0.0 Nm/m (K), 0.0 Nms/m (D)
+  K_TCP eigenvalues 5.00 .. 2000 | D_TCP 1.03 .. 225  (both positive: valid springs)
+
+  K_TCP [N/m, Nm/rad | rows fx..mz, cols tx..rz]:
+           tx        ty        tz    |    rx        ry        rz
+  fx [    2000  -0.5725   -20.68 |        0        0        0 ]
+  fy [ -0.5725     1999   -33.18 |        0        0        0 ]
+  fz [  -20.68   -33.18    801.3 |        0        0        0 ]
+     ---------------------------+---------------------------
+  mx [       0        0        0 |    5.013  0.02147   0.7756 ]
+  my [       0        0        0 |  0.02147    5.034    1.244 ]
+  mz [       0        0        0 |   0.7756    1.244    49.95 ]
+
+  D_TCP [Ns/m, Nms/rad]:
+           tx        ty        tz    |    rx        ry        rz
+  fx [   216.3    17.54   -1.272 |        0        0        0 ]
+  fy [   17.54    186.9  -0.7516 |        0        0        0 ]
+  fz [  -1.272  -0.7516    170.7 |        0        0        0 ]
+     ---------------------------+---------------------------
+  mx [       0        0        0 |    1.524  -0.1678 -0.003884 ]
+  my [       0        0        0 |  -0.1678    1.804 -0.01854 ]
+  mz [       0        0        0 | -0.003884 -0.01854    1.031 ]
+
+[GATE] Set up finished (holding the pressed pose). Press Enter to start the grind (e+Enter stops).
+
+Stop requested with e + Enter. Finishing control loop...
+
+Joint motion [deg]:
+joint    start   final   delta
+------------------------------
+q1        0.8     1.3     0.5
+q2       12.1    29.4    17.3
+q3       -0.5    -2.0    -1.4
+q4     -130.9  -129.6     1.3
+q5       -0.2   -19.3   -19.1
+q6      142.9   158.5    15.6
+q7       44.7    62.5    17.8
+
+=== Final result ===
+p_d = [528.3, -9.0, -32.2] mm
+p_EE = [527.7, -7.3, 27.9] mm
+e_p = [0.7, -1.7, -60.1] mm
+position_error = 60.13 mm
+e_R = [-0.19, -1.32, 0.23] deg
+rotation_error = 1.35 deg
+csv: logs/surface_grinding_controller_log.csv

@@ -524,6 +524,9 @@ for mode, name in ((1, "damping"), (3, "damping_sigma")):
         "the bias requires the task drift to stay within its registered limit "
         "in both modes.",
         [
+            pair for pair in main_gain_overrides(0.0, 0.0)
+            if pair[0] != "nullspace_mode"
+        ] + [
             ("nullspace_mode", f"{mode}"),
             ("disturbance_cues_enabled", "1"),
             ("disturbance_push_time", "5.0"),
