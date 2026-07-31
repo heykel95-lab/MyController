@@ -1,0 +1,93 @@
+# ====================================================================
+# SET-UP PHASE (2) -- press the tool onto the surface and settle
+# ====================================================================
+# Starts from the contact-point height captured at the end of descend and
+# ramps to setup_push_end. Ends on setup_moment_threshold after
+# setup_min_time, or on setup_timeout, whichever comes first.
+
+# --------------------------------------------------------------------
+# Timing
+# --------------------------------------------------------------------
+# Earliest end [s], hard limit [s], and the ending moment [Nm].
+setup_min_time = 2.0
+setup_timeout = 5.0
+setup_moment_threshold = 150.0
+
+# --------------------------------------------------------------------
+# Push ramp
+# --------------------------------------------------------------------
+# Ramp speed [m/s] and end depth [m]; ramp time follows from the two.
+# Check normal stiffness * setup_push_end against safety.txt before a new range.
+setup_push_speed = 0.050
+setup_push_end = 0.060
+
+# --------------------------------------------------------------------
+# Translational impedance
+# --------------------------------------------------------------------
+# 0 = the base-frame diagonal below. 1 = the surface-frame one.
+setup_translation_surface_frame = 1
+
+# Base frame [x, y, z]: stiffness [N/m] and damping fallback [Ns/m].
+setup_Kp_x = 2000.0
+setup_Kp_y = 2000.0
+setup_Kp_z = 350.0
+setup_Dp_x = 10.0
+setup_Dp_y = 10.0
+setup_Dp_z = 175.0
+
+# Surface frame, used by the calibrated experiments: stiffness [N/m].
+setup_Kp_surface_tangent1 = 800.0
+setup_Kp_surface_tangent2 = 2000.0
+setup_Kp_surface_normal = 800.0
+
+# Surface-frame damping fallback [Ns/m].
+setup_Dp_surface_tangent1 = 50.0
+setup_Dp_surface_tangent2 = 50.0
+setup_Dp_surface_normal = 25.0
+
+# --------------------------------------------------------------------
+# Rotational impedance
+# --------------------------------------------------------------------
+# Surface frame: stiffness [Nm/rad] and damping fallback [Nms/rad].
+setup_KR_normal = 50.0
+setup_KR_tangent1 = 5.0
+setup_KR_tangent2 = 5.0
+setup_DR_normal = 10.0
+setup_DR_tangent1 = 10.01
+setup_DR_tangent2 = 10.01
+
+# 1 = compute damping online instead of using the fallbacks above.
+setup_auto_damping = 1
+
+# Damping ratio for that computation. 1.0 = critical.
+setup_auto_damping_factor = 1.0
+
+# --------------------------------------------------------------------
+# Coupled (pole-based) stiffness
+# --------------------------------------------------------------------
+# 1 = command the full 6x6 spring about a pole during set up.
+use_coupled_stiffness = 0
+
+# K/D source: 1 = block diagonal, 0 = the pole below.
+coupled_use_block_diagonal = 0
+
+# 1 = use a deliberately commanded pole rather than a derived one.
+coupled_pole_manual = 1
+
+# 1 = define the pole as r_c = p_TCP - p_c in the surface frame [m].
+# This is the preferred experiment convention.
+coupled_use_direct_rc_surface = 0
+coupled_rc_tangent1 = 0.0
+coupled_rc_tangent2 = 0.0
+coupled_rc_normal = 0.0
+
+# Legacy base-frame pole-from-edge offset [m], kept for archived setups.
+coupled_pole_from_edge_x = -0.04
+coupled_pole_from_edge_y = 0.08
+coupled_pole_from_edge_z = 0.0
+
+# 1 = freeze the pole at first contact. 0 = follow the live edge.
+coupled_pole_freeze_at_contact = 1
+
+# 1 = print the coupled-stiffness diagnostics in the set-up report.
+print_coupled_diagnostics = 1
