@@ -168,6 +168,21 @@ def process_run(run_id, repeat_tag, run_dir):
     if row["tool_mount_status"] == "known_play":
         flags.append("tool-play")
 
+    # The conventions reject a run whose witness mark moved, but a slip is not
+    # visible from the EE pose, so nothing automatic can catch it. This is the
+    # operator's way to say so: a line "reject: <reason>" in
+    # operator_observation.txt flags the run out of every mean and figure.
+    # Any other content in that file is a note and changes nothing.
+    observation = os.path.join(run_dir, "operator_observation.txt")
+    if os.path.isfile(observation):
+        with open(observation) as f:
+            for line in f:
+                text = line.split("#")[0].strip()
+                if text.lower().startswith("reject:"):
+                    reason = text.split(":", 1)[1].strip() or "unspecified"
+                    flags.append(f"operator-reject({reason})")
+                    break
+
     params = read_params(os.path.join(run_dir, "params_effective"))
     for key, value in study_params(params).items():
         row[key] = f"{value:.6f}"

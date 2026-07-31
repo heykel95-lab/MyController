@@ -206,3 +206,33 @@ measurement: play about \(Y_{EE}\) tilts the tool axis along \(t_1\) when the
 commanded spin puts the face long axis on \(t_2\), and along \(t_2\) when the
 spin is zero, so it lands on the measured component of one half of Case A
 either way.
+
+## Tool slip is an axis-specific limitation, 2026-07-31
+
+The declared mount play is a rotation about \(Y_{EE}\), and the commanded
+twist places \(Y_{EE}\) only 25 deg from \(t_2\). For a \(t_2\) excitation the
+slip axis therefore nearly coincides with the axis being corrected: the
+contact moment can be taken up by the tool turning inside the gripper instead
+of the arm turning, and because the alignment metric infers the tool from the
+EE pose, that reads as no correction rather than as a slip.
+
+The archived campaign is consistent with this. Median within-group standard
+deviation is 0.017 deg across the ten \(t_1\)-excited groups and 0.033 deg
+across the ten \(t_2\)-excited ones, and the two largest spreads in the whole
+campaign are both \(t_2\): `MAIN_A4_t2_10deg` at 1.62 deg, where one repeat
+removed exactly 0.00 deg while its siblings removed 1.56 and 1.62, and
+`MAIN_D2_t2_rc_t1_p060` at 0.55 deg. The effect is not purely axis-specific --
+spread grows with correction magnitude on both axes, and the largest \(t_1\)
+spread is the 6.05 deg `MAIN_D1_t1_rc_t2_m060` condition -- but \(t_2\) being
+twice as noisy overall, with both extremes, points at the slip axis.
+
+The consequence for the results is one-directional. A slip absorbs correction
+that the metric cannot see, so it can only make a \(t_2\) condition look worse
+than it is. The headline asymmetry, \(t_2\) correcting more than \(t_1\), is
+therefore a lower bound rather than an artefact.
+
+Runs where the witness mark moved are rejected by the conventions above, but a
+slip is not observable from the robot, so nothing automatic detects it. Write
+a line `reject: <reason>` into that repeat's `operator_observation.txt` and the
+extractor flags it `operator-reject(...)`, which removes it from every mean and
+draws it hollow.
