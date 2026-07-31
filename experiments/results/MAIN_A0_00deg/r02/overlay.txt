@@ -1,8 +1,8 @@
-# MAIN_D1_t1_rc_t2_p060
+# MAIN_A0_00deg
 # Applied on top of surface_grinding_controller/params/.
 # Only keys listed here differ from the nominal set.
+use_coupled_stiffness = 0
 approach_orient_error_threshold = 0.035
-approach_orient_spin_error_threshold = 0.009
 setup_timeout = 5.0
 setup_push_end = 0.060
 setup_push_speed = 0.050
@@ -14,16 +14,9 @@ setup_KR_normal = 50.0
 command_tool_twist = 1
 tool_target_offset_normal_deg = 90.0
 q_init_case = horizontal_table_search
-tool_target_offset_tangent1_deg = 10.0
+tool_target_offset_tangent1_deg = 0.0
 tool_target_offset_tangent2_deg = 0.0
 setup_KR_tangent1 = 5.0
 setup_KR_tangent2 = 5.0
 setup_Kp_surface_tangent1 = 2000.0
 setup_Kp_surface_tangent2 = 2000.0
-use_coupled_stiffness = 1
-coupled_use_block_diagonal = 0
-coupled_pole_manual = 1
-coupled_use_direct_rc_surface = 1
-coupled_rc_tangent1 = 0.0
-coupled_rc_tangent2 = 0.060
-coupled_rc_normal = 0.0

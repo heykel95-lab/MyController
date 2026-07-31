@@ -17,12 +17,6 @@ approach_orient_min_time = 0.5
 # Tool-axis error at which it switches to descend [rad].
 approach_orient_error_threshold = 0.035
 
-# Gate for the spin about the tool axis [rad]. Separate because the axis error
-# has a floor near 1.5 deg on this system and the spin does not: sharing the
-# threshold above let the spin through at 2 deg while it was still converging,
-# and the clearance capture then froze that error into the contact reference.
-approach_orient_spin_error_threshold = 0.009
-
 # Slew rate for the commanded orientation [deg/s]. Without it the whole
 # rotation is a step at t = 0; a commanded spin about the tool axis can be
 # most of a half turn and trips the power limit against approach_KR.

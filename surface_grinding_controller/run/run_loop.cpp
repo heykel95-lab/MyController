@@ -553,7 +553,7 @@ RunResult runControlLoop(Parameters& params,
         const bool orientation_reached =
             tool_axis_error <= params.approach_orient_error_threshold &&
             (!params.command_tool_twist ||
-             spin_error <= params.approach_orient_error_threshold);
+             spin_error <= params.approach_orient_spin_error_threshold);
         if (phase_time >= params.approach_orient_min_time &&
             orientation_reached) {
           phase = ControlPhase::kApproachDescend;

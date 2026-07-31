@@ -168,6 +168,11 @@ struct Parameters {
   // Phase 1: approach (orient, then descend).
   double approach_orient_min_time = 0.5;
   double approach_orient_error_threshold = 0.03;
+  // Separate gate for the spin about the tool axis [rad]. The axis error is
+  // limited by the mounted system, near 1.5 deg, which is what sets the
+  // threshold above; the spin is a wrist rotation with no such floor and
+  // converges to a fraction of a degree if it is not let go early.
+  double approach_orient_spin_error_threshold = 0.009;
   // Slew rate for the commanded orientation [deg/s]. The target is otherwise a
   // step at t=0, and a commanded spin about the tool axis can be most of a
   // half turn, which trips the power limit against the approach KR.

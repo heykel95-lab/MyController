@@ -205,6 +205,10 @@ MAIN_COMMON = [
     # explicit 2 deg gate is reachable and the subsequent descend reduced the
     # EE-inferred first-contact residual to about 1 deg in repeated A0 runs.
     ("approach_orient_error_threshold", "0.035"),
+    # The spin about the tool axis has its own gate: sharing the one above let
+    # it through at 2 deg while still converging, and the clearance capture
+    # freezes whatever error is standing at handover into the contact frame.
+    ("approach_orient_spin_error_threshold", "0.009"),
     ("setup_timeout", "5.0"),
     # The two loose-gate A0 diagnostics reached 24.33 N at 0.060 m with
     # Kp,n=360 N/m. The primary campaign instead targets the established
