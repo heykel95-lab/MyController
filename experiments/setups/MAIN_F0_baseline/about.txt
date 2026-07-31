@@ -1,0 +1,12 @@
+run_id:   MAIN_F0_baseline
+repeats:  3
+
+plane profile: horizontal
+
+tool profile: grinding_tool
+
+purpose:
+  Null-space mode 0 under a scripted hold disturbance: no null-space torque at all.
+
+pass criterion:
+  The reference the two swept modes are read against. Recovery here is whatever the arm does unaided along the redundant axis.

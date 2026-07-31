@@ -508,33 +508,72 @@ for name, axis_offset_deg, edge_mm in (("y_long", 0.0, 120), ("x_short", -90.0, 
     )
 
 
-# Case F: the null-space comparison. This is a hold experiment, not a contact
-# sequence: the arm holds one pose while the operator displaces it on a cue the
-# run prints, and the recovery is what is compared. Mode 1 is projected
-# null-space damping alone; mode 3 adds the smallest-singular-value bias. The
-# cue times and the run duration are fixed so every repetition sees the same
-# disturbance schedule, and the two modes differ in nothing else.
-for mode, name in ((1, "damping"), (3, "damping_sigma")):
+# Case F: the null-space terms, isolated. This is a hold experiment, not a
+# contact sequence: the arm holds one pose while the operator displaces it on a
+# cue the run prints, and the recovery is what is compared.
+#
+# The modes separate cleanly in the controller. Mode 1 returns projected
+# damping alone; mode 2 zeroes that damping and applies only the
+# smallest-singular-value bias; mode 3 is their sum and is therefore not run,
+# because it cannot show anything the two single-term sweeps do not.
+#
+# Both gains are swept a factor of two either side of the configured value.
+# k_sigma is bracketed deliberately: 1.0 is below the value at which the probe
+# was observed to move the arm, 2.0 is about where motion becomes visible, and
+# 4.0 is clearly driven. A setting that commands torque without moving the
+# joints is not optimisation and must not be reported as such.
+NULLSPACE_LEVELS = (1.0, 2.0, 4.0)
+
+
+def nullspace_common(mode):
+    return [
+        pair for pair in main_gain_overrides(0.0, 0.0)
+        if pair[0] != "nullspace_mode"
+    ] + [
+        ("nullspace_mode", f"{mode}"),
+        ("disturbance_cues_enabled", "1"),
+        ("disturbance_push_time", "5.0"),
+        ("disturbance_release_time", "8.0"),
+        # Cue, displace, release, then an unassisted recovery window.
+        ("experiment_duration", "30.0"),
+        ("print_sigma_debug", "1"),
+    ]
+
+
+add(
+    "MAIN_F0_baseline",
+    "Null-space mode 0 under a scripted hold disturbance: no null-space "
+    "torque at all.",
+    "The reference the two swept modes are read against. Recovery here is "
+    "whatever the arm does unaided along the redundant axis.",
+    nullspace_common(0),
+    repeats=3,
+)
+
+for level in NULLSPACE_LEVELS:
+    tag = f"{level:.1f}".replace(".", "p")
     add(
-        f"MAIN_F{mode}_nullspace_{name}",
-        f"Null-space mode {mode} under a scripted hold disturbance: "
-        f"{'projected damping only' if mode == 1 else 'projected damping plus the singular-value bias'}.",
-        "Compare recovery, Cartesian task drift, joint motion and the smallest "
-        "singular value against the other mode. A difference attributable to "
-        "the bias requires the task drift to stay within its registered limit "
-        "in both modes.",
-        [
-            pair for pair in main_gain_overrides(0.0, 0.0)
-            if pair[0] != "nullspace_mode"
-        ] + [
-            ("nullspace_mode", f"{mode}"),
-            ("disturbance_cues_enabled", "1"),
-            ("disturbance_push_time", "5.0"),
-            ("disturbance_release_time", "8.0"),
-            # Cue, displace, release, then an unassisted recovery window.
-            ("experiment_duration", "30.0"),
-            ("print_sigma_debug", "1"),
-        ],
+        f"MAIN_F1_damping_{tag}",
+        f"Null-space mode 1 under a scripted hold disturbance: projected "
+        f"damping only, nullspace_damping = {level}.",
+        "Compare recovery, Cartesian task drift and joint motion against the "
+        "mode-0 reference. Damping alone has no preferred posture, so the arm "
+        "settles wherever the redundant axis stops.",
+        nullspace_common(1) + [("nullspace_damping", f"{level}")],
+        repeats=3,
+    )
+
+for level in NULLSPACE_LEVELS:
+    tag = f"{level:.1f}".replace(".", "p")
+    add(
+        f"MAIN_F2_ksigma_{tag}",
+        f"Null-space mode 2 under a scripted hold disturbance: "
+        f"smallest-singular-value bias only, k_sigma = {level}.",
+        "Accept a setting only if the commanded null-space direction is "
+        "actually followed by joint motion and the Cartesian task drift stays "
+        "within its registered limit. Torque without motion is below the "
+        "friction threshold, not optimisation.",
+        nullspace_common(2) + [("nullspace_k_sigma", f"{level}")],
         repeats=3,
     )
 

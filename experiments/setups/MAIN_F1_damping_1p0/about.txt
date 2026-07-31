@@ -1,0 +1,12 @@
+run_id:   MAIN_F1_damping_1p0
+repeats:  3
+
+plane profile: horizontal
+
+tool profile: grinding_tool
+
+purpose:
+  Null-space mode 1 under a scripted hold disturbance: projected damping only, nullspace_damping = 1.0.
+
+pass criterion:
+  Compare recovery, Cartesian task drift and joint motion against the mode-0 reference. Damping alone has no preferred posture, so the arm settles wherever the redundant axis stops.

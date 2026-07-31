@@ -1,4 +1,4 @@
-105 setups, 316 total runs
+110 setups, 331 total runs
 
 G1_coupled_block_diagonal          x3  Coupled 6x6 path with block-diagonal gains must reproduce the decoupled wrench exactly.
 G1_decoupled_baseline              x5  Decoupled wrench, no coupling.
@@ -58,8 +58,13 @@ MAIN_D3_t1_rc_face_centre          x3  Case D: compliance centre at the grinding
 MAIN_D3_t2_rc_face_centre          x3  Case D: compliance centre at the grinding-face centre, +10 deg about t2.
 MAIN_E1_tilt_about_y_long          x3  Tilt 10 deg about the tool's own Y_EE axis, so the 120 mm edge leads.
 MAIN_E1_tilt_about_x_short         x3  Tilt 10 deg about the tool's own X_EE axis, so the 40 mm edge leads.
-MAIN_F1_nullspace_damping          x3  Null-space mode 1 under a scripted hold disturbance: projected damping only.
-MAIN_F3_nullspace_damping_sigma    x3  Null-space mode 3 under a scripted hold disturbance: projected damping plus the singular-value bias.
+MAIN_F0_baseline                   x3  Null-space mode 0 under a scripted hold disturbance: no null-space torque at all.
+MAIN_F1_damping_1p0                x3  Null-space mode 1 under a scripted hold disturbance: projected damping only, nullspace_damping = 1.0.
+MAIN_F1_damping_2p0                x3  Null-space mode 1 under a scripted hold disturbance: projected damping only, nullspace_damping = 2.0.
+MAIN_F1_damping_4p0                x3  Null-space mode 1 under a scripted hold disturbance: projected damping only, nullspace_damping = 4.0.
+MAIN_F2_ksigma_1p0                 x3  Null-space mode 2 under a scripted hold disturbance: smallest-singular-value bias only, k_sigma = 1.0.
+MAIN_F2_ksigma_2p0                 x3  Null-space mode 2 under a scripted hold disturbance: smallest-singular-value bias only, k_sigma = 2.0.
+MAIN_F2_ksigma_4p0                 x3  Null-space mode 2 under a scripted hold disturbance: smallest-singular-value bias only, k_sigma = 4.0.
 VALID_T0_00deg                     x3  Tilted-plane validation at the baseline gains with independent tool offsets (t1=+0 deg, t2=+0 deg).
 VALID_T1_t1_10deg                  x3  Tilted-plane validation at the baseline gains with independent tool offsets (t1=+10 deg, t2=+0 deg).
 VALID_T2_t2_10deg                  x3  Tilted-plane validation at the baseline gains with independent tool offsets (t1=+0 deg, t2=+10 deg).

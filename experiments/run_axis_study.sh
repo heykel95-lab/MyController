@@ -47,8 +47,13 @@ RUN_IDS=(
   MAIN_D3_t2_rc_face_centre
   MAIN_E1_tilt_about_y_long
   MAIN_E1_tilt_about_x_short
-  MAIN_F1_nullspace_damping
-  MAIN_F3_nullspace_damping_sigma
+  MAIN_F0_baseline
+  MAIN_F1_damping_1p0
+  MAIN_F1_damping_2p0
+  MAIN_F1_damping_4p0
+  MAIN_F2_ksigma_1p0
+  MAIN_F2_ksigma_2p0
+  MAIN_F2_ksigma_4p0
 )
 
 repeats_for() {

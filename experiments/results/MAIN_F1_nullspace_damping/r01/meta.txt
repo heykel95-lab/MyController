@@ -1,0 +1,11 @@
+run_id:        MAIN_F1_nullspace_damping
+repeat:        1
+timestamp:     2026-07-31T19:27:46+02:00
+git_commit:    01cc948c1d805c5e4efba973db92057f0e15e715
+git_dirty:     no
+host:          Computer19
+plane_profile: horizontal
+tool_profile:  grinding_tool
+tool_mount_status: rigid
+tool_mount_play_bound_deg: 0.0
+controller_exit: 130
