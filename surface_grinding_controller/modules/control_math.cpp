@@ -349,7 +349,39 @@ Mat3 makeToolOrientationForAlignmentTarget(
 
   // Rotate the tool axis onto the offset command axis, keeping the remaining
   // twist as close to the start as possible.
-  return rotationBetweenUnitVectors(tool_axis_start, tool_axis_target) * R_start;
+  const Mat3 R_axis =
+      rotationBetweenUnitVectors(tool_axis_start, tool_axis_target) * R_start;
+  if (!params.command_tool_twist) {
+    return R_axis;
+  }
+
+  // The shortest arc above turns about an axis perpendicular to the tool axis,
+  // so it never sets the spin about that axis: the face keeps the start pose's
+  // twist. Command it instead, so the leading edge of a rectangular face is a
+  // property of the plane rather than of q_init.
+  const Vec3 face_long_axis_ee =
+      normalizedOrFallback(params.tool_contact_half_length_ee,
+                           Vec3(0.0, 1.0, 0.0));
+  // Both directions are measured in the plane perpendicular to the tool axis.
+  const auto perpendicular = [&tool_axis_target](const Vec3& v) -> Vec3 {
+    return v - v.dot(tool_axis_target) * tool_axis_target;
+  };
+  const Vec3 current = perpendicular(R_axis * face_long_axis_ee);
+  const Vec3 zero_reference = perpendicular(R_alignment_target.col(0));
+  // Degenerate only if the face long axis or tangent1 is along the tool axis;
+  // then no twist is defined and the start twist is the honest answer.
+  if (current.norm() <= 1e-9 || zero_reference.norm() <= 1e-9) {
+    return R_axis;
+  }
+
+  const Vec3 target = Eigen::AngleAxisd(
+                          (M_PI / 180.0) * params.tool_target_offset_normal_deg,
+                          tool_axis_target) *
+                      zero_reference.normalized();
+  const Vec3 current_unit = current.normalized();
+  const double twist = std::atan2(
+      tool_axis_target.dot(current_unit.cross(target)), current_unit.dot(target));
+  return Eigen::AngleAxisd(twist, tool_axis_target) * R_axis;
 }
 
 Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_alignment_target) {

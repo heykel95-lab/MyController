@@ -127,6 +127,7 @@ RunResult runControlLoop(Parameters& params,
   double gate_paused_time = 0.0;  // frozen descend clock while gated
   bool gate_grind_armed = false;
   bool gate_grind_passed = false;
+  double gate_grind_paused_time = 0.0;  // frozen push ramp while gated
 
   // The preload frozen when the set-up phase ends; grind presses with it.
   double setup_push_start = -params.descend_surface_clearance;
@@ -319,7 +320,10 @@ RunResult runControlLoop(Parameters& params,
     // ---------------------------------------------------------------
     // Manual re-guidance from hold.
     // ---------------------------------------------------------------
-    if (phase == ControlPhase::kHold && signals.guide_requested.load()) {
+    // Accepted from every phase, like e and m: g drops the commanded torque to
+    // gravity compensation, so leaving a pressed phase just releases the
+    // preload rather than moving the arm.
+    if (phase != ControlPhase::kManualGuide && signals.guide_requested.load()) {
       signals.guide_requested.store(false);
       signals.proceed_requested.store(false);
 
@@ -353,7 +357,11 @@ RunResult runControlLoop(Parameters& params,
 
       phase = ControlPhase::kManualGuide;
       phase_start_time = time;
-      printf("\nphase: manual_guide (move the tool by hand; p+Enter recaptures and resumes hold, e+Enter stops)\n");
+      // p restarts from initial_phase, which is the sequence's first phase in a
+      // sequence run and hold in a hold run. Name the one that will happen.
+      printf("\nphase: manual_guide (move the tool by hand; p+Enter recaptures "
+             "and restarts %s, e+Enter stops)\n",
+             phaseName(initial_phase));
     }
     if (phase == ControlPhase::kManualGuide) {
       Array7 coriolis_array = model.coriolis(state);
@@ -421,6 +429,7 @@ RunResult runControlLoop(Parameters& params,
         gate_paused_time = 0.0;
         gate_grind_armed = false;
         gate_grind_passed = false;
+        gate_grind_paused_time = 0.0;
         setup_push_start = -params.descend_surface_clearance;
         grind_push = 0.0;
         damping.hold_computed = false;
@@ -496,26 +505,36 @@ RunResult runControlLoop(Parameters& params,
         const double tool_axis_error = std::acos(
             std::max(-1.0, std::min(1.0, tool_axis_current.dot(tool_axis_target))));
         const double phase_time = time - phase_start_time;
+        const double rotation_error =
+            applyRotationalAxisMask(
+                params, orientationError(R_EE, R_d_alignment_target),
+                R_alignment_target)
+                .norm();
 
         if (params.debug_period > 0.0 && time >= next_debug_time &&
             intro_printed_for == phase) {
-          const Vec3 e_R_target = applyRotationalAxisMask(
-              params, orientationError(R_EE, R_d_alignment_target), R_alignment_target);
           printApproachOrientDebug(phase_time,
                                    (180.0 / M_PI) * tool_axis_error,
-                                   (180.0 / M_PI) * e_R_target.norm());
+                                   (180.0 / M_PI) * rotation_error);
           next_debug_time = time + params.debug_period;
         }
 
+        // axis_err covers the two tilts only. With the spin commanded as well
+        // the target is a full frame, so wait for the whole rotation error.
+        const bool orientation_reached =
+            params.command_tool_twist
+                ? rotation_error <= params.approach_orient_error_threshold
+                : tool_axis_error <= params.approach_orient_error_threshold;
         if (phase_time >= params.approach_orient_min_time &&
-            tool_axis_error <= params.approach_orient_error_threshold) {
+            orientation_reached) {
           phase = ControlPhase::kApproachDescend;
           phase_start_time = time;
           next_debug_time = time;
           contact_force_bias = external_force;
           contact_moment_bias = external_moment;
-          printf("\nOrientation reached: axis_err=%.1f deg\n",
-                 (180.0 / M_PI) * tool_axis_error);
+          printf("\nOrientation reached: axis_err=%.1f deg | rot_err=%.1f deg\n",
+                 (180.0 / M_PI) * tool_axis_error,
+                 (180.0 / M_PI) * rotation_error);
           printf("phase: %s\n", phaseName(phase));
         }
         break;  // desired stays at p_start: rotate without moving the TCP
@@ -619,9 +638,11 @@ RunResult runControlLoop(Parameters& params,
       case ControlPhase::kSetUp: {
         const double phase_time = time - phase_start_time;
         double setup_push_velocity = 0.0;
+        // Frozen clock, like descend's: waiting at the grind gate must not go
+        // on ramping the commanded depth, or the preload grows while you read.
         const double push =
-            setUpPush(params, phase_time, setup_push_start,
-                      setup_push_velocity);
+            setUpPush(params, phase_time - gate_grind_paused_time,
+                      setup_push_start, setup_push_velocity);
         const Vec3 edge_target = first_contact_point + push * descend_direction;
         desired.p_d = edge_target - R_contact_start * tool_contact_offset_ee;
         desired.pdot_d = setup_push_velocity * descend_direction;
@@ -666,7 +687,8 @@ RunResult runControlLoop(Parameters& params,
                    "Enter to start the grind (e+Enter stops).\n");
           }
           if (!signals.gate_continue.load()) {
-            break;  // keep pressing while waiting
+            gate_grind_paused_time += period.toSec();
+            break;  // keep pressing, at the preload reached, while waiting
           }
           gate_grind_passed = true;
           signals.gate_continue.store(false);

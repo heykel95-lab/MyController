@@ -9,7 +9,7 @@ descend_surface_clearance = 0.020
 
 # 1 = wait for Enter before the phase.
 pause_before_set_up = 1
-pause_before_grind = 0
+pause_before_grind = 1
 
 # --------------------------------------------------------------------
 # Hold while paused: position, base frame [x, y, z]
@@ -27,7 +27,10 @@ pause_hold_Dp_z = 200.0
 # --------------------------------------------------------------------
 # Hold while paused: orientation, surface frame [t1, t2, normal]
 # --------------------------------------------------------------------
-# Stiffness [Nm/rad]. Same frame and values as the approach phase.
+# Stiffness [Nm/rad]. 
+# KR should havee the same values as the approach phase.
+# Or else the Orientation won't be the same as in the orientation phase from the start because diffrent Rotational Gains
+
 pause_hold_KR_tangent1 = 90.0
 pause_hold_KR_tangent2 = 90.0
 pause_hold_KR_normal = 90.0

@@ -144,10 +144,14 @@ struct Parameters {
   double alignment_target_tilt_angle_deg = 0.0;    // a, about base x
   double alignment_target_tilt_angle_y_deg = 0.0;  // b, about base y
   Vec3 alignment_target_tangent1 = Vec3(0.0, 1.0, 0.0);
-  // Commanded tool-axis offset from the calibrated surface normal [deg]. It
-  // tilts only the command, not the plane used for clearance, gains or scoring.
+  // Commanded orientation offset from the surface frame [deg]. It offsets only
+  // the command, not the plane used for clearance, gains or scoring. The two
+  // tangents tilt the tool axis; the normal spins the face about that axis,
+  // and only applies when command_tool_twist is set.
   double tool_target_offset_tangent1_deg = 0.0;
   double tool_target_offset_tangent2_deg = 0.0;
+  double tool_target_offset_normal_deg = 0.0;
+  bool command_tool_twist = false;
   Vec3 tool_axis_ee = Vec3(0.0, 0.0, 1.0);
   double tool_axis_target_sign = -1.0;
   bool use_tool_contact_point_control = true;
@@ -688,6 +692,17 @@ Vec7 computeNullspaceTorque(
     const Mat6x7& J,
     const Vec7& dq,
     SigmaDiagnostics& sigma);
+
+// True when the hand's measured stroke covers the widths this program
+// commands. A homing that ran with the tool clamped measures only the travel
+// left over, and every later move() and grasp() is clamped to that stroke.
+bool gripperWidthCalibrated(const franka::GripperState& state,
+                            const Parameters& params);
+
+// Prints what the bad stroke means and how to clear it. No-op when the
+// calibration is good.
+void reportGripperCalibration(const franka::GripperState& state,
+                              const Parameters& params);
 
 bool openGripper(const Parameters& params, Gripper& gripper);
 

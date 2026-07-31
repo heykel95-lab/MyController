@@ -248,6 +248,9 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
                 p.tool_target_offset_tangent2_deg);
   p.tool_axis_ee = getVec3Xyz("tool_axis_ee", p.tool_axis_ee);
   p.tool_axis_target_sign = getDouble("tool_axis_target_sign", p.tool_axis_target_sign);
+  p.command_tool_twist = getBool("command_tool_twist", p.command_tool_twist);
+  p.tool_target_offset_normal_deg =
+      getDouble("tool_target_offset_normal_deg", p.tool_target_offset_normal_deg);
   p.use_tool_contact_point_control =
       getBool("use_tool_contact_point_control", p.use_tool_contact_point_control);
   p.auto_select_tool_contact_edge =

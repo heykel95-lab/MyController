@@ -7,7 +7,7 @@
 # The manual Dp/DR next to each K is the fallback.
 
 # Upper limit on any computed coefficient [Ns/m | Nms/rad].
-auto_damping_max = 8000.0
+auto_damping_max = 400.0
 
 # 0 = manual damping is only a fallback. 1 = it is also a per-axis floor.
 auto_damping_min_from_manual = 0

@@ -923,9 +923,39 @@ bool selectHoldNullspaceMode(Parameters& params,
 
 }  // namespace
 
+bool gripperWidthCalibrated(const franka::GripperState& state,
+                            const Parameters& params) {
+  const double width_tolerance = 0.002;
+  const double commanded =
+      std::max(params.gripper_open_width, params.gripper_grasp_width);
+  return state.max_width + width_tolerance >= commanded;
+}
+
+void reportGripperCalibration(const franka::GripperState& state,
+                              const Parameters& params) {
+  if (gripperWidthCalibrated(state, params)) {
+    return;
+  }
+  const double commanded =
+      std::max(params.gripper_open_width, params.gripper_grasp_width);
+  fprintf(stderr,
+          "\nHand width calibration is invalid: stroke %.1f mm, but this "
+          "program commands up to %.1f mm.\n",
+          1000.0 * state.max_width,
+          1000.0 * commanded);
+  fprintf(stderr,
+          "The last homing measured only the travel left beside the tool, so "
+          "move() and grasp() are clamped to that stroke and the fingers "
+          "barely move.\n");
+  fprintf(stderr,
+          "Clear it with r (type recal) or ./tools/home_gripper, fingers "
+          "EMPTY. Never home with the tool clamped.\n\n");
+}
+
 bool openGripper(const Parameters& params, Gripper& gripper) {
   try {
     const franka::GripperState before = gripper.readOnce();
+    reportGripperCalibration(before, params);
     printf("Opening gripper to %.1f mm...\n", 1000.0 * params.gripper_open_width);
     const bool opened = gripper.move(params.gripper_open_width, params.gripper_open_speed);
     const franka::GripperState after = gripper.readOnce();
@@ -943,6 +973,8 @@ bool openGripper(const Parameters& params, Gripper& gripper) {
            1000.0 * after.max_width);
     if (verified) {
       printf("Gripper opened and width verified.\n");
+    } else if (!calibration_supports_target) {
+      reportGripperCalibration(after, params);
     } else {
       fprintf(stderr,
               "Gripper did not reach the requested open width. Support/remove "
@@ -958,6 +990,7 @@ bool openGripper(const Parameters& params, Gripper& gripper) {
 bool graspTool(const Parameters& params, Gripper& gripper) {
   try {
     const franka::GripperState before = gripper.readOnce();
+    reportGripperCalibration(before, params);
     printf("Grasping tool: width %.1f mm, force %.1f N...\n",
            1000.0 * params.gripper_grasp_width, params.gripper_grasp_force);
     // epsilon_inner/outer set how far the final width may fall short of /
@@ -1060,14 +1093,19 @@ bool recalibrateGripper(const Parameters& params,
            1000.0 * before.width,
            1000.0 * before.max_width,
            before.is_grasped ? "yes" : "no");
+    reportGripperCalibration(before, params);
     printf("This opens the fingers completely. A held tool WILL FALL.\n");
     printf("Support the tool by hand or remove it before continuing.\n");
 
     if (!confirmation_already_received) {
       printf("Type  recal  and press Enter to continue, anything else to abort: ");
       fflush(stdout);
-      if (readChoice() != "recal") {
-        printf("Recalibration aborted. Nothing was moved.\n");
+      // Echo what arrived: the usual abort is a bare Enter, and without this
+      // the prompt looks like it failed rather than like it was answered.
+      const std::string answer = readChoice();
+      if (answer != "recal") {
+        printf("Read \"%s\", not \"recal\". Aborted; nothing was moved.\n",
+               answer.c_str());
         return false;
       }
     } else {
@@ -1157,12 +1195,6 @@ bool runToolPickup(const Parameters& params,
   printf("]\n");
   printf("Path: q_init -> stand-off -> down onto the tool -> %s -> lift.\n",
          grasp ? "grasp" : "release");
-  printf("Press Enter to run it, anything else to abort: ");
-  fflush(stdout);
-  if (!readChoice().empty()) {
-    printf("Aborted. Nothing was moved.\n");
-    return false;
-  }
 
   // Open before travelling: the fingers must clear the tool on the way in.
   // On release the hand is still carrying, so it opens at the holder instead.
@@ -1230,17 +1262,16 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
   // inspect or set up first and return to this menu.
   while (true) {
     printf("\n=== Startup mode ===\n");
-    printf("  s = go to q_init, then run the phase sequence\n");
-    printf("  h = go to q_init, then hold that pose\n");
-    printf("  t = test the set-up impedance: hold with the set-up K and D\n");
-    printf("  g = guiding mode: go to q_init, then hand-guide to your pose;\n");
-    printf("      use s+Enter for sequence or h+Enter for hold\n");
-    printf("  q = go to q_init, inspect the posture, then choose again\n");
-    printf("  o = open the Franka hand now (release/load tool), then choose again\n");
-    printf("  c = close/grasp the tool now, then choose again\n");
-    printf("  r = recalibrate the hand width (opens fully; support the tool)\n");
-    printf("  f = fetch the tool: via q_init, down onto it, grasp, lift\n");
-    printf("  b = put the tool back: same path, releases at the holder\n");
+    printf("  s = run the phase sequence from q_init\n");
+    printf("  h = hold the q_init pose\n");
+    printf("  t = hold with the set-up impedance\n");
+    printf("  g = hand-guide the start pose\n");
+    printf("  q = go to q_init and inspect\n");
+    printf("  o = open the hand now\n");
+    printf("  c = grasp the tool now\n");
+    printf("  r = recalibrate hand width, fingers empty\n");
+    printf("  f = fetch the tool from the holder\n");
+    printf("  b = put the tool back\n");
     printf("  e = stop and quit\n");
     printf("While a run is going: e+Enter stops, m+Enter comes back here.\n");
     printf("Choice [s/h/t/g/q/o/c/r/f/b/e]: ");
