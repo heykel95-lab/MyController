@@ -3,6 +3,10 @@
 # traceable to a commit and a parameter set without carrying the bulk data.
 results/**/*.csv
 pilot_results/**/*.csv
+Old_Results/**/*.csv
+# The metrics snapshot taken when the MAIN campaign was restarted is small
+# and is the only record of the superseded rows, so it stays tracked.
+!Old_Results/metrics_before_redo.csv
 
 __pycache__/
 *.pyc

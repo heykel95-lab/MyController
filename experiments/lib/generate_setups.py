@@ -218,6 +218,13 @@ MAIN_COMMON = [
     ("setup_translation_surface_frame", "1"),
     ("setup_Kp_surface_normal", "800.0"),
     ("setup_KR_normal", "50.0"),
+    # The two tilts set the tool-axis direction only. Without the spin about
+    # that axis commanded, q_init decides which edge of the 40 x 120 mm face
+    # leads, and a 120 mm edge is a different contact condition from a 40 mm
+    # one at the same angle. 90 deg puts the long axis along t2, so the short
+    # edge leads. Pinned here so every MAIN run records it.
+    ("command_tool_twist", "1"),
+    ("tool_target_offset_normal_deg", "90.0"),
 ]
 
 
