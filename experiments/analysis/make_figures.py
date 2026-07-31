@@ -132,6 +132,21 @@ def errorbar_from_buckets(ax, buckets, label, color, marker="o"):
     return bool(plotted)
 
 
+def log_ticks_at(ax, values):
+    """Label a log axis only where a setting was tested.
+
+    A log scale otherwise fills the decade with minor labels -- 3x10^2, 4x10^2,
+    6x10^2 -- which collide with each other and with the major ones at the
+    printed width. The tested settings are the only meaningful positions.
+    """
+    ax.set_xscale("log")
+    ticks = sorted(set(values))
+    ax.set_xticks(ticks)
+    ax.set_xticklabels([f"{int(round(v))}" for v in ticks])
+    ax.set_xticks([], minor=True)
+    ax.tick_params(axis="x", which="minor", length=0)
+
+
 # Figures carry no internal title: the thesis caption identifies each one, and
 # a title inside the axes repeats it on the page.
 def figure_legend(fig, ax, ncol=3):
@@ -339,9 +354,12 @@ def fig_main_rotational_stiffness(rows):
             errorbar_from_buckets(
                 ax, buckets, rf"$t_{axis}$ excitation", color, marker=marker
             )
+        # Ticks at the settings that were tested, so the reader sees which
+        # values the response is drawn through.
+        ax.set_xticks([5, 15, 50])
         ax.set_xlabel(r"excited-axis $K_R$ [Nm/rad]")
         ax.set_ylabel(ylabel)
-    axes[0].legend()
+    figure_legend(fig, axes[0])
     return save(fig, "MAIN_B_KR.pdf")
 
 
@@ -376,7 +394,7 @@ def fig_main_translational_stiffness(rows):
             errorbar_from_buckets(
                 ax, buckets, rf"$t_{axis}$ excitation", color, marker=marker
             )
-        ax.set_xscale("log")
+        log_ticks_at(ax, (300.0, 800.0, 2000.0))
         ax.set_xlabel(r"cross-direction $K_p$ [N/m]")
         ax.set_ylabel(ylabel)
     figure_legend(fig, axes[0])
