@@ -1,0 +1,12 @@
+run_id:   MAIN_D3_t1_rc_face_centre
+repeats:  3
+
+plane profile: horizontal
+
+tool profile: grinding_tool
+
+purpose:
+  Case D: compliance centre at the grinding-face centre, +10 deg about t1. r_c = -20 mm along the tool axis from p_EE.
+
+pass criterion:
+  Compare against the matched p000 run, which places the pole at p_EE instead. A difference is the 20 mm of tool the p000 convention ignores; no difference means the normal offset does not matter and only the tangential lever does.
