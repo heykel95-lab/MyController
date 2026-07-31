@@ -190,8 +190,9 @@ def main():
     good = [r for r in rows if not r["no_motion"]]
     if good:
         ex = np.array([r["excursion"] for r in good])
-        print(f"\nexcursion rad: mean {ex.mean():.3f}, sd {ex.std(ddof=1):.3f}, "
-              f"min {ex.min():.3f}, max {ex.max():.3f}")
+        sd = ex.std(ddof=1) if len(ex) > 1 else float("nan")
+        print(f"\nexcursion rad: mean {ex.mean():.3f}, sd {sd:.3f}, "
+              f"min {ex.min():.3f}, max {ex.max():.3f}  (n={len(ex)})")
         print("A trial whose excursion sits far from the others received a "
               "different disturbance, whatever its cue timing says.")
     return 0
