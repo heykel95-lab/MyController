@@ -170,6 +170,7 @@ struct Parameters {
   // same time in every repetition instead of whenever the operator reacted.
   bool disturbance_cues_enabled = false;
   double disturbance_push_time = 5.0;     // cue to displace the arm [s]
+  double disturbance_hold_time = 7.0;     // cue to stop moving, still held [s]
   double disturbance_release_time = 8.0;  // cue to let go [s]
 
   // Phase 1: approach (orient, then descend).
@@ -341,7 +342,8 @@ enum class SigmaDebugEvent {
   // commands; when the hand actually arrived is not observable, so these mark
   // the instruction and not the load itself.
   kDisturbCuePush = 6,
-  kDisturbCueRelease = 7
+  kDisturbCueHold = 7,
+  kDisturbCueRelease = 8
 };
 
 // Compact, preallocated diagnostic row for sigma-enabled hold experiments.

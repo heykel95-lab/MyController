@@ -533,9 +533,15 @@ def nullspace_common(mode):
         ("nullspace_mode", f"{mode}"),
         ("disturbance_cues_enabled", "1"),
         ("disturbance_push_time", "5.0"),
+        ("disturbance_hold_time", "7.0"),
         ("disturbance_release_time", "8.0"),
-        # Cue, displace, release, then an unassisted recovery window.
-        ("experiment_duration", "30.0"),
+        # Displace, hold still, release, then recover. Ten seconds of recovery
+        # and not the twenty-two first used: across the archived mode-1 runs
+        # all null-space motion ceased within 2.6 s of the release cue and the
+        # arm then sat idle for the remaining twenty, which is dead time in
+        # every repetition. Ten still covers the sigma drive, which ran about
+        # twelve seconds in the earlier conditioning runs.
+        ("experiment_duration", "18.0"),
         # Terminal only. The sigma rows still reach the log; printing four
         # lines every debug period buries the operator cues in a 30 s hold.
         ("print_sigma_debug", "0"),

@@ -75,7 +75,7 @@ def read_log(path):
 
 def cue_times(run_dir):
     """Cue times as configured for this run, from its archived parameters."""
-    push = release = None
+    push = hold = release = None
     # Every parameter file, because the archive keeps them under their own
     # names rather than under a fixed set.
     for path in sorted(glob.glob(
@@ -88,11 +88,13 @@ def cue_times(run_dir):
                 try:
                     if key == "disturbance_push_time":
                         push = float(value)
+                    elif key == "disturbance_hold_time":
+                        hold = float(value)
                     elif key == "disturbance_release_time":
                         release = float(value)
                 except ValueError:
                     pass
-    return push, release
+    return push, hold, release
 
 
 def sustained_windows(t, speed):
@@ -119,7 +121,7 @@ def report(run_dir):
     if data is None:
         return None
     t, speed = data
-    push_cue, release_cue = cue_times(run_dir)
+    push_cue, hold_cue, release_cue = cue_times(run_dir)
     if push_cue is None or release_cue is None:
         return None
 
@@ -144,7 +146,10 @@ def report(run_dir):
         push_cue=push_cue, release_cue=release_cue,
         start=start, end=end,
         early=push_cue - start,
-        overshoot=end - release_cue,
+        # Driving should stop at the hold cue, not at the release cue. Motion
+        # after it is the hand still moving the arm while it was meant to be
+        # stationary, which is what blurs the transition.
+        overshoot=end - (hold_cue if hold_cue is not None else release_cue),
         excursion=excursion,
         recovery_from=max(end, release_cue),
         run_end=float(t[-1]),
@@ -176,7 +181,7 @@ def main():
         if r["early"] > 0.2:
             notes.append(f"started {r['early']:.1f}s early")
         if r["overshoot"] > 0.3:
-            notes.append(f"held {r['overshoot']:.1f}s past release")
+            notes.append(f"still moving {r['overshoot']:.1f}s past the hold cue")
         print(f"{label:<34}{r['start']:>7.1f}{r['end']:>7.1f}"
               f"{r['early']:>+7.1f}{r['overshoot']:>+7.1f}"
               f"{r['excursion']:>8.3f}{r['recovery_from']:>9.1f}"

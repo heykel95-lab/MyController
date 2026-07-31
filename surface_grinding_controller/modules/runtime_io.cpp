@@ -52,6 +52,8 @@ const char* sigmaDebugEventName(SigmaDebugEvent event) {
       return "recapture";
     case SigmaDebugEvent::kDisturbCuePush:
       return "disturb_cue_push";
+    case SigmaDebugEvent::kDisturbCueHold:
+      return "disturb_cue_hold";
     case SigmaDebugEvent::kDisturbCueRelease:
       return "disturb_cue_release";
     case SigmaDebugEvent::kStop:

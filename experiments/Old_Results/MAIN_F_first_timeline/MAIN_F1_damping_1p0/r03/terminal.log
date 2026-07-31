@@ -1,0 +1,67 @@
+
+Press Enter to recover and configure the robot.
+Robot recovered or already ready.
+keys: e stop | m menu | g hand-guide
+
+=== Startup mode ===
+  s = run the phase sequence from q_init
+  h = hold the q_init pose
+  t = hold with the set-up impedance
+  g = hand-guide the start pose
+  q = go to q_init and inspect
+  o = open the hand now
+  c = grasp the tool now
+  r = recalibrate hand width, fingers empty
+  f = fetch the tool from the holder
+  b = put the tool back
+  e = stop and quit
+While a run is going: e+Enter stops, m+Enter comes back here.
+Choice [s/h/t/g/q/o/c/r/f/b/e]: Moving to q_init (horizontal_table_search)
+  q1..q7 [deg] = [0.8, 12.1, -0.5, -130.9, -0.2, 142.9, 44.7] deg
+  horizontal_table_search = [0.014777, 0.210911, -0.009320, -2.284835, -0.002725, 2.493410, 0.780694] rad
+q_init reached.
+
+Select hold nullspace mode:
+  0 = no nullspace torque
+  1 = nullspace damping only (no return to q_start)
+  2 = sigma optimization only (push toward larger sigma_min)
+  3 = sigma optimization + nullspace damping (damped comeback)
+Choice [0/1/2/3, Enter = 1]: Selected: hold mode with nullspace_damping_only.
+
+=== Start pose ===
+q_start = [0.8, 12.1, -0.5, -130.9, -0.2, 142.8, 44.7] deg
+p_start = [531.2, 2.5, 156.8] mm
+
+=== Run ===
+phase: hold
+
+--- nullspace: nullspace_damping_only ---
+  tau = -d_null * N_tau * dq            d_null = 1.000 Nms/rad
+  type: d <Nms/rad>
+  type 0/1/2/3 to switch mode.
+  Kp=[2000, 2000, 2000] N/m  KR=[50, 50, 50] Nm/rad  [x,y,z]
+  Dp=[50, 50, 50] Ns/m  DR=[8.0, 8.0, 8.0] Nms/rad
+
+>>> PUSH THE ARM NOW  (t = 5.0 s)
+
+>>> RELEASE - do not touch until the run ends  (t = 8.0 s)
+
+Joint motion [deg]:
+joint    start   final   delta
+------------------------------
+q1        0.8   -71.1   -71.9
+q2       12.1    39.4    27.3
+q3       -0.5    72.7    73.3
+q4     -130.9  -126.7     4.2
+q5       -0.2   -47.6   -47.4
+q6      142.8   127.6   -15.2
+q7       44.7    75.6    30.8
+
+=== Final result ===
+p_d = [531.2, 2.5, 156.8] mm
+p_EE = [531.6, 1.6, 157.4] mm
+e_p = [-0.4, 0.9, -0.6] mm
+position_error = 1.15 mm
+e_R = [-1.84, -1.03, -0.45] deg
+rotation_error = 2.16 deg
+csv: logs/surface_grinding_controller_log.csv

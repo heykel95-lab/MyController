@@ -279,6 +279,8 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
       getBool("disturbance_cues_enabled", p.disturbance_cues_enabled);
   p.disturbance_push_time =
       getDouble("disturbance_push_time", p.disturbance_push_time);
+  p.disturbance_hold_time =
+      getDouble("disturbance_hold_time", p.disturbance_hold_time);
   p.disturbance_release_time =
       getDouble("disturbance_release_time", p.disturbance_release_time);
   p.approach_orient_min_time =

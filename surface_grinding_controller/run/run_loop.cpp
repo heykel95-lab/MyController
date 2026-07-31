@@ -137,6 +137,7 @@ RunResult runControlLoop(Parameters& params,
   double gate_grind_paused_time = 0.0;  // frozen push ramp while gated
   bool setup_reported = false;          // the result prints once, at phase end
   bool disturb_push_cued = false;       // scripted disturbance cues, once each
+  bool disturb_hold_cued = false;
   bool disturb_release_cued = false;
 
   // The preload frozen when the set-up phase ends; grind presses with it.
@@ -506,6 +507,13 @@ RunResult runControlLoop(Parameters& params,
       if (!disturb_push_cued && time >= params.disturbance_push_time) {
         disturb_push_cued = true;
         cue("PUSH THE ARM NOW", SigmaDebugEvent::kDisturbCuePush);
+      }
+      // Separating "stop moving" from "let go" marks the transition. Without
+      // it the driven stretch and the statically held one run together, and
+      // the moment the hand stopped driving is only inferable.
+      if (!disturb_hold_cued && time >= params.disturbance_hold_time) {
+        disturb_hold_cued = true;
+        cue("STOP MOVING - hold it still", SigmaDebugEvent::kDisturbCueHold);
       }
       if (!disturb_release_cued && time >= params.disturbance_release_time) {
         disturb_release_cued = true;

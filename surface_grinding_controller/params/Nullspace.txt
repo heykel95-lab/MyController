@@ -62,4 +62,5 @@ disturbance_cues_enabled = 0
 # Cue times measured from the start of the run [s]. The run then holds
 # undisturbed until experiment_duration, which is the recovery window.
 disturbance_push_time = 5.0
+disturbance_hold_time = 7.0
 disturbance_release_time = 8.0
