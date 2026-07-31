@@ -389,13 +389,16 @@ for rc_t1_mm in (-40, 40):
     )
 
 # Case D coarse centre-of-compliance sweep. Gains fixed 2026-07-31 from the
-# completed A--C screening, as the conventions require before D runs:
-# K_R = 5 N m/rad, which was best or tied at every condition and fell
-# monotonically as it rose (t1 0.64/0.57/0.49, t2 1.59/1.58/1.14 for 5/15/50);
-# and the cross-matched K_P = 300 N/m, the campaign's best result (t2 1.79 deg,
-# 21 % removed) and within 0.06 deg of the best on t1. The pole is swept at the
-# most responsive condition, where a centre-of-compliance effect is most
-# visible. Paired per axis exactly as Case C paired them.
+# completed A--C screening, as the conventions require before D runs, and both
+# land on the Case A baseline: K_R = 5 N m/rad was best or tied at every
+# condition and fell monotonically as it rose (t1 0.64/0.57/0.49, t2
+# 1.59/1.58/1.14 for 5/15/50), and K_P stays at 2000 N/m.
+#
+# K_P = 300 corrected more in the screening -- 1.79 deg and 21 % removed on t2
+# against 1.59 at baseline -- but adopting it would have changed the pole and
+# the stiffness together, leaving any difference from Case A ambiguous between
+# the two. At baseline the pole is the only variable, and the zero-lever runs
+# have an exact matched reference: D1_p000 against A2, D2_p000 against A4.
 for axis in (1, 2):
     rc_axis = 2 if axis == 1 else 1
     for rc_mm in (-60, 0, 60):
@@ -404,8 +407,6 @@ for axis in (1, 2):
             pair for pair in main_gain_overrides(
                 10.0 if axis == 1 else 0.0,
                 10.0 if axis == 2 else 0.0,
-                kp_t1=300.0 if axis == 2 else 2000.0,
-                kp_t2=300.0 if axis == 1 else 2000.0,
             )
             if pair[0] != "use_coupled_stiffness"
         ] + [
