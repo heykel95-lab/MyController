@@ -36,9 +36,27 @@ def replies_for(run_id):
             first = f.read().strip()
         if first in ("s", "h"):
             mode = first.encode()
+
+    # A plain hold asks for its null-space mode after reaching q_init. Enter
+    # would keep the overlay's value, but answering with the digit puts the
+    # mode the trial ran in its own transcript instead of leaving it implied.
+    nullspace = b""
+    overlay = os.path.join(HERE, "..", "setups", run_id, "overlay.txt")
+    if os.path.isfile(overlay):
+        with open(overlay) as f:
+            for line in f:
+                key, _, value = line.partition("=")
+                if key.strip() == "nullspace_mode":
+                    value = value.split("#")[0].strip()
+                    if value in ("0", "1", "2", "3"):
+                        nullspace = value.encode()
+
     return [
         (b"Press Enter to recover and configure the robot.", b"\n"),
         (b"Choice [s/h/t/g/q/o/c/r/f/b/e]: ", mode + b"\n"),
+        # The "Enter = N" tail of this prompt changes with the configured mode,
+        # so match the stable part.
+        (b"Choice [0/1/2/3", nullspace + b"\n"),
         (b"[GATE] Reached", b"\n"),      # start the set-up press
         (b"[GATE] Set up finished", b"e\n"),  # result has printed; stop
     ]
