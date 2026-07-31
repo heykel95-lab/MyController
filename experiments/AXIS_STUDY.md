@@ -236,3 +236,12 @@ slip is not observable from the robot, so nothing automatic detects it. Write
 a line `reject: <reason>` into that repeat's `operator_observation.txt` and the
 extractor flags it `operator-reject(...)`, which removes it from every mean and
 draws it hollow.
+
+`MAIN_A4_t2_10deg/r03` is deliberately **not** rejected. The slip is a property
+of the fixture rather than a recording fault, and it is the clearest evidence
+the campaign holds that the limitation is real; excluding it would remove the
+finding along with the outlier. It carries an `operator_observation.txt`
+describing what happened, with no `reject:` line, so it stays in every mean and
+figure and is reported in the thesis instead. Its group therefore reads
++1.06 +/- 0.75 deg rather than the +1.59 +/- 0.03 of its two siblings, and any
+figure showing Case A at a \(t_2\) excitation carries that error bar.

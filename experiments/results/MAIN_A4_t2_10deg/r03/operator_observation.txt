@@ -1,0 +1,24 @@
+# Note only. No "reject:" line, so this repeat stays in every mean and figure.
+
+Suspected tool slip in the gripper during the set-up press.
+
+This repeat removed 0.00 deg of alignment error where r01 and r02 removed
+1.56 and 1.62 deg under an identical configuration. The before value was also
+1.7 deg lower than theirs, so the trial started from a different first-contact
+angle as well.
+
+The declared mount play is a rotation about Y_EE, and the commanded twist puts
+Y_EE 25 deg from t2. On a t2 excitation the slip axis therefore nearly
+coincides with the axis being corrected, so the contact moment can be taken up
+by the tool turning inside the gripper instead of the arm turning. Alignment is
+inferred from the EE pose, so that is indistinguishable from no correction.
+
+Kept deliberately. The slip is a real property of this fixture rather than a
+recording fault, and excluding it would remove the clearest evidence the
+campaign has that the limitation exists. It is reported in the thesis instead.
+
+Consequence for the result: a slip can only hide correction that physically
+happened, so it biases a t2 condition downward and never upward. The
+t2-corrects-more-than-t1 asymmetry is a lower bound.
+
+See the tool-slip section of experiments/AXIS_STUDY.md.
