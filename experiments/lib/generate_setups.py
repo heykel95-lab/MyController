@@ -209,6 +209,10 @@ MAIN_COMMON = [
     # it through at 2 deg while still converging, and the clearance capture
     # freezes whatever error is standing at handover into the contact frame.
     ("approach_orient_spin_error_threshold", "0.009"),
+    # The axis error settles at a value the commanded tilt decides, 1.3 deg at
+    # 0 and 2.1 deg at 10, so the 10 deg conditions never reach the gate. Hand
+    # over at the settled value rather than waiting on one that cannot arrive.
+    ("approach_orient_timeout", "5.0"),
     ("setup_timeout", "5.0"),
     # The two loose-gate A0 diagnostics reached 24.33 N at 0.060 m with
     # Kp,n=360 N/m. The primary campaign instead targets the established

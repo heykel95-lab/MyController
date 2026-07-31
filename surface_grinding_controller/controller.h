@@ -173,6 +173,11 @@ struct Parameters {
   // threshold above; the spin is a wrist rotation with no such floor and
   // converges to a fraction of a degree if it is not let go early.
   double approach_orient_spin_error_threshold = 0.009;
+  // Hand over anyway after this long [s]. The axis error settles at a value
+  // set by the commanded tilt against the approach KR -- 1.3 deg at 0 deg,
+  // 2.1 deg at 10 deg -- so a fixed gate is not reachable at every condition,
+  // and the step has no other way to end.
+  double approach_orient_timeout = 5.0;
   // Slew rate for the commanded orientation [deg/s]. The target is otherwise a
   // step at t=0, and a commanded spin about the tool axis can be most of a
   // half turn, which trips the power limit against the approach KR.

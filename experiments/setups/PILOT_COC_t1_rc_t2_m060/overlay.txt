@@ -3,6 +3,7 @@
 # Only keys listed here differ from the nominal set.
 approach_orient_error_threshold = 0.035
 approach_orient_spin_error_threshold = 0.009
+approach_orient_timeout = 5.0
 setup_timeout = 5.0
 setup_push_end = 0.060
 setup_push_speed = 0.050

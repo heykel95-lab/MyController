@@ -556,16 +556,32 @@ RunResult runControlLoop(Parameters& params,
             tool_axis_error <= params.approach_orient_error_threshold &&
             (!params.command_tool_twist ||
              spin_error <= params.approach_orient_spin_error_threshold);
+        // Settled short of the gate is still the end of the phase: the axis
+        // error stops improving at a value the commanded tilt decides, and
+        // waiting past that only spends time. Said plainly, because it changes
+        // what the trial handed over with.
+        const bool orient_timed_out =
+            params.approach_orient_timeout > 0.0 &&
+            phase_time >= params.approach_orient_timeout;
         if (phase_time >= params.approach_orient_min_time &&
-            orientation_reached) {
+            (orientation_reached || orient_timed_out)) {
           phase = ControlPhase::kApproachDescend;
           phase_start_time = time;
           next_debug_time = time;
           contact_force_bias = external_force;
           contact_moment_bias = external_moment;
-          printf("\nOrientation reached: axis_err=%.1f deg | spin_err=%.1f deg\n",
-                 (180.0 / M_PI) * tool_axis_error,
-                 (180.0 / M_PI) * spin_error);
+          if (orientation_reached) {
+            printf("\nOrientation reached: axis_err=%.1f deg | spin_err=%.1f deg\n",
+                   (180.0 / M_PI) * tool_axis_error,
+                   (180.0 / M_PI) * spin_error);
+          } else {
+            printf("\nOrientation settled short of the %.1f deg gate after "
+                   "%.1f s: axis_err=%.1f deg | spin_err=%.1f deg\n",
+                   (180.0 / M_PI) * params.approach_orient_error_threshold,
+                   params.approach_orient_timeout,
+                   (180.0 / M_PI) * tool_axis_error,
+                   (180.0 / M_PI) * spin_error);
+          }
           printf("phase: %s\n", phaseName(phase));
         }
         break;  // desired stays at p_start: rotate without moving the TCP
