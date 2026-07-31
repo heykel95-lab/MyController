@@ -536,7 +536,9 @@ def nullspace_common(mode):
         ("disturbance_release_time", "8.0"),
         # Cue, displace, release, then an unassisted recovery window.
         ("experiment_duration", "30.0"),
-        ("print_sigma_debug", "1"),
+        # Terminal only. The sigma rows still reach the log; printing four
+        # lines every debug period buries the operator cues in a 30 s hold.
+        ("print_sigma_debug", "0"),
     ]
 
 

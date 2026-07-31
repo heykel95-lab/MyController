@@ -703,11 +703,6 @@ Vec7 computeNullspaceTorque(
   sigma.k_sigma = params.nullspace_k_sigma;
   sigma.deadband = std::max(0.0, params.nullspace_sigma_deadband);
 
-  if (!params.use_nullspace_optimization ||
-      params.nullspace_mode == NullspaceMode::kOff) {
-    return Vec7::Zero();
-  }
-
   Map<const Vec7> q_current(state.q.data());
 
   // Moore-Penrose pseudo-inverse J^+ = sum_i (1/sigma_i) v_i u_i^T, dropping
@@ -749,6 +744,14 @@ Vec7 computeNullspaceTorque(
     sigma.dominant_velocity_fraction =
         (dominant_velocity * dominant_velocity) /
         dq_nullspace.squaredNorm();
+  }
+
+  // Mode 0 commands nothing, but it is the baseline the other modes are read
+  // against, so the redundant axis still has to be observed. The projector and
+  // the diagnostics above are what observe it; only the torque is withheld.
+  if (!params.use_nullspace_optimization ||
+      params.nullspace_mode == NullspaceMode::kOff) {
+    return Vec7::Zero();
   }
 
   // Mode 1 has no q_start spring: it only dissipates joint velocity projected

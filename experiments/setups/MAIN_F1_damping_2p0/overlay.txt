@@ -26,5 +26,5 @@ disturbance_cues_enabled = 1
 disturbance_push_time = 5.0
 disturbance_release_time = 8.0
 experiment_duration = 30.0
-print_sigma_debug = 1
+print_sigma_debug = 0
 nullspace_damping = 2.0
