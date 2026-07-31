@@ -429,6 +429,51 @@ for axis in (1, 2):
             repeats=3,
         )
 
+# Case D3: the compliance centre at the grinding-face centre. The lever is
+# r_c = p_TCP - p_c and contact.tcp is p_EE, so r_c = 0 already places the pole
+# at p_EE -- that is what the p000 runs above are. The face the tool actually
+# grinds with sits FACE_CENTER_M along the tool axis from p_EE, so putting the
+# pole there is r_c = -FACE_CENTER_M * (tool axis), resolved in the surface
+# frame at the commanded tilt. Mostly normal, with a small tangential part the
+# tilt introduces; the t1/t2 sweeps above never leave the tangent plane, so
+# this is the only condition that moves the pole along the normal.
+FACE_CENTER_M = 0.020
+for axis in (1, 2):
+    tilt = math.radians(10.0)
+    normal_part = FACE_CENTER_M * math.cos(tilt)
+    tangent_part = FACE_CENTER_M * math.sin(tilt)
+    if axis == 1:
+        rc = (0.0, -tangent_part, normal_part)
+    else:
+        rc = (tangent_part, 0.0, normal_part)
+    overrides = [
+        pair for pair in main_gain_overrides(
+            10.0 if axis == 1 else 0.0,
+            10.0 if axis == 2 else 0.0,
+        )
+        if pair[0] != "use_coupled_stiffness"
+    ] + [
+        ("use_coupled_stiffness", "1"),
+        ("coupled_use_block_diagonal", "0"),
+        ("coupled_pole_manual", "1"),
+        ("coupled_use_direct_rc_surface", "1"),
+        ("coupled_rc_tangent1", f"{rc[0]:.6f}"),
+        ("coupled_rc_tangent2", f"{rc[1]:.6f}"),
+        ("coupled_rc_normal", f"{rc[2]:.6f}"),
+    ]
+    add(
+        f"MAIN_D3_t{axis}_rc_face_centre",
+        f"Case D: compliance centre at the grinding-face centre, +10 deg "
+        f"about t{axis}. r_c = -20 mm along the tool axis from p_EE.",
+        "Compare against the matched p000 run, which places the pole at p_EE "
+        "instead. A difference is the 20 mm of tool the p000 convention "
+        "ignores; no difference means the normal offset does not matter and "
+        "only the tangential lever does.",
+        overrides,
+        repeats=3,
+    )
+
+
 # Compact absolute-orientation validation on the separately calibrated tilted
 # plane. These reproduce the three baseline angle cases from horizontal Case A.
 # A final tuned condition is added only after horizontal Cases A--D select it.

@@ -43,6 +43,8 @@ RUN_IDS=(
   MAIN_D2_t2_rc_t1_m060
   MAIN_D2_t2_rc_t1_p000
   MAIN_D2_t2_rc_t1_p060
+  MAIN_D3_t1_rc_face_centre
+  MAIN_D3_t2_rc_face_centre
 )
 
 repeats_for() {
