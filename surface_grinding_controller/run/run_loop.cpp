@@ -715,13 +715,19 @@ RunResult runControlLoop(Parameters& params,
             printf("\n[GATE] Set up finished (holding the pressed pose). Press "
                    "Enter to start the grind (e+Enter stops).\n");
           }
-          if (!signals.gate_continue.load()) {
+          // A stop releases the gate rather than being ignored by it. Set up
+          // has already finished here, so its result is a measurement the run
+          // made: quitting at the gate must still report it, or the trial is
+          // discarded for a keystroke that arrived after the work was done.
+          if (!signals.gate_continue.load() && !signals.stop_requested.load()) {
             gate_grind_paused_time += period.toSec();
             break;  // keep pressing, at the preload reached, while waiting
           }
           gate_grind_passed = true;
+          const bool stopped_at_gate = !signals.gate_continue.load();
           signals.gate_continue.store(false);
-          printf("[GATE] Continuing to grind.\n");
+          printf(stopped_at_gate ? "[GATE] Stop requested; reporting set up.\n"
+                                 : "[GATE] Continuing to grind.\n");
         }
 
         SetUpReport report;
