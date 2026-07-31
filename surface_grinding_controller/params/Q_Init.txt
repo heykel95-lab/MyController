@@ -3,7 +3,7 @@
 # ====================================================================
 # q_init_case selects one of the postures below. The startup menu moves the
 # arm there before anything else runs. Type the name of which q_init_case you want to start from there
-q_init_case = tilted_tool
+q_init_case = saved_qinit
 
 # horizontal_tool
 q_init_horizontal_1 = 0.0
@@ -32,14 +32,16 @@ q_init_tilted_close_5 = 0.335103
 q_init_tilted_close_6 = 2.446952
 q_init_tilted_close_7 = 0.457276
 
-# horizontal_table_search
-q_init_table_1 = -0.016251
-q_init_table_2 = 0.174096
-q_init_table_3 = -0.018640
-q_init_table_4 = -2.273434
-q_init_table_5 = -0.000397
-q_init_table_6 = 2.533846
-q_init_table_7 = 0.745537
+# horizontal_table_search -- the start pose every MAIN overlay pins. Re-measured
+# 2026-07-31 for the restarted campaign; the superseded runs in
+# experiments/Old_Results used the previous values, archived with each of them.
+q_init_table_1 = 0.014777
+q_init_table_2 = 0.210911
+q_init_table_3 = -0.009320
+q_init_table_4 = -2.284835
+q_init_table_5 = -0.002725
+q_init_table_6 = 2.493410
+q_init_table_7 = 0.780694
 
 # saved_qinit -- written by w+Enter in guiding mode. Saving also sets
 # q_init_case above to saved_qinit, so the next run starts from it.
