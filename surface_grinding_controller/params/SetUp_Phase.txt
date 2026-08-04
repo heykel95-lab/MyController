@@ -81,7 +81,9 @@ coupled_rc_tangent1 = 0.0
 coupled_rc_tangent2 = 0.0
 coupled_rc_normal = 0.0
 
-# Legacy base-frame pole-from-edge offset [m], kept for archived setups.
+# Legacy base-frame pole position, measured from the contact edge [m], kept
+# for archived setups. The spring applies r_c = p_TCP - p_c, so the lever has
+# the opposite sign: +y here puts the pole toward +y and tips the +y side down.
 coupled_pole_from_edge_x = -0.04
 coupled_pole_from_edge_y = 0.08
 coupled_pole_from_edge_z = 0.0

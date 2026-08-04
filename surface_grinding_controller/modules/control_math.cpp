@@ -553,10 +553,9 @@ void startKeyboardStopThread(const Parameters& /*params*/,
   std::atomic<bool>& gate_continue = signals.gate_continue;
   std::atomic<bool>& menu_requested = signals.menu_requested;
 
-  // One line only. What can be typed in a given mode is printed by that
-  // mode's own block, where it is in context.
-  printf("keys: e stop | m menu | g hand-guide\n");
-
+  // Nothing is printed here: what can be typed in a given mode belongs to
+  // that mode's own block, and the startup menu already carries the keys
+  // that hold in every run.
   std::thread keyboard_thread([&signals, &stop_requested, &proceed_requested,
                                &guide_requested, &guidance_menu_key,
                                &guided_hold_selector_pending,
@@ -571,9 +570,9 @@ void startKeyboardStopThread(const Parameters& /*params*/,
       if (!std::getline(std::cin, line)) {
         break;
       }
-      // Set-up impedance for the t mode: "kp2 1500", "kr3 40", "r1 -20".
+      // Set-up impedance for the t mode: "kp2 1500", "kr3 40", "pc1 -20".
       // Checked before the single-letter keys, which would otherwise swallow
-      // the leading k.
+      // the leading k. pc is tried before r so the two names stay distinct.
       {
         int index = 0;
         double value = 0.0;
@@ -582,6 +581,8 @@ void startKeyboardStopThread(const Parameters& /*params*/,
           target = &signals.setup_kp_request;
         } else if (std::sscanf(line.c_str(), "kr%d %lf", &index, &value) == 2) {
           target = &signals.setup_kr_request;
+        } else if (std::sscanf(line.c_str(), "pc%d %lf", &index, &value) == 2) {
+          target = &signals.setup_pole_mm_request;
         } else if (std::sscanf(line.c_str(), "r%d %lf", &index, &value) == 2) {
           target = &signals.setup_rc_mm_request;
         }
@@ -641,14 +642,35 @@ void startKeyboardStopThread(const Parameters& /*params*/,
         guidance_menu_key.store('o');
       } else if (line == "c" || line == "C") {
         guidance_menu_key.store('c');
-      } else if (line == "recal" || line == "RECAL") {
-        // The full word is the confirmation: recalibrating opens the fingers
-        // fully and may drop a tool. It runs after torque control returns.
+      } else if (line == "r" || line == "R") {
+        // Recalibrating opens the fingers fully and may drop a tool, so the
+        // guiding menu prints the warning and starts on one Enter. It runs
+        // after torque control returns.
+        if (!guided_hold_selector_pending.load()) {
+          printf("Ignored: r recalibrates the hand from the guiding menu.\n");
+          continue;
+        }
+        signals.gripper_confirm_pending.store(true);
         guidance_menu_key.store('r');
+        // Park until that menu has read the confirming line, so both threads
+        // never take the same one.
+        while (signals.gripper_confirm_pending.load() &&
+               !stop_requested.load()) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        if (stop_requested.load()) {
+          break;
+        }
       } else if (line == "w" || line == "W") {
         guidance_menu_key.store('w');
       } else if (line == "s" || line == "S") {
         guidance_menu_key.store('s');
+        // The same key in a run: start the sequence from the pose held now.
+        // Guiding consumes the key above; the run loop drains this one when
+        // it starts, so the choice made there never leaks into the run.
+        signals.run_mode_request.store('s');
+      } else if (line == "t" || line == "T") {
+        signals.run_mode_request.store('t');
       } else if (line == "h" || line == "H") {
         guidance_menu_key.store('h');
         // Hand stdin to the hold selector once this key ends the control

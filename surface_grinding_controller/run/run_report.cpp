@@ -22,7 +22,8 @@ std::string sessionFileName(const std::string& name, int session) {
 // ====================================================================
 void writeRunLogs(const Parameters& params, const RunResult& result) {
   if (result.descend_failed) {
-    printf("\nDescend stopped: maximum distance reached before the clearance height.\n");
+    printSection("descend stopped");
+    printf("  maximum distance reached before the clearance height.\n");
   }
   printJointStartEndTableDeg(result.q_start, result.final_q);
   writeLogToCsv(result.log, params.csv_file_name);

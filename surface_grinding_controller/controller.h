@@ -568,6 +568,18 @@ Mat3 makeToolOrientationForAlignmentTarget(
 
 Vec3 applyRotationalAxisMask(const Parameters& params, Vec3 e_R, const Mat3& R_alignment_target);
 
+// ---- terminal furniture ----
+// Every block in the program is opened by one of these three, at one shared
+// width: a banner for what the operator chose or got, a section for a part
+// of it, a bare rule to close a list.
+void printBanner(const char* title);
+void printSection(const char* title);
+void printRule();
+// One row of a gain table: label, the triple, its unit, and where the numbers
+// came from ("auto", or "" for none).
+void printRow(const char* label, const Vec3& v, const char* unit,
+              const char* note);
+
 // ====================================================================
 // Run state -- one object per thing a run carries
 // ====================================================================
@@ -580,6 +592,10 @@ struct KeyboardSignals {
   std::atomic<bool> guide_requested{false};
   std::atomic<char> guidance_menu_key{0};
   std::atomic<bool> guided_hold_selector_pending{false};
+  // Set with the r key, cleared once the guiding menu has read the Enter that
+  // confirms the recalibration. The keyboard thread parks meanwhile: two
+  // readers would race for that one line.
+  std::atomic<bool> gripper_confirm_pending{false};
   std::atomic<bool> gate_continue{false};
   // Starts parked so the first startup menu owns stdin alone.
   std::atomic<bool> menu_requested{true};
@@ -598,11 +614,21 @@ struct KeyboardSignals {
   // Live mode switch: 0..3 typed while holding. -1 means nothing pending.
   std::atomic<int> nullspace_mode_request{-1};
 
-  // Live set-up impedance, for the t mode: kp1..3 [N/m], kr1..3 [Nm/rad] and
-  // the pole r1..3 [mm], indexed [tangent1, tangent2, normal]. NaN = pending
-  // nothing. Retuning these rebuilds the gain matrices.
+  // Run mode switched inside the run: 's' runs the sequence from the pose
+  // held now, 't' comes back to the set-up impedance hold. 0 = nothing
+  // pending. The tuning loop is t -> s -> t, and it must not go out through
+  // the menu, which re-reads the files and drops what was just typed.
+  std::atomic<char> run_mode_request{0};
+
+  // Live set-up impedance, for the t mode: kp1..3 [N/m] and kr1..3 [Nm/rad].
+  // NaN = nothing pending. Retuning these rebuilds the gain matrices.
   std::array<std::atomic<double>, 3> setup_kp_request;
   std::array<std::atomic<double>, 3> setup_kr_request;
+  // The compliance centre, one array per convention, because the two name it
+  // from opposite ends: pc1..3 [mm] place the pole itself, r1..3 [mm] give
+  // r_c = p_TCP - p_c. A key that does not match the convention in use is
+  // refused rather than silently written into the parameter nothing reads.
+  std::array<std::atomic<double>, 3> setup_pole_mm_request;
   std::array<std::atomic<double>, 3> setup_rc_mm_request;
 
   // Atomics are not copy-initializable, so the arrays are cleared here.
@@ -611,6 +637,7 @@ struct KeyboardSignals {
     for (int i = 0; i < 3; ++i) {
       setup_kp_request[i].store(none);
       setup_kr_request[i].store(none);
+      setup_pole_mm_request[i].store(none);
       setup_rc_mm_request[i].store(none);
     }
   }
@@ -737,10 +764,9 @@ bool openGripper(const Parameters& params, Gripper& gripper);
 bool graspTool(const Parameters& params, Gripper& gripper);
 
 // Franka Hand width recalibration (libfranka homing). Opens the fingers
-// fully, so a held tool falls unless it is supported.
-bool recalibrateGripper(const Parameters& params,
-                        Gripper& gripper,
-                        bool confirmation_already_received = false);
+// fully, so a held tool falls unless it is supported: it prints the warning
+// and starts on one Enter, and anything else aborts.
+bool recalibrateGripper(const Parameters& params, Gripper& gripper);
 
 // Writes the seven joint values into the saved_qinit block of
 // params/Q_Init.txt and points q_init_case at it. Returns false if the file
@@ -804,9 +830,7 @@ bool withinJointLimits(const Array7& q, int& joint_out);
 bool runManualGuidanceStart(Parameters& params,
                             Robot& robot,
                             const Model& model,
-                            std::atomic<bool>& stop_requested,
-                            std::atomic<char>& guidance_menu_key,
-                            std::atomic<bool>& guided_hold_selector_pending);
+                            KeyboardSignals& signals);
 
 const char* phaseName(ControlPhase phase);
 
@@ -828,6 +852,9 @@ void printJointStartEndTableDeg(const Vec7& q_start, const Vec7& q_final);
 
 // The gains a phase commands, printed as it starts. The set-up phase and
 // the t hold print printSetUpImpedanceLaw instead.
+// Opens a phase's block: the rule that names it, then what it commands.
+void printPhaseHeader(ControlPhase phase);
+
 void printPhaseIntro(const Parameters& params,
                      const DampingCache& damping,
                      ControlPhase phase);
@@ -837,9 +864,13 @@ void printGateHold(const Parameters& params, const DampingCache& damping);
 
 // The set-up impedance the t mode commands, and what can be retyped while it
 // holds. Printed when that hold starts and after every change.
+// R_alignment_target and R_EE resolve the commanded pole onto the tool, which
+// is the frame the tool geometry is measured in.
 void printSetUpImpedanceLaw(const Parameters& params,
                             const DampingCache& damping,
-                            bool tunable);
+                            bool tunable,
+                            const Mat3& R_alignment_target,
+                            const Mat3& R_EE);
 
 // The active nullspace law and what can be retyped while holding. Printed
 // when a hold starts and whenever the mode is switched live.

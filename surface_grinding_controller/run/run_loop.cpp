@@ -43,6 +43,14 @@ RunResult runControlLoop(Parameters& params,
   Mat3 R_d = T_initial.block<3, 3>(0, 0);
   Vec7 q_start = Map<const Vec7>(initial_state.q.data());
 
+  // Where the hold was established. t returns to it rather than holding the
+  // pose the sequence stopped at, so every tuning cycle presses from the same
+  // place: pressed poses differ by the depth reached, and a set-up tried from
+  // one is not the set-up tried from the next.
+  Vec3 hold_return_p = p_start;
+  Mat3 hold_return_R = R_d;
+  bool hold_returning = false;
+
   // Baseline external wrench: contact detection and the set-up report both
   // measure changes against this, not against absolute readings.
   Map<const Vec6> initial_external_wrench(initial_state.O_F_ext_hat_K.data());
@@ -96,15 +104,22 @@ RunResult runControlLoop(Parameters& params,
   };
 
   // ---- phase machine ----
+  const ControlPhase sequence_first_phase =
+      params.use_approach_orient ? ControlPhase::kApproachOrient
+                                 : ControlPhase::kApproachDescend;
   const ControlPhase initial_phase =
-      !params.use_phase_sequence  ? ControlPhase::kHold
-      : params.use_approach_orient ? ControlPhase::kApproachOrient
-                                   : ControlPhase::kApproachDescend;
+      params.use_phase_sequence ? sequence_first_phase : ControlPhase::kHold;
   const bool sigma_hold_diagnostics_enabled =
       initial_phase == ControlPhase::kHold &&
       (params.nullspace_mode == NullspaceMode::kSigmaOnly ||
        params.nullspace_mode == NullspaceMode::kDampingAndSigma);
   ControlPhase phase = initial_phase;
+  // Where p returns to after hand guiding. It follows the s and t switches
+  // below, so re-guiding restarts the mode running now, not the one the run
+  // was started in.
+  ControlPhase restart_phase = initial_phase;
+  // A key typed before this run began belongs to the menu or to guiding.
+  signals.run_mode_request.store(0);
   double phase_start_time = 0.0;
   double next_debug_time = 0.0;
   double next_sigma_debug_time = 0.0;
@@ -147,7 +162,7 @@ RunResult runControlLoop(Parameters& params,
   // Auto-damping is cached per phase group.
   DampingCache damping = manualDampingCache(gains);
 
-  printf("\n=== Start pose ===\n");
+  printSection("start pose");
   printVec7Deg("q_start", q_start);
   printVec3Mm("p_start", p_start);
 
@@ -280,13 +295,13 @@ RunResult runControlLoop(Parameters& params,
   Vec3 final_e_R = Vec3::Zero();
   Vec7 final_q = q_start;
 
-  printf("\n=== Run ===\n");
-  printf("phase: %s\n", phaseName(phase));
+  printBanner("RUN");
   // The t mode is about the set-up spring; the nullspace belongs to the plain
   // hold, where it is what is being studied. The set-up block waits until the
   // auto damping has been fitted, so it can print the values in use.
   bool setup_law_printed = false;
-  // kManualGuide is the sentinel: it never prints an intro of its own.
+  // kManualGuide is the sentinel: it never opens a block of its own, so it
+  // also means "nothing printed yet", and every phase entry opens one.
   ControlPhase intro_printed_for = ControlPhase::kManualGuide;
   bool gate_block_printed = false;
   if (phase == ControlPhase::kHold && !params.hold_with_setup_gains) {
@@ -329,6 +344,142 @@ RunResult runControlLoop(Parameters& params,
     const Vec3 external_moment = external_wrench.tail<3>();
 
     // ---------------------------------------------------------------
+    // Take the pose reached as the start of whatever runs next.
+    // ---------------------------------------------------------------
+    // Shared by the p recapture after hand guiding and by the s and t
+    // switches below: all three continue from where the arm is, so the
+    // commanded pose does not step at the moment of the switch. Only the
+    // phase the caller sets afterwards differs.
+    const auto restartFromPoseReached = [&](bool reanchor_surface_point) {
+      p_start = p_EE;
+      R_d = R_EE;
+      q_start = q_current;
+      R_d_alignment_target =
+          makeToolOrientationForAlignmentTarget(params, R_alignment_target, R_d);
+      // The slew restarts from the pose reached, not the original one.
+      R_orient_start = R_d;
+      R_orient_command = R_d;
+      // Re-anchoring the plane belongs to the hand-placed start alone. An s
+      // pressed after a sequence would otherwise take the pressed pose for
+      // the surface, and each cycle would descend a clearance deeper.
+      if (reanchor_surface_point && params.use_start_as_surface_point) {
+        surface_point_runtime = p_start;
+      }
+      contact_force_bias = external_force;
+      contact_moment_bias = external_moment;
+      first_contact_tcp = p_start;
+      first_contact_point = p_start;
+      R_contact_start = R_d_alignment_target;
+      active_tool_contact_offset_ee = params.tool_contact_face_center_ee;
+
+      phase_start_time = time;
+      ++sigma_debug_segment_id;
+      next_sigma_debug_file_time = time;
+      sigma_debug_external_joint_torque_bias = external_joint_torque;
+      sigma_debug_external_joint_torque_bias_valid = true;
+      resetSigmaDebugPeaks();
+      next_debug_time = time;
+      next_sigma_debug_time = time;
+      last_sigma_debug_valid = false;
+      gate_set_up_armed = false;
+      gate_set_up_passed = false;
+      gate_paused_time = 0.0;
+      gate_grind_armed = false;
+      gate_grind_passed = false;
+      gate_grind_paused_time = 0.0;
+      setup_reported = false;
+      setup_push_start = -params.descend_surface_clearance;
+      grind_push = 0.0;
+      damping.hold_computed = false;
+      damping.Dp_hold = Dp_hold;
+      damping.DR_hold = DR_hold;
+      damping.pause_computed = false;
+      damping.Dp_pause = Dp_pause;
+      damping.DR_pause = DR_pause;
+
+      if (sigma_hold_diagnostics_enabled) {
+        SigmaDebugRow recapture_row;
+        recapture_row.run_time = time;
+        recapture_row.phase_time = 0.0;
+        recapture_row.segment_id = sigma_debug_segment_id;
+        recapture_row.event = SigmaDebugEvent::kRecapture;
+        recapture_row.q = q_current;
+        recapture_row.dq = dq;
+        recapture_row.pdot = pdot;
+        recapture_row.omega = omega;
+        recapture_row.external_joint_torque_baseline_valid = true;
+        recapture_row.joint_contact = joint_contact;
+        recapture_row.cartesian_contact = cartesian_contact;
+        appendSigmaDebugRow(recapture_row);
+      }
+    };
+
+    // ---------------------------------------------------------------
+    // Switching the run mode: s runs the sequence, t holds with the set-up
+    // impedance.
+    // ---------------------------------------------------------------
+    // The t hold is where the set-up spring is tuned, so the sequence has to
+    // be reachable from it without ending the run: going out through the menu
+    // re-reads the parameter files and drops every kp/kr/r just typed. t takes
+    // the pose the sequence reached and walks back to where the hold started,
+    // so the next set-up is pressed from the same place as the last.
+    const char run_mode_request = signals.run_mode_request.exchange(0);
+    if (run_mode_request == 's') {
+      if (phase == ControlPhase::kManualGuide) {
+        printf("Ignored: p+Enter re-captures the pose first.\n");
+      } else if (phase != ControlPhase::kHold) {
+        printf("Ignored: the sequence is already running; t+Enter holds.\n");
+      } else if (hold_returning) {
+        // Starting from halfway back would press from a pose no other cycle
+        // uses, which is the one thing this loop is meant to avoid.
+        printf("Ignored: still returning to the pose the hold started from.\n");
+      } else if (params.use_coupled_stiffness &&
+                 !params.coupled_use_block_diagonal &&
+                 !params.coupled_pole_manual) {
+        // The rule the menu applies before a sequence run holds here too: the
+        // coupled spring needs a pole it was given, not one inferred.
+        printf("Ignored: a sequence with the coupled stiffness needs "
+               "block-diagonal mode or a commanded pole.\n");
+      } else {
+        params.use_phase_sequence = true;
+        params.hold_with_setup_gains = false;
+        restartFromPoseReached(false);
+        restart_phase = sequence_first_phase;
+        phase = sequence_first_phase;
+        intro_printed_for = ControlPhase::kManualGuide;
+        setup_law_printed = false;
+        printSection("s: sequence from the pose held");
+        printVec3Mm("p_start", p_start);
+        printf("  %-16s   the one commanded now\n", "impedance");
+      }
+    } else if (run_mode_request == 't') {
+      if (phase == ControlPhase::kManualGuide) {
+        printf("Ignored: p+Enter re-captures the pose first.\n");
+      } else if (phase == ControlPhase::kHold && params.hold_with_setup_gains) {
+        printf(hold_returning
+                   ? "Ignored: already on the way back to the hold pose.\n"
+                   : "Ignored: already holding with the set-up impedance.\n");
+      } else {
+        params.use_phase_sequence = false;
+        params.hold_with_setup_gains = true;
+        restartFromPoseReached(false);
+        restart_phase = ControlPhase::kHold;
+        phase = ControlPhase::kHold;
+        hold_returning = true;
+        // Both blocks may already be the ones in force -- t is pressed from
+        // the set-up press as often as from the grind -- so ask for them
+        // again explicitly. What they say has changed: the hold commands the
+        // gains now, and the impedance block gains its keys.
+        intro_printed_for = ControlPhase::kManualGuide;
+        setup_law_printed = false;
+        printSection("t: set-up impedance hold, returning to its pose");
+        printVec3Mm("p_start", hold_return_p);
+        printf("  %-16s   %.3f m/s, turning at %.1f deg/s\n", "returning at",
+               params.descend_speed, params.approach_orient_max_rate_deg);
+      }
+    }
+
+    // ---------------------------------------------------------------
     // Manual re-guidance from hold.
     // ---------------------------------------------------------------
     // Accepted from every phase, like e and m: g drops the commanded torque to
@@ -368,11 +519,15 @@ RunResult runControlLoop(Parameters& params,
 
       phase = ControlPhase::kManualGuide;
       phase_start_time = time;
-      // p restarts from initial_phase, which is the sequence's first phase in a
-      // sequence run and hold in a hold run. Name the one that will happen.
-      printf("\nphase: manual_guide (move the tool by hand; p+Enter recaptures "
-             "and restarts %s, e+Enter stops)\n",
-             phaseName(initial_phase));
+      // Guiding returns to the phase it interrupted, so the block that phase
+      // printed has to be opened again when p re-captures.
+      intro_printed_for = ControlPhase::kManualGuide;
+      printPhaseHeader(ControlPhase::kManualGuide);
+      printf("  %-16s   move the tool by hand\n", "motion");
+      // p restarts the mode running now: the sequence's first phase after an
+      // s, hold after a t or a hold run. Name the one that will happen.
+      printf("  %-16s   p re-capture and restart %s | e stop\n", "keys",
+             phaseName(restart_phase));
     }
     if (phase == ControlPhase::kManualGuide) {
       Array7 coriolis_array = model.coriolis(state);
@@ -410,70 +565,17 @@ RunResult runControlLoop(Parameters& params,
       }
       if (signals.proceed_requested.load()) {
         signals.proceed_requested.store(false);
-        // Re-capture the hand-moved pose as the new sequence start.
-        p_start = p_EE;
-        R_d = R_EE;
-        q_start = q_current;
-        R_d_alignment_target =
-            makeToolOrientationForAlignmentTarget(params, R_alignment_target, R_d);
-        // The slew restarts from the hand-placed pose, not the original one.
-        R_orient_start = R_d;
-        R_orient_command = R_d;
-        surface_point_runtime =
-            params.use_start_as_surface_point ? p_start : params.surface_point;
-        contact_force_bias = external_force;
-        contact_moment_bias = external_moment;
-        first_contact_tcp = p_start;
-        first_contact_point = p_start;
-        R_contact_start = R_d_alignment_target;
-        active_tool_contact_offset_ee = params.tool_contact_face_center_ee;
+        // Re-capture the hand-moved pose as the new sequence start. It is
+        // also where t returns to from now on: the hand placed it there.
+        restartFromPoseReached(true);
+        phase = restart_phase;
+        hold_return_p = p_start;
+        hold_return_R = R_d;
+        hold_returning = false;
 
-        phase = initial_phase;
-        phase_start_time = time;
-        ++sigma_debug_segment_id;
-        next_sigma_debug_file_time = time;
-        sigma_debug_external_joint_torque_bias = external_joint_torque;
-        sigma_debug_external_joint_torque_bias_valid = true;
-        resetSigmaDebugPeaks();
-        next_debug_time = time;
-        next_sigma_debug_time = time;
-        last_sigma_debug_valid = false;
-        gate_set_up_armed = false;
-        gate_set_up_passed = false;
-        gate_paused_time = 0.0;
-        gate_grind_armed = false;
-        gate_grind_passed = false;
-        gate_grind_paused_time = 0.0;
-        setup_reported = false;
-        setup_push_start = -params.descend_surface_clearance;
-        grind_push = 0.0;
-        damping.hold_computed = false;
-        damping.Dp_hold = Dp_hold;
-        damping.DR_hold = DR_hold;
-        damping.pause_computed = false;
-        damping.Dp_pause = Dp_pause;
-        damping.DR_pause = DR_pause;
-
-        if (sigma_hold_diagnostics_enabled) {
-          SigmaDebugRow recapture_row;
-          recapture_row.run_time = time;
-          recapture_row.phase_time = 0.0;
-          recapture_row.segment_id = sigma_debug_segment_id;
-          recapture_row.event = SigmaDebugEvent::kRecapture;
-          recapture_row.q = q_current;
-          recapture_row.dq = dq;
-          recapture_row.pdot = pdot;
-          recapture_row.omega = omega;
-          recapture_row.external_joint_torque_baseline_valid = true;
-          recapture_row.joint_contact = joint_contact;
-          recapture_row.cartesian_contact = cartesian_contact;
-          appendSigmaDebugRow(recapture_row);
-        }
-
-        printf("\n=== Resuming hold from re-guided pose ===\n");
+        printSection("resuming from the re-guided pose");
         printVec7Deg("q_start", q_start);
         printVec3Mm("p_start", p_start);
-        printf("phase: %s\n", phaseName(phase));
       }
       return Torques(tau_array);
     }
@@ -629,8 +731,7 @@ RunResult runControlLoop(Parameters& params,
                    (180.0 / M_PI) * tool_axis_error,
                    (180.0 / M_PI) * spin_error);
           }
-          printf("phase: %s\n", phaseName(phase));
-        }
+          }
         break;  // desired stays at p_start: rotate without moving the TCP
       }
 
@@ -715,8 +816,7 @@ RunResult runControlLoop(Parameters& params,
                  force_along_descend);
           printContactEdgeDebug(active_tool_contact_offset_ee, first_contact_tcp,
                                 first_contact_point);
-          printf("phase: %s\n", phaseName(phase));
-        } else if (distance >= params.descend_max_distance) {
+          } else if (distance >= params.descend_max_distance) {
           descend_failed = true;
           signals.stop_requested.store(true);
           desired.p_d = p_EE;
@@ -821,7 +921,6 @@ RunResult runControlLoop(Parameters& params,
         phase = ControlPhase::kGrind;
         phase_start_time = time;
         next_debug_time = time;
-        printf("phase: %s\n", phaseName(phase));
         break;
       }
 
@@ -853,7 +952,49 @@ RunResult runControlLoop(Parameters& params,
         break;
       }
 
-      case ControlPhase::kHold:
+      // -------------------------------------------------------------
+      // Hold: the captured start position, or the way back to it.
+      // -------------------------------------------------------------
+      case ControlPhase::kHold: {
+        if (!hold_returning) {
+          break;
+        }
+        // t is pressed from a pressed pose, so the commanded pose walks back
+        // to where the hold started instead of jumping: at descend_speed,
+        // the speed it travelled in on, and the orient rate for the tilt the
+        // set-up press put in.
+        const Vec3 to_home = hold_return_p - p_start;
+        const double distance = to_home.norm();
+        const double step = params.descend_speed * period.toSec();
+        const bool position_home = distance <= step;
+        if (position_home) {
+          p_start = hold_return_p;
+        } else {
+          p_start += (step / distance) * to_home;
+          desired.pdot_d = (params.descend_speed / distance) * to_home;
+        }
+
+        const Eigen::AngleAxisd to_home_R(hold_return_R * R_d.transpose());
+        const double step_R =
+            (M_PI / 180.0) * params.approach_orient_max_rate_deg * period.toSec();
+        const bool orientation_home = std::abs(to_home_R.angle()) <= step_R;
+        if (orientation_home) {
+          R_d = hold_return_R;
+        } else {
+          R_d = Mat3(Eigen::AngleAxisd(std::copysign(step_R, to_home_R.angle()),
+                                       to_home_R.axis())) *
+                R_d;
+        }
+
+        desired.p_d = p_start;
+        if (position_home && orientation_home) {
+          hold_returning = false;
+          desired.pdot_d.setZero();
+          printf("Back at the pose the hold started from.\n");
+        }
+        break;
+      }
+
       case ControlPhase::kManualGuide:
         break;  // hold the captured start position
     }
@@ -1026,9 +1167,12 @@ RunResult runControlLoop(Parameters& params,
           std::numeric_limits<double>::quiet_NaN());
       const double kr = signals.setup_kr_request[i].exchange(
           std::numeric_limits<double>::quiet_NaN());
+      const double pole_mm = signals.setup_pole_mm_request[i].exchange(
+          std::numeric_limits<double>::quiet_NaN());
       const double rc_mm = signals.setup_rc_mm_request[i].exchange(
           std::numeric_limits<double>::quiet_NaN());
-      if (!std::isfinite(kp) && !std::isfinite(kr) && !std::isfinite(rc_mm)) {
+      if (!std::isfinite(kp) && !std::isfinite(kr) && !std::isfinite(pole_mm) &&
+          !std::isfinite(rc_mm)) {
         continue;
       }
       if (phase != ControlPhase::kHold || !params.hold_with_setup_gains) {
@@ -1047,9 +1191,28 @@ RunResult runControlLoop(Parameters& params,
         params.setup_KR_diag(i) = kr;
         setup_impedance_changed = true;
       }
-      if (std::isfinite(rc_mm)) {
-        params.coupled_rc_surface(i) = 0.001 * rc_mm;
-        setup_impedance_changed = true;
+      // The compliance centre has one key per convention, named after what it
+      // writes: pc places the pole itself, r gives r_c = p_TCP - p_c. They
+      // have opposite signs, so the key that does not match the convention in
+      // use is refused rather than moving the pole the wrong way.
+      if (std::isfinite(pole_mm) || std::isfinite(rc_mm)) {
+        const bool direct = params.coupled_use_direct_rc_surface;
+        if (!params.use_coupled_stiffness) {
+          printf("Ignored: the compliance centre belongs to the coupled "
+                 "spring, and the decoupled spring is in use.\n");
+        } else if (std::isfinite(pole_mm) && !direct) {
+          params.coupled_pole_from_edge(i) = 0.001 * pole_mm;
+          setup_impedance_changed = true;
+        } else if (std::isfinite(rc_mm) && direct) {
+          params.coupled_rc_surface(i) = 0.001 * rc_mm;
+          setup_impedance_changed = true;
+        } else if (direct) {
+          printf("Ignored: this run commands r_c = p_TCP - p_c; type r%d, "
+                 "not pc%d.\n", i + 1, i + 1);
+        } else {
+          printf("Ignored: this run commands the pole from the contact edge; "
+                 "type pc%d, not r%d.\n", i + 1, i + 1);
+        }
       }
     }
     if (setup_impedance_changed) {
@@ -1071,6 +1234,7 @@ RunResult runControlLoop(Parameters& params,
     // updateAutoDamping, so the damping it reports is already fitted: no
     // waiting and no timing logic are involved.
     if (intro_printed_for != phase) {
+      printPhaseHeader(phase);
       printPhaseIntro(params, damping, phase);
       intro_printed_for = phase;
     }
@@ -1080,7 +1244,8 @@ RunResult runControlLoop(Parameters& params,
         (phase == ControlPhase::kHold && params.hold_with_setup_gains);
     if (wants_setup_block && !setup_law_printed) {
       printSetUpImpedanceLaw(params, damping,
-                             phase == ControlPhase::kHold);
+                             phase == ControlPhase::kHold,
+                             R_alignment_target, R_EE);
       setup_law_printed = true;
     }
     if (!wants_setup_block) {

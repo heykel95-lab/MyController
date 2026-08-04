@@ -17,13 +17,16 @@ int main() {
     const Parameters base_params = readParameters(parameterFiles());
     Robot robot(base_params.robot_ip);
 
+    printBanner("SURFACE GRINDING CONTROLLER");
+    printf("  %-16s   %s\n", "robot", base_params.robot_ip.c_str());
+    printRule();
     printf("\nPress Enter to recover and configure the robot.\n");
     std::string enter_line;
     std::getline(std::cin, enter_line);
 
     try {
       robot.automaticErrorRecovery();
-      printf("Robot recovered or already ready.\n");
+      printf("  Robot recovered or already ready.\n");
     } catch (const franka::Exception& e) {
       fprintf(stderr, "Automatic error recovery failed: %s\n", e.what());
       fprintf(stderr, "Please recover/unlock the robot manually in Franka Desk.\n");
@@ -55,6 +58,7 @@ int main() {
       signals.proceed_requested.store(false);
       signals.guide_requested.store(false);
       signals.guidance_menu_key.store(0);
+      signals.gripper_confirm_pending.store(false);
       signals.gate_continue.store(false);
 
       if (!askStartupRunMode(params, robot, model)) {
@@ -78,13 +82,10 @@ int main() {
       }
 
       if (params.use_manual_guidance_start &&
-          !runManualGuidanceStart(params, robot, model,
-                                  signals.stop_requested,
-                                  signals.guidance_menu_key,
-                                  signals.guided_hold_selector_pending)) {
+          !runManualGuidanceStart(params, robot, model, signals)) {
         // Guiding was ended by m+Enter rather than e+Enter: ask again.
         if (signals.menu_requested.load()) {
-          printf("\n=== returning to the startup menu ===\n");
+          printSection("returning to the startup menu");
           continue;
         }
         return 0;
@@ -99,7 +100,7 @@ int main() {
       if (!signals.menu_requested.load()) {
         break;
       }
-      printf("\n=== returning to the startup menu ===\n");
+      printSection("returning to the startup menu");
     }
 
 

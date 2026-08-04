@@ -430,24 +430,76 @@ const char* nullspaceModeName(NullspaceMode mode) {
 // Value formatting
 // ====================================================================
 
+// ---- terminal furniture ----
+// One width for every rule in the program, so blocks line up however they
+// interleave. 68 columns leaves an 80-column terminal room to breathe.
+namespace {
+
+constexpr int kRuleWidth = 68;
+
+void printRuleOf(char c, int width) {
+  char rule[kRuleWidth + 1];
+  const int used = width < kRuleWidth ? width : kRuleWidth;
+  for (int i = 0; i < used; ++i) {
+    rule[i] = c;
+  }
+  rule[used] = '\0';
+  printf("%s\n", rule);
+}
+
+}  // namespace
+
+void printRule() {
+  printRuleOf('-', kRuleWidth);
+}
+
+void printBanner(const char* title) {
+  printf("\n");
+  printRuleOf('=', kRuleWidth);
+  printf("  %s\n", title);
+  printRuleOf('=', kRuleWidth);
+}
+
+void printSection(const char* title) {
+  // The title sits in the rule, so a block opens without spending three
+  // lines on it: "-- set-up impedance ------------".
+  const int used = 4 + static_cast<int>(strlen(title));
+  printf("\n-- %s ", title);
+  printRuleOf('-', kRuleWidth - used);
+}
+
+// One row shape for every gain table: label, the triple, its unit, then the
+// one word that says where the numbers came from. The note is dropped when
+// there is none, so no row ends in spaces.
+void printRow(const char* label, const Vec3& v, const char* unit,
+              const char* note) {
+  if (note == nullptr || note[0] == '\0') {
+    printf("  %-16s = [%9.1f, %9.1f, %9.1f] %s\n",
+           label, v(0), v(1), v(2), unit);
+    return;
+  }
+  printf("  %-16s = [%9.1f, %9.1f, %9.1f] %-8s %s\n",
+         label, v(0), v(1), v(2), unit, note);
+}
+
 void printVec3Mm(const char* label, const Vec3& v) {
-  printf("%s = [%.1f, %.1f, %.1f] mm\n",
+  printf("  %-16s = [%9.1f, %9.1f, %9.1f] mm\n",
          label, 1000.0 * v(0), 1000.0 * v(1), 1000.0 * v(2));
 }
 
 void printVec3Deg(const char* label, const Vec3& v) {
   const double rad_to_deg = 180.0 / M_PI;
-  printf("%s = [%.2f, %.2f, %.2f] deg\n",
+  printf("  %-16s = [%9.2f, %9.2f, %9.2f] deg\n",
          label, rad_to_deg * v(0), rad_to_deg * v(1), rad_to_deg * v(2));
 }
 
 void printGainVec(const char* label, const Vec3& v) {
-  printf("%s = [%.4g, %.4g, %.4g]\n", label, v(0), v(1), v(2));
+  printf("  %-16s = [%9.4g, %9.4g, %9.4g]\n", label, v(0), v(1), v(2));
 }
 
 void printVec7Deg(const char* label, const Vec7& v) {
   const double rad_to_deg = 180.0 / M_PI;
-  printf("%s = [%.1f, %.1f, %.1f, %.1f, %.1f, %.1f, %.1f] deg\n",
+  printf("  %-16s = [%.1f, %.1f, %.1f, %.1f, %.1f, %.1f, %.1f] deg\n",
          label,
          rad_to_deg * v(0), rad_to_deg * v(1), rad_to_deg * v(2),
          rad_to_deg * v(3), rad_to_deg * v(4), rad_to_deg * v(5),
@@ -481,11 +533,10 @@ void printSpatialGainEigenvalues(const char* label, const Mat6x6& M) {
 
 void printJointStartEndTableDeg(const Vec7& q_start, const Vec7& q_final) {
   const double rad_to_deg = 180.0 / M_PI;
-  printf("\nJoint motion [deg]:\n");
-  printf("joint    start   final   delta\n");
-  printf("------------------------------\n");
+  printSection("joint motion [deg]");
+  printf("  %-8s%9s%9s%9s\n", "joint", "start", "final", "delta");
   for (int i = 0; i < 7; ++i) {
-    printf("q%-2d   %7.1f %7.1f %7.1f\n",
+    printf("  q%-7d%9.1f%9.1f%+9.1f\n",
            i + 1,
            rad_to_deg * q_start(i),
            rad_to_deg * q_final(i),
@@ -495,160 +546,210 @@ void printJointStartEndTableDeg(const Vec7& q_start, const Vec7& q_final) {
 
 void printSetUpImpedanceLaw(const Parameters& params,
                             const DampingCache& damping,
-                            bool tunable) {
+                            bool tunable,
+                            const Mat3& R_alignment_target,
+                            const Mat3& R_EE) {
   const bool surface = params.setup_translation_surface_frame;
   const Vec3& kp = surface ? params.setup_Kp_surface_diag : params.setup_Kp_diag;
-  printf("\n--- set-up impedance ---\n");
-  if (params.use_coupled_stiffness) {
-    printf("  wrench = K_TCP*dx + D_TCP*dv, K_TCP = Ad(r_c)^T*blkdiag(Kp,KR)*Ad(r_c)\n");
-  } else {
-    printf("  f = Kp*e_p + Dp*de,   m = KR*e_R + DR*dw   (decoupled)\n");
-  }
   const Vec3& dp = surface ? params.setup_Dp_surface_diag : params.setup_Dp_diag;
-  const char* frame = surface ? "[t1,t2,n]" : "[x,y,z]  ";
-  printf("  Kp %s  = [%8.1f, %8.1f, %8.1f] N/m\n",
-         frame, kp(0), kp(1), kp(2));
-  if (!params.setup_auto_damping) {
-    printf("  Dp %s  = [%8.1f, %8.1f, %8.1f] Ns/m\n",
-           frame, dp(0), dp(1), dp(2));
-  } else if (damping.setup_damping_valid) {
-    printf("  Dp %s  = [%8.1f, %8.1f, %8.1f] Ns/m   auto\n",
-           frame, damping.setup_Dp_used(0), damping.setup_Dp_used(1),
-           damping.setup_Dp_used(2));
+  const char* frame = surface ? "[t1,t2,n]" : "[x,y,z]";
+
+  // One row shape for the whole block: label, the triple, its unit, then the
+  // one word that says where the numbers came from.
+  const auto row = [](const std::string& label, const Vec3& v,
+                      const char* unit, const char* note) {
+    printRow(label.c_str(), v, unit, note);
+  };
+  const auto labelled = [frame](const char* name) {
+    return std::string(name) + " " + frame;
+  };
+
+  printSection("set-up impedance");
+  if (params.use_coupled_stiffness) {
+    printf("  %-16s   wrench = K_TCP*dx + D_TCP*dv\n", "law");
+    printf("  %-16s   K_TCP  = Ad(r_c)^T * blkdiag(Kp,KR) * Ad(r_c)\n", "");
   } else {
-    printf("  Dp %s  = auto, refit at the first cycle\n", frame);
+    printf("  %-16s   f = Kp*e_p + Dp*de,  m = KR*e_R + DR*dw "
+           "(decoupled)\n", "law");
   }
-  printf("  KR [t1,t2,n]  = [%8.1f, %8.1f, %8.1f] Nm/rad\n",
-         params.setup_KR_diag(0), params.setup_KR_diag(1),
-         params.setup_KR_diag(2));
+  row(labelled("Kp"), kp, "N/m", "");
   if (!params.setup_auto_damping) {
-    printf("  DR [t1,t2,n]  = [%8.1f, %8.1f, %8.1f] Nms/rad\n",
-           params.setup_DR_diag(0), params.setup_DR_diag(1),
-           params.setup_DR_diag(2));
+    row(labelled("Dp"), dp, "Ns/m", "");
   } else if (damping.setup_damping_valid) {
-    printf("  DR [t1,t2,n]  = [%8.1f, %8.1f, %8.1f] Nms/rad   auto\n",
-           damping.setup_DR_used(0), damping.setup_DR_used(1),
-           damping.setup_DR_used(2));
+    row(labelled("Dp"), damping.setup_Dp_used, "Ns/m", "auto");
   } else {
-    printf("  DR [t1,t2,n]  = auto, refit at the first cycle\n");
+    printf("  %-16s = auto, refit at the first cycle\n",
+           labelled("Dp").c_str());
   }
+  row("KR [t1,t2,n]", params.setup_KR_diag, "Nm/rad", "");
+  if (!params.setup_auto_damping) {
+    row("DR [t1,t2,n]", params.setup_DR_diag, "Nms/rad", "");
+  } else if (damping.setup_damping_valid) {
+    row("DR [t1,t2,n]", damping.setup_DR_used, "Nms/rad", "auto");
+  } else {
+    printf("  %-16s = auto, refit at the first cycle\n", "DR [t1,t2,n]");
+  }
+  // Two rows, because the pole has two opposite-signed readings and mixing
+  // them up turns the press the wrong way: p_c is where the compliance centre
+  // sits, r_c = p_TCP - p_c is the lever the adjoint applies. The key is
+  // named after the row it writes, so neither can be typed into the other.
+  const char* pole_keys = "";
+  const char* pole_key_names = "";
   if (params.use_coupled_stiffness && params.coupled_use_direct_rc_surface) {
-    printf("  r_c [t1,t2,n] = [%8.1f, %8.1f, %8.1f] mm   centre of compliance\n",
-           1000.0 * params.coupled_rc_surface(0),
-           1000.0 * params.coupled_rc_surface(1),
-           1000.0 * params.coupled_rc_surface(2));
-  } else if (params.use_coupled_stiffness &&
-             params.coupled_pole_freeze_at_contact) {
-    // Legacy convention, frozen: with no contact yet the reference and the TCP
-    // coincide, so r_c = -coupled_pole_from_edge in the base frame.
-    printf("  r_c [x,y,z]   = [%8.1f, %8.1f, %8.1f] mm   centre of compliance\n",
-           -1000.0 * params.coupled_pole_from_edge(0),
-           -1000.0 * params.coupled_pole_from_edge(1),
-           -1000.0 * params.coupled_pole_from_edge(2));
+    row("r_c [t1,t2,n]", Vec3(1000.0 * params.coupled_rc_surface), "mm",
+        "p_TCP - p_c, commanded");
+    pole_keys = "r1..r3 <mm>";
+    pole_key_names = "r1..r3";
   } else if (params.use_coupled_stiffness) {
-    printf("  r_c           = tracks the live contact edge each cycle\n"
-           "                  (legacy pole_from_edge, not frozen)\n");
+    row("p_c from edge", Vec3(1000.0 * params.coupled_pole_from_edge), "mm",
+        "commanded: where the pole sits");
+    pole_keys = "pc1..pc3 <mm>";
+    pole_key_names = "pc1..pc3";
+    if (params.coupled_pole_freeze_at_contact) {
+      // Before contact the edge and the TCP coincide, so the lever is just
+      // the negated pole. From contact on it also carries the tool geometry,
+      // and the set-up report prints the resolved one.
+      row("r_c [x,y,z]", Vec3(-1000.0 * params.coupled_pole_from_edge), "mm",
+          "p_TCP - p_c, before contact");
+    } else {
+      printf("  %-16s = tracks the live contact edge each cycle\n", "r_c");
+    }
+  }
+  // The same pole on the tool. Commanded in the surface frame, it does not
+  // sit still in the tool: these are the numbers that say where on the tool
+  // the pivot is, in the frame the tool geometry is measured in.
+  if (params.use_coupled_stiffness) {
+    const Vec3 r_c_base =
+        params.coupled_use_direct_rc_surface
+            ? Vec3(R_alignment_target * params.coupled_rc_surface)
+            : Vec3(-params.coupled_pole_from_edge);
+    printRow("r_c [EE]", Vec3(1000.0 * (R_EE.transpose() * r_c_base)), "mm",
+             "the same pole, on the tool");
   }
   if (tunable) {
-    printf("\n  To command Kp, KR and the centre of compliance, type:\n");
-    printf("    kp1..kp3 <N/m>    kr1..kr3 <Nm/rad>    r1..r3 <mm>\n");
+    if (params.use_coupled_stiffness) {
+      printf("  %-16s   kp1..kp3 <N/m> | kr1..kr3 <Nm/rad> | %s\n", "keys",
+             pole_keys);
+      printf("  %-16s   %s commands the row marked commanded, in its frame\n",
+             "", pole_key_names);
+    } else {
+      printf("  %-16s   kp1..kp3 <N/m> | kr1..kr3 <Nm/rad>\n", "keys");
+    }
+    printf("  %-16s   s runs the sequence with them | t comes back here\n", "");
   }
 }
 
 void printNullspaceLaw(const Parameters& params) {
-  printf("\n--- nullspace: %s ---\n",
-         nullspaceModeName(params.nullspace_mode));
+  char title[64];
+  snprintf(title, sizeof(title), "nullspace: %s",
+           nullspaceModeName(params.nullspace_mode));
+  printSection(title);
   switch (params.nullspace_mode) {
     case NullspaceMode::kOff:
-      printf("  tau = 0\n");
+      printf("  %-16s   tau = 0\n", "law");
       break;
     case NullspaceMode::kDampingOnly:
-      printf("  tau = -d_null * N_tau * dq            d_null = %.3f Nms/rad\n",
+      printf("  %-16s   tau = -d_null * N_tau * dq\n", "law");
+      printf("  %-16s   %.3f Nms/rad\n", "d_null",
              params.nullspace_damping);
-      printf("  type: d <Nms/rad>\n");
+      printf("  %-16s   d <Nms/rad>\n", "keys");
       break;
     case NullspaceMode::kSigmaOnly:
-      printf("  tau = +k_sigma * N_tau * n_best       k_sigma = %.3f Nm\n",
-             params.nullspace_k_sigma);
-      printf("  undamped: it pushes, nothing brakes it\n");
-      printf("  type: k <Nm>, a <deg>\n");
+      printf("  %-16s   tau = +k_sigma * N_tau * n_best\n", "law");
+      printf("  %-16s   %.3f Nm   undamped: it pushes, nothing brakes "
+             "it\n", "k_sigma", params.nullspace_k_sigma);
+      printf("  %-16s   k <Nm> | a <deg>\n", "keys");
       break;
     case NullspaceMode::kDampingAndSigma:
-      printf("  tau = -d_null * N_tau * dq            d_null = %.3f Nms/rad\n",
+      printf("  %-16s   tau = -d_null * N_tau * dq\n", "law");
+      printf("  %-16s       + k_sigma * N_tau * n_best\n", "");
+      printf("  %-16s   %.3f Nms/rad\n", "d_null",
              params.nullspace_damping);
-      printf("        +k_sigma * N_tau * n_best       k_sigma = %.3f Nm\n",
-             params.nullspace_k_sigma);
-      printf("  type: d <Nms/rad>, k <Nm>, a <deg>\n");
+      printf("  %-16s   %.3f Nm\n", "k_sigma", params.nullspace_k_sigma);
+      printf("  %-16s   d <Nms/rad> | k <Nm> | a <deg>\n", "keys");
       break;
   }
   // alpha only decides where sigma is sampled, so it is meaningless in the
   // modes that never sample it.
   if (params.nullspace_mode == NullspaceMode::kSigmaOnly ||
       params.nullspace_mode == NullspaceMode::kDampingAndSigma) {
-    printf("  probe alpha = %.3f deg = %.6f rad (sampling only, not a gain)\n",
-           180.0 / M_PI * params.nullspace_alpha, params.nullspace_alpha);
+    printf("  %-16s   %.3f deg = %.6f rad   sampling only, not a gain\n",
+           "probe alpha", 180.0 / M_PI * params.nullspace_alpha,
+           params.nullspace_alpha);
   }
-  printf("  type 0/1/2/3 to switch mode.\n");
+  printf("  %-16s   0/1/2/3 switch mode\n", "");
+}
+
+void printPhaseHeader(ControlPhase phase) {
+  char title[48];
+  snprintf(title, sizeof(title), "phase: %s", phaseName(phase));
+  printSection(title);
 }
 
 void printPhaseIntro(const Parameters& params,
                      const DampingCache& damping,
                      ControlPhase phase) {
+  // Same row shape as the set-up impedance block, so any two phase blocks in
+  // the transcript can be read down the same columns.
+  const auto row = printRow;
+
   switch (phase) {
     case ControlPhase::kApproachOrient:
-    case ControlPhase::kApproachDescend:
-      printf("  Kp=[%.0f, %.0f, %.0f] N/m  KR=[%.0f, %.0f, %.0f] Nm/rad  [t1,t2,n]\n",
-             params.approach_Kp_diag(0), params.approach_Kp_diag(1),
-             params.approach_Kp_diag(2), params.approach_KR_diag(0),
-             params.approach_KR_diag(1), params.approach_KR_diag(2));
+    case ControlPhase::kApproachDescend: {
+      char auto_note[48] = "";
+      if (params.approach_auto_damping) {
+        snprintf(auto_note, sizeof(auto_note), "auto (factor %.2f)",
+                 params.approach_auto_damping_factor);
+      }
+      row("Kp [t1,t2,n]", params.approach_Kp_diag, "N/m", "");
       if (params.approach_auto_damping && damping.approach_damping_valid) {
-        printf("  Dp=[%.1f, %.1f, %.1f] Ns/m  DR=[%.2f, %.2f, %.2f] Nms/rad"
-               "  auto (factor %.2f)\n",
-               damping.approach_Dp_used(0), damping.approach_Dp_used(1),
-               damping.approach_Dp_used(2), damping.approach_DR_used(0),
-               damping.approach_DR_used(1), damping.approach_DR_used(2),
-               params.approach_auto_damping_factor);
-      } else if (params.approach_auto_damping) {
-        printf("  Dp, DR = auto (factor %.2f), fitted at the first cycle\n",
-               params.approach_auto_damping_factor);
+        row("Dp [t1,t2,n]", damping.approach_Dp_used, "Ns/m", auto_note);
+      } else if (!params.approach_auto_damping) {
+        row("Dp [t1,t2,n]", params.approach_Dp_diag, "Ns/m", "");
       } else {
-        printf("  Dp=[%.0f, %.0f, %.0f] Ns/m  DR=[%.1f, %.1f, %.1f] Nms/rad\n",
-               params.approach_Dp_diag(0), params.approach_Dp_diag(1),
-               params.approach_Dp_diag(2), params.approach_DR_diag(0),
-               params.approach_DR_diag(1), params.approach_DR_diag(2));
+        printf("  %-16s = %s, fitted at the first cycle\n", "Dp [t1,t2,n]",
+               auto_note);
+      }
+      row("KR [t1,t2,n]", params.approach_KR_diag, "Nm/rad", "");
+      if (params.approach_auto_damping && damping.approach_damping_valid) {
+        row("DR [t1,t2,n]", damping.approach_DR_used, "Nms/rad", auto_note);
+      } else if (!params.approach_auto_damping) {
+        row("DR [t1,t2,n]", params.approach_DR_diag, "Nms/rad", "");
+      } else {
+        printf("  %-16s = %s, fitted at the first cycle\n", "DR [t1,t2,n]",
+               auto_note);
       }
       if (phase == ControlPhase::kApproachDescend) {
-        printf("  descend to %.0f mm clearance at %.3f m/s\n",
+        printf("  %-16s   %.0f mm clearance at %.3f m/s\n", "descend to",
                1000.0 * params.descend_surface_clearance, params.descend_speed);
       }
       break;
+    }
     case ControlPhase::kGrind:
       if (params.grind_sweep_enabled) {
-        printf("  sweep along tangent%d, %.0f mm at %.2f Hz. Impedance as set up.\n",
+        printf("  %-16s   sweep along tangent%d, %.0f mm at %.2f Hz\n", "motion",
                params.grind_axis, 1000.0 * params.grind_amplitude_m,
                params.grind_frequency_hz);
       } else {
-        printf("  free-slide press hold. Impedance as set up.\n");
+        printf("  %-16s   free-slide press hold\n", "motion");
       }
+      printf("  %-16s   as set up\n", "impedance");
       break;
     case ControlPhase::kHold:
       if (params.hold_with_setup_gains) {
         break;  // the set-up impedance block covers it
       }
-      printf("  Kp=[%.0f, %.0f, %.0f] N/m  KR=[%.0f, %.0f, %.0f] Nm/rad  [x,y,z]\n",
-             params.hold_Kp_diag(0), params.hold_Kp_diag(1),
-             params.hold_Kp_diag(2), params.hold_KR_diag(0),
-             params.hold_KR_diag(1), params.hold_KR_diag(2));
+      row("Kp [x,y,z]", params.hold_Kp_diag, "N/m", "");
       if (params.hold_auto_damping && damping.hold_damping_valid) {
-        printf("  Dp=[%.1f, %.1f, %.1f] Ns/m  DR=[%.2f, %.2f, %.2f] Nms/rad  auto\n",
-               damping.hold_Dp_used(0), damping.hold_Dp_used(1),
-               damping.hold_Dp_used(2), damping.hold_DR_used(0),
-               damping.hold_DR_used(1), damping.hold_DR_used(2));
+        row("Dp [x,y,z]", damping.hold_Dp_used, "Ns/m", "auto");
       } else if (!params.hold_auto_damping) {
-        printf("  Dp=[%.0f, %.0f, %.0f] Ns/m  DR=[%.1f, %.1f, %.1f] Nms/rad\n",
-               params.hold_Dp_diag(0), params.hold_Dp_diag(1),
-               params.hold_Dp_diag(2), params.hold_DR_diag(0),
-               params.hold_DR_diag(1), params.hold_DR_diag(2));
+        row("Dp [x,y,z]", params.hold_Dp_diag, "Ns/m", "");
+      }
+      row("KR [x,y,z]", params.hold_KR_diag, "Nm/rad", "");
+      if (params.hold_auto_damping && damping.hold_damping_valid) {
+        row("DR [x,y,z]", damping.hold_DR_used, "Nms/rad", "auto");
+      } else if (!params.hold_auto_damping) {
+        row("DR [x,y,z]", params.hold_DR_diag, "Nms/rad", "");
       }
       break;
     case ControlPhase::kSetUp:
@@ -658,23 +759,19 @@ void printPhaseIntro(const Parameters& params,
 }
 
 void printGateHold(const Parameters& params, const DampingCache& damping) {
-  printf("  gate hold: Kp=[%.0f, %.0f, %.0f] N/m [x,y,z]  "
-         "KR=[%.0f, %.0f, %.0f] Nm/rad [t1,t2,n]\n",
-         params.pause_hold_Kp_diag(0), params.pause_hold_Kp_diag(1),
-         params.pause_hold_Kp_diag(2), params.pause_hold_KR_diag(0),
-         params.pause_hold_KR_diag(1), params.pause_hold_KR_diag(2));
+  const auto row = printRow;
+  printSection("gate hold");
+  row("Kp [x,y,z]", params.pause_hold_Kp_diag, "N/m", "");
   if (params.pause_hold_auto_damping && damping.pause_damping_valid) {
-    printf("             Dp=[%.1f, %.1f, %.1f] Ns/m  "
-           "DR=[%.2f, %.2f, %.2f] Nms/rad  auto\n",
-           damping.pause_Dp_used(0), damping.pause_Dp_used(1),
-           damping.pause_Dp_used(2), damping.pause_DR_used(0),
-           damping.pause_DR_used(1), damping.pause_DR_used(2));
+    row("Dp [x,y,z]", damping.pause_Dp_used, "Ns/m", "auto");
   } else if (!params.pause_hold_auto_damping) {
-    printf("             Dp=[%.0f, %.0f, %.0f] Ns/m  "
-           "DR=[%.1f, %.1f, %.1f] Nms/rad\n",
-           params.pause_hold_Dp_diag(0), params.pause_hold_Dp_diag(1),
-           params.pause_hold_Dp_diag(2), params.pause_hold_DR_diag(0),
-           params.pause_hold_DR_diag(1), params.pause_hold_DR_diag(2));
+    row("Dp [x,y,z]", params.pause_hold_Dp_diag, "Ns/m", "");
+  }
+  row("KR [t1,t2,n]", params.pause_hold_KR_diag, "Nm/rad", "");
+  if (params.pause_hold_auto_damping && damping.pause_damping_valid) {
+    row("DR [t1,t2,n]", damping.pause_DR_used, "Nms/rad", "auto");
+  } else if (!params.pause_hold_auto_damping) {
+    row("DR [t1,t2,n]", params.pause_hold_DR_diag, "Nms/rad", "");
   }
 }
 
@@ -684,7 +781,7 @@ void printContactEdgeDebug(const Vec3& offset_ee,
   printVec3Mm("offset_ee", offset_ee);
   printVec3Mm("p_EE_at_contact", p_EE_at_contact);
   printVec3Mm("contact_point", contact_point);
-  printVec3Mm("edge_offset_base", contact_point - p_EE_at_contact);
+  printVec3Mm("edge_offset", contact_point - p_EE_at_contact);
 }
 
 // ====================================================================
@@ -830,14 +927,17 @@ void printFinalSummary(const Vec3& final_p_d,
                        const Vec3& final_e_p,
                        const Vec3& final_e_R,
                        const std::string& csv_file_name) {
-  printf("\n=== Final result ===\n");
+  printBanner("FINAL RESULT");
   printVec3Mm("p_d", final_p_d);
   printVec3Mm("p_EE", final_p_EE);
   printVec3Mm("e_p", final_e_p);
-  printf("position_error = %.2f mm\n", 1000.0 * final_e_p.norm());
   printVec3Deg("e_R", final_e_R);
-  printf("rotation_error = %.2f deg\n", (180.0 / M_PI) * final_e_R.norm());
-  printf("csv: %s\n", csv_file_name.c_str());
+  printRule();
+  printf("  %-16s   %.2f mm\n", "position error", 1000.0 * final_e_p.norm());
+  printf("  %-16s   %.2f deg\n", "rotation error",
+         (180.0 / M_PI) * final_e_R.norm());
+  printf("  %-16s   %s\n", "csv", csv_file_name.c_str());
+  printRule();
 }
 
 // ====================================================================
@@ -880,14 +980,15 @@ NullspaceMode askHoldNullspaceMode(NullspaceMode configured,
     *stop_selected = false;
   }
   const NullspaceMode fallback = configured;
-  printf("\nSelect hold nullspace mode:\n");
-  printf("  0 = no nullspace torque\n");
-  printf("  1 = nullspace damping only (no return to q_start)\n");
-  printf("  2 = sigma optimization only (push toward larger sigma_min)\n");
-  printf("  3 = sigma optimization + nullspace damping (damped comeback)\n");
+  printSection("hold nullspace mode");
+  printf("  0   no nullspace torque\n");
+  printf("  1   nullspace damping only, no return to q_start\n");
+  printf("  2   sigma optimization only, push toward larger sigma_min\n");
+  printf("  3   sigma optimization + nullspace damping, damped comeback\n");
   if (stop_selected != nullptr) {
-    printf("  e = stop\n");
+    printf("  e   stop\n");
   }
+  printRule();
   printf("Choice [0/1/2/3, Enter = %s]: ",
          fallback == NullspaceMode::kOff ? "0"
              : fallback == NullspaceMode::kSigmaOnly ? "2"
@@ -954,15 +1055,16 @@ void reportGripperCalibration(const franka::GripperState& state,
           "move() and grasp() are clamped to that stroke and the fingers "
           "barely move.\n");
   fprintf(stderr,
-          "Clear it with r (type recal) or ./tools/home_gripper, fingers "
-          "EMPTY. Never home with the tool clamped.\n\n");
+          "Clear it with r or ./tools/home_gripper, fingers EMPTY. Never "
+          "home with the tool clamped.\n\n");
 }
 
 bool openGripper(const Parameters& params, Gripper& gripper) {
   try {
     const franka::GripperState before = gripper.readOnce();
     reportGripperCalibration(before, params);
-    printf("Opening gripper to %.1f mm...\n", 1000.0 * params.gripper_open_width);
+    printSection("gripper: open");
+    printf("  %-16s   %.1f mm\n", "target", 1000.0 * params.gripper_open_width);
     const bool opened = gripper.move(params.gripper_open_width, params.gripper_open_speed);
     const franka::GripperState after = gripper.readOnce();
     const double width_tolerance = 0.002;
@@ -973,12 +1075,12 @@ bool openGripper(const Parameters& params, Gripper& gripper) {
     const bool verified =
         opened && calibration_supports_target && target_reached;
 
-    printf("Gripper width: %.1f -> %.1f mm (reported max %.1f mm).\n",
+    printf("  %-16s   %.1f -> %.1f mm, reported max %.1f mm\n", "width",
            1000.0 * before.width,
            1000.0 * after.width,
            1000.0 * after.max_width);
     if (verified) {
-      printf("Gripper opened and width verified.\n");
+      printf("  %-16s   open, width verified\n", "result");
     } else if (!calibration_supports_target) {
       reportGripperCalibration(after, params);
     } else {
@@ -997,7 +1099,8 @@ bool graspTool(const Parameters& params, Gripper& gripper) {
   try {
     const franka::GripperState before = gripper.readOnce();
     reportGripperCalibration(before, params);
-    printf("Grasping tool: width %.1f mm, force %.1f N...\n",
+    printSection("gripper: grasp the tool");
+    printf("  %-16s   %.1f mm at %.1f N\n", "target",
            1000.0 * params.gripper_grasp_width, params.gripper_grasp_force);
     // epsilon_inner/outer set how far the final width may fall short of /
     // exceed the target and still count as a successful grasp.
@@ -1013,12 +1116,12 @@ bool graspTool(const Parameters& params, Gripper& gripper) {
             params.gripper_grasp_width + params.gripper_grasp_epsilon_outer;
     const bool verified = grasped && after.is_grasped && width_in_band;
 
-    printf("Gripper width: %.1f -> %.1f mm | grasped flag: %s.\n",
+    printf("  %-16s   %.1f -> %.1f mm, grasped flag %s\n", "width",
            1000.0 * before.width,
            1000.0 * after.width,
            after.is_grasped ? "yes" : "no");
     if (verified) {
-      printf("Gripper closed on the tool and grasp verified.\n");
+      printf("  %-16s   closed on the tool, grasp verified\n", "result");
     } else {
       fprintf(stderr,
               "Tool grasp was not verified. Support the tool, check its "
@@ -1085,37 +1188,33 @@ bool saveGuidedPoseAsQInit(const Vec7& q) {
     output << text << "\n";
   }
   printf("Saved this pose as q_init_case = saved_qinit in %s.\n", path.c_str());
-  printVec7Deg("saved q1..q7 [deg]", q);
+  printVec7Deg("saved q1..q7", q);
   return true;
 }
 
-bool recalibrateGripper(const Parameters& params,
-                        Gripper& gripper,
-                        bool confirmation_already_received) {
+bool recalibrateGripper(const Parameters& params, Gripper& gripper) {
   try {
     const franka::GripperState before = gripper.readOnce();
-    printf("\n=== Franka Hand width recalibration ===\n");
-    printf("Current width: %.1f mm | reported max: %.1f mm | grasped: %s\n",
+    printBanner("FRANKA HAND WIDTH RECALIBRATION");
+    printf("  %-16s   %.1f mm, reported max %.1f mm, grasped %s\n", "now",
            1000.0 * before.width,
            1000.0 * before.max_width,
            before.is_grasped ? "yes" : "no");
     reportGripperCalibration(before, params);
-    printf("This opens the fingers completely. A held tool WILL FALL.\n");
-    printf("Support the tool by hand or remove it before continuing.\n");
+    printRule();
+    printf("  This opens the fingers completely. A held tool WILL FALL.\n");
+    printf("  Support the tool by hand or remove it before continuing.\n");
+    printRule();
 
-    if (!confirmation_already_received) {
-      printf("Type  recal  and press Enter to continue, anything else to abort: ");
-      fflush(stdout);
-      // Echo what arrived: the usual abort is a bare Enter, and without this
-      // the prompt looks like it failed rather than like it was answered.
-      const std::string answer = readChoice();
-      if (answer != "recal") {
-        printf("Read \"%s\", not \"recal\". Aborted; nothing was moved.\n",
-               answer.c_str());
-        return false;
-      }
-    } else {
-      printf("Explicit recal command received; starting.\n");
+    // Enter starts it. The warning above is what the operator answers, so
+    // anything typed instead of a bare Enter aborts.
+    printf("Press Enter to recalibrate, anything else to abort: ");
+    fflush(stdout);
+    const std::string answer = readChoice();
+    if (!answer.empty()) {
+      printf("Read \"%s\", not a bare Enter. Aborted; nothing was moved.\n",
+             answer.c_str());
+      return false;
     }
 
     const bool homed = gripper.homing();
@@ -1127,11 +1226,11 @@ bool recalibrateGripper(const Parameters& params,
         after.width + width_tolerance >= params.gripper_open_width;
     const bool verified = homed && calibration_supports_target && opened;
 
-    printf("After recalibration: width %.1f mm | reported max %.1f mm.\n",
+    printf("  %-16s   %.1f mm, reported max %.1f mm\n", "after",
            1000.0 * after.width,
            1000.0 * after.max_width);
     if (verified) {
-      printf("Recalibrated. The hand is open; place the tool and select c.\n");
+      printf("  %-16s   open; place the tool and select c\n", "result");
     } else {
       fprintf(stderr,
               "Recalibration was not verified. Do not start the robot "
@@ -1244,8 +1343,9 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
 
   const auto move_to_q_init = [&]() {
     const Vec7 q_init = Map<const Vec7>(params.q_init.data());
-    printf("Moving to q_init (%s)\n", params.q_init_case.c_str());
-    printVec7Deg("  q1..q7 [deg]", q_init);
+    printSection("moving to q_init");
+    printf("  %-16s   %s\n", "case", params.q_init_case.c_str());
+    printVec7Deg("q1..q7 [deg]", q_init);
     // Also as stored in Q_Init.txt, so the pose can be compared or pasted.
     printf("  %s = [", params.q_init_case.c_str());
     for (int i = 0; i < 7; ++i) {
@@ -1254,7 +1354,7 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
     printf("] rad\n");
     MotionGenerator motion_generator(0.4, params.q_init);
     robot.control(motion_generator);
-    printf("q_init reached.\n");
+    printf("  q_init reached.\n");
     q_init_reached = true;
   };
 
@@ -1267,24 +1367,32 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
   // One choice selects both the start-pose source and the run mode. q, o and c
   // inspect or set up first and return to this menu.
   while (true) {
-    printf("\n=== Startup mode ===\n");
-    printf("  s = run the phase sequence from q_init\n");
-    printf("  h = hold the q_init pose\n");
-    printf("  t = hold with the set-up impedance\n");
-    printf("  g = hand-guide the start pose\n");
-    printf("  q = go to q_init and inspect\n");
-    printf("  o = open the hand now\n");
-    printf("  c = grasp the tool now\n");
-    printf("  r = recalibrate hand width, fingers empty\n");
-    printf("  f = fetch the tool from the holder\n");
-    printf("  b = put the tool back\n");
-    printf("  e = stop and quit\n");
-    printf("While a run is going: e+Enter stops, m+Enter comes back here.\n");
+    // Grouped by what the key does: three that start a run, one that hands
+    // the pose over, then the ones that act now and come back here.
+    printBanner("STARTUP MODE");
+    printf("  run     s   run the phase sequence from q_init\n");
+    printf("          h   hold the q_init pose\n");
+    printf("          t   hold with the set-up impedance, to test those "
+           "gains\n");
+    printf("          g   hand-guide the start pose, then choose\n");
+    printRule();
+    printf("  set up  q   go to q_init and inspect\n");
+    printf("          o   open the hand now\n");
+    printf("          c   grasp the tool now\n");
+    printf("          r   recalibrate the hand width, fingers empty\n");
+    printf("          f   fetch the tool from the holder\n");
+    printf("          b   put the tool back\n");
+    printRule();
+    printf("  quit    e   stop and quit\n");
+    printRule();
+    printf("  in a run    e stop | m menu | g hand-guide | "
+           "s sequence | t hold\n");
+    printRule();
     printf("Choice [s/h/t/g/q/o/c/r/f/b/e]: ");
 
     const std::string choice = readChoice();
     if (matches(choice, {"s", "sequence"})) {
-      printf("\n=== Phase sequence mode ===\n");
+      printSection("selected: phase sequence");
       ensure_q_init();
       params.use_manual_guidance_start = false;
       params.use_phase_sequence = true;
@@ -1333,9 +1441,7 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
     if (matches(choice, {"r", "recal", "recalibrate"})) {
       try {
         Gripper gripper(params.robot_ip);
-        // The synchronous startup menu always presents the full warning before
-        // accepting the exact confirmation word.
-        recalibrateGripper(params, gripper, false);
+        recalibrateGripper(params, gripper);
       } catch (const franka::Exception& e) {
         fprintf(stderr, "Gripper connection failed: %s\n", e.what());
       }
@@ -1363,9 +1469,9 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
       return false;
     }
     if (matches(choice, {"g", "guide", "guiding"})) {
+      printSection("selected: guiding");
       ensure_q_init();
       params.use_manual_guidance_start = true;
-      printf("Selected: guiding mode (hand-place the start pose after q_init).\n");
       break;
     }
     if (choice.empty()) {
@@ -1379,7 +1485,7 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
   // In guiding mode the run mode is chosen at the END of guiding, so asking
   // here would be redundant.
   if (params.use_manual_guidance_start) {
-    printf("Run mode (s/h) will be chosen at the end of guiding.\n");
+    printf("  hand-place the start pose, then pick s or h there.\n");
     return true;
   }
 
@@ -1393,18 +1499,20 @@ bool askStartupRunMode(Parameters& params, Robot& robot,
   // its nullspace mode from the parameter file without asking. Asking here
   // would let the two drift apart, so it is not asked.
   if (params.hold_with_setup_gains) {
-    printf("Selected: hold with the SET-UP gains. Nullspace mode from "
-           "parameters: %s.\n", nullspaceModeName(params.nullspace_mode));
-    if (params.use_coupled_stiffness) {
-      printf("Coupled set-up stiffness is active in this hold.\n");
-    }
+    printSection("selected: set-up impedance hold");
+    printf("  %-16s   %s\n", "spring",
+           params.use_coupled_stiffness ? "coupled set-up stiffness"
+                                        : "decoupled set-up stiffness");
+    printf("  %-16s   %s, from Nullspace.txt\n", "nullspace",
+           nullspaceModeName(params.nullspace_mode));
     return true;
   }
 
   // Plain hold is where the nullspace terms are studied, so ask for the mode
   // rather than taking it silently. Enter keeps the parameter-file value.
   (void)selectHoldNullspaceMode(params);
-  printf("Selected: hold mode with %s.\n",
+  printSection("selected: hold");
+  printf("  %-16s   %s\n", "nullspace",
          nullspaceModeName(params.nullspace_mode));
   return true;
 }
@@ -1451,9 +1559,12 @@ bool performStartupGripperAction(const Parameters& params) {
 bool runManualGuidanceStart(Parameters& params,
                             Robot& robot,
                             const Model& model,
-                            std::atomic<bool>& stop_requested,
-                            std::atomic<char>& guidance_menu_key,
-                            std::atomic<bool>& guided_hold_selector_pending) {
+                            KeyboardSignals& signals) {
+  std::atomic<bool>& stop_requested = signals.stop_requested;
+  std::atomic<char>& guidance_menu_key = signals.guidance_menu_key;
+  std::atomic<bool>& guided_hold_selector_pending =
+      signals.guided_hold_selector_pending;
+
   struct PendingFlagReset {
     std::atomic<bool>& flag;
     ~PendingFlagReset() {
@@ -1469,25 +1580,27 @@ bool runManualGuidanceStart(Parameters& params,
   Gripper gripper(params.robot_ip);
   Vec7 stop_q = Vec7::Zero();
   const auto print_stop_pose = [&stop_q]() {
-    printf("\n=== Manual guidance stop pose ===\n");
-    printf("q1..q7 [rad] (paste into a q_init_* case):\n");
+    printBanner("MANUAL GUIDANCE STOP POSE");
+    printf("  paste into a q_init_* case:\n");
     for (int i = 0; i < 7; ++i) {
-      printf("  q_init_%d = %.6f\n", i + 1, stop_q(i));
+      printf("    q_init_%d = %.6f\n", i + 1, stop_q(i));
     }
     printVec7Deg("q1..q7 [deg]", stop_q);
+    printRule();
   };
 
   while (true) {
-    printf("\nphase: manual_guidance_start\n");
-    printf("Move the robot by hand. Then:\n");
-    printf("  o+Enter = open the gripper\n");
-    printf("  c+Enter = close/grasp the tool\n");
-    printf("  recal+Enter = recalibrate the hand width (opens fully)\n");
-    printf("  m+Enter = back to the startup menu\n");
-    printf("  w+Enter = save this pose as q_init (writes params/Q_Init.txt)\n");
-    printf("  s+Enter = start phase sequence from this pose\n");
-    printf("  h+Enter = start hold from this pose\n");
-    printf("  e+Enter = stop (prints this pose as a q_init_* case)\n");
+    printSection("phase: manual_guidance_start");
+    printf("  Move the robot by hand, then press one of:\n");
+    printf("    start   s   phase sequence from this pose\n");
+    printf("            h   hold from this pose\n");
+    printf("    hand    o   open the gripper\n");
+    printf("            c   close and grasp the tool\n");
+    printf("            r   recalibrate the hand width, Enter confirms\n");
+    printf("    pose    w   save this pose as q_init (params/Q_Init.txt)\n");
+    printf("    leave   m   back to the startup menu\n");
+    printf("            e   stop, printing this pose as a q_init_* case\n");
+    printRule();
 
     // Gravity compensation with a little joint damping, so the arm can be moved
     // by hand. Ends as soon as the keyboard thread reports a menu key.
@@ -1518,7 +1631,10 @@ bool runManualGuidanceStart(Parameters& params,
     } else if (key == 'c') {
       graspTool(params, gripper);
     } else if (key == 'r') {
-      recalibrateGripper(params, gripper, true);
+      // The keyboard thread is parked on this flag: it holds stdin until the
+      // confirmation above has been read, then reads again.
+      recalibrateGripper(params, gripper);
+      signals.gripper_confirm_pending.store(false);
     } else if (key == 'w') {
       const RobotState saved_state = robot.readOnce();
       (void)saveGuidedPoseAsQInit(Map<const Vec7>(saved_state.q.data()));

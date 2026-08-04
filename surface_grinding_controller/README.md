@@ -60,14 +60,26 @@ passes a phase gate.
 ## Startup menu
 
 ```text
-s  go to q_init, then run the sequence
-h  go to q_init, then hold that pose
-t  hold with the set-up impedance, to test those gains
-g  go to q_init, then hand-guide; pick s or h afterwards
-q  go to q_init and inspect the posture, then choose again
-o  open the hand    c  grasp the tool    r  recalibrate the hand width
-f  fetch the tool from its holder   b  put the tool back
-e  stop and quit
+====================================================================
+  STARTUP MODE
+====================================================================
+  run     s   run the phase sequence from q_init
+          h   hold the q_init pose
+          t   hold with the set-up impedance, to test those gains
+          g   hand-guide the start pose, then choose
+--------------------------------------------------------------------
+  set up  q   go to q_init and inspect
+          o   open the hand now
+          c   grasp the tool now
+          r   recalibrate the hand width, fingers empty
+          f   fetch the tool from the holder
+          b   put the tool back
+--------------------------------------------------------------------
+  quit    e   stop and quit
+--------------------------------------------------------------------
+  in a run    e stop | m menu | g hand-guide | s sequence | t hold
+--------------------------------------------------------------------
+Choice [s/h/t/g/q/o/c/r/f/b/e]:
 ```
 
 `f` opens the hand, travels via q_init to the stored pickup posture and
@@ -77,11 +89,13 @@ pickup posture and need `use_tool_pickup = 1` plus a measured `q_pickup_*` in
 pose it prints.
 
 `o`, `c`, `q` and `r` act now and return to the menu. Recalibration is the
-Franka Hand homing procedure: it opens the fingers fully, so it needs the
-confirmation word `recal` and the tool must be supported or removed.
+Franka Hand homing procedure: it opens the fingers fully, so it prints the
+warning and starts on one Enter — anything else typed aborts, and the tool must
+be supported or removed. `r` does the same from the guiding menu.
 
-**During any run:** `e+Enter` stops, `m+Enter` comes back to this menu. A
-second run in the same program start writes
+**During any run:** `e+Enter` stops, `m+Enter` comes back to this menu,
+`s+Enter` runs the sequence from a hold and `t+Enter` holds with the set-up
+impedance. A second run in the same program start writes
 `surface_grinding_controller_log_s2.csv`, so the first run's log survives.
 
 ## Modes
@@ -108,7 +122,15 @@ Set-up impedance hold (t)
   pushed by hand and measured on its own. Like a sequence run it takes the
   nullspace mode from Nullspace.txt instead of asking, so the two cannot
   drift apart. While it holds, "kp3 900" [N/m], "kr1 8" [Nm/rad] and
-  "r1 -40" (the pole, in mm) retune the spring and rebuild it in place.
+  "pc1 -40" [mm] retune the spring and rebuild it in place. The compliance
+  centre has one key per convention, named after what it writes: pc1..pc3
+  place the pole itself, from the contact edge, and r1..r3 give
+  r_c = p_TCP - p_c in the surface frame. They have opposite signs, so the
+  block prints both rows, marks the one it accepts, and refuses the key
+  that belongs to the other convention.
+  s+Enter then runs the sequence with exactly those gains and t+Enter comes
+  back to this hold, at the pose it started from, so tuning and trying
+  alternate without leaving the run.
   Tunes: SetUp_Phase, Nullspace.
 
 Guiding (g)
@@ -133,6 +155,8 @@ stateDiagram-v2
   set_up --> gate_grind: after min time,<br/>moment >= threshold,<br/>or timeout
   gate_grind --> grind: Enter
   grind --> [*]: e
+  hold --> approach_orient: s (from<br/>the pose held)
+  grind --> hold: t
   hold --> manual_guide: g
   manual_guide --> hold: p (re-capture)
   hold --> [*]: e
@@ -140,6 +164,16 @@ stateDiagram-v2
 
 The two gates are optional (`pause_before_set_up`, `pause_before_grind`); with
 them off the run passes straight through.
+
+`s` starts from the pose the arm is holding, so nothing moves at the switch
+itself. `t` is accepted from any sequence phase, including from a gate or from
+the grind: it takes the pressed pose the sequence reached and walks the
+commanded pose back to where the hold started, at `descend_speed` and
+`approach_orient_max_rate_deg`, then holds there. That is what makes the cycle
+repeatable — every set-up is tried from the same place, not from wherever the
+last one was stopped. `s` is refused while that return is still running, and it
+keeps the plane the run started with, so repeating the cycle cannot walk the
+surface point deeper.
 
 ## Parameter files
 

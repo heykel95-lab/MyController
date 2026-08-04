@@ -39,21 +39,22 @@ void printSurfaceFrameBreakdown(const Mat3& R_alignment_target,
     formatRatio(kr[i], sizeof(kr[i]), moment_surf(i), tip_surf(i), 5e-4);
   }
 
-  printf("\n=== Set-up surface-frame breakdown ===\n");
-  printf("frame: alignment-target [tangent1, tangent2, normal]\n");
-  printf("force        [N]      = [%+9.2f, %+9.2f, %+9.2f]\n",
+  printSection("set-up surface-frame breakdown");
+  printf("  %-16s   alignment-target [tangent1, tangent2, normal]\n",
+         "frame");
+  printf("  force        [N]      = [%+9.2f, %+9.2f, %+9.2f]\n",
          force_surf(0), force_surf(1), force_surf(2));
-  printf("tcp_disp     [mm]     = [%+9.2f, %+9.2f, %+9.2f]\n",
+  printf("  tcp_disp     [mm]     = [%+9.2f, %+9.2f, %+9.2f]\n",
          1000.0 * tcp_disp_surf(0), 1000.0 * tcp_disp_surf(1), 1000.0 * tcp_disp_surf(2));
-  printf("edge_disp    [mm]     = [%+9.2f, %+9.2f, %+9.2f]\n",
+  printf("  edge_disp    [mm]     = [%+9.2f, %+9.2f, %+9.2f]\n",
          1000.0 * edge_disp_surf(0), 1000.0 * edge_disp_surf(1), 1000.0 * edge_disp_surf(2));
-  printf("Kp_eff=F/tcp [N/m]    = [%s, %s, %s]\n", kp[0], kp[1], kp[2]);
-  printf("moment@edge  [Nm]     = [%+9.2f, %+9.2f, %+9.2f]\n",
+  printf("  Kp_eff=F/tcp [N/m]    = [%s, %s, %s]\n", kp[0], kp[1], kp[2]);
+  printf("  moment@edge  [Nm]     = [%+9.2f, %+9.2f, %+9.2f]\n",
          moment_surf(0), moment_surf(1), moment_surf(2));
-  printf("tip_angle    [deg]    = [%+9.2f, %+9.2f, %+9.2f]\n",
+  printf("  tip_angle    [deg]    = [%+9.2f, %+9.2f, %+9.2f]\n",
          (180.0 / M_PI) * tip_surf(0), (180.0 / M_PI) * tip_surf(1),
          (180.0 / M_PI) * tip_surf(2));
-  printf("KR_eff=M/ang [Nm/rad] = [%s, %s, %s]\n", kr[0], kr[1], kr[2]);
+  printf("  KR_eff=M/ang [Nm/rad] = [%s, %s, %s]\n", kr[0], kr[1], kr[2]);
 }
 
 }  // namespace
@@ -66,14 +67,14 @@ void reportSetUpResult(const Parameters& params,
   const Vec3 edge_from_contact_mm = 1000.0 * (r.tool_contact_point - r.first_contact_point);
   const Vec3 tcp_from_contact_mm = 1000.0 * (r.p_EE - r.first_contact_point);
 
-  printf("\n=== Set-up result ===\n");
-  printf("stop: %s | t=%.1f s | tip=%.1f deg | F=%.1f N | M=%.1f Nm\n",
+  printBanner("SET-UP RESULT");
+  printf("  stop: %s | t=%.1f s | tip=%.1f deg | F=%.1f N | M=%.1f Nm\n",
          r.stopped_on_moment ? "moment" : "time",
          r.phase_time, actual_tip_deg, r.force_delta_norm, r.moment_delta_norm);
-  printf("edge_from_contact = [%+.1f, %+.1f, %+.1f] mm | norm=%.1f mm\n",
+  printf("  edge_from_contact = [%+.1f, %+.1f, %+.1f] mm | norm=%.1f mm\n",
          edge_from_contact_mm(0), edge_from_contact_mm(1), edge_from_contact_mm(2),
          edge_from_contact_mm.norm());
-  printf("tcp_from_contact  = [%+.1f, %+.1f, %+.1f] mm | norm=%.1f mm\n",
+  printf("  tcp_from_contact  = [%+.1f, %+.1f, %+.1f] mm | norm=%.1f mm\n",
          tcp_from_contact_mm(0), tcp_from_contact_mm(1), tcp_from_contact_mm(2),
          tcp_from_contact_mm.norm());
 
@@ -85,7 +86,7 @@ void reportSetUpResult(const Parameters& params,
   const double align_after_deg =
       (180.0 / M_PI) *
       toolSurfaceMisalignmentAngle(params, r.R_EE, R_alignment_target);
-  printf("alignment: before=%.2f deg | after=%.2f deg | gain=%+.2f deg\n",
+  printf("  alignment: before=%.2f deg | after=%.2f deg | gain=%+.2f deg\n",
          align_before_deg, align_after_deg, align_before_deg - align_after_deg);
   const Vec3 align_before_surface_deg =
       (180.0 / M_PI) * R_alignment_target.transpose() *
@@ -94,7 +95,7 @@ void reportSetUpResult(const Parameters& params,
   const Vec3 align_after_surface_deg =
       (180.0 / M_PI) * R_alignment_target.transpose() *
       toolSurfaceAlignmentErrorInBase(params, r.R_EE, R_alignment_target);
-  printf("alignment components [t1,t2,n] deg: before=[%+.2f,%+.2f,%+.2f] | "
+  printf("  alignment components [t1,t2,n] deg: before=[%+.2f,%+.2f,%+.2f] | "
          "after=[%+.2f,%+.2f,%+.2f]\n",
          align_before_surface_deg(0), align_before_surface_deg(1),
          align_before_surface_deg(2), align_after_surface_deg(0),
@@ -129,13 +130,30 @@ void reportSetUpResult(const Parameters& params,
   // r_c = p_TCP - p_c, the lever the 6x6 spring is built about. The frame it
   // was commanded in is the one worth reading; the other is the same vector.
   const Vec3 r_c_surface = R_alignment_target.transpose() * r_c;
-  printf("\n=== Centre of compliance ===\n");
+  // The same lever on the tool. A pole commanded in the surface frame does not
+  // sit still in the tool: as the tilt changes, so do these numbers, which is
+  // what makes them the ones to report -- they say where on the tool the pivot
+  // was, in the frame the tool geometry is measured in.
+  const Mat3& R_pole_ref =
+      params.coupled_pole_freeze_at_contact ? r.R_contact_start : r.R_EE;
+  const Vec3 r_c_ee = R_pole_ref.transpose() * r_c;
+  // p_c - p_EE = -r_c, and the grinding face centre is at
+  // tool_contact_face_center_ee from p_EE, so this is the pivot measured from
+  // the face the tool grinds with.
+  const Vec3 pole_from_face_ee = -r_c_ee - params.tool_contact_face_center_ee;
+  printSection("centre of compliance");
+  printf("  %-16s   r_c = p_TCP - p_c\n", "definition");
   if (params.coupled_use_direct_rc_surface) {
-    printVec3Mm("  r_c = p_TCP - p_c [t1,t2,n]", r_c_surface);
+    printVec3Mm("r_c [t1,t2,n]", r_c_surface);
   } else {
-    printVec3Mm("  r_c = p_TCP - p_c [x,y,z]  ", r_c);
-    printVec3Mm("  from pole_from_edge        ", pole - edge_ref);
+    printVec3Mm("r_c [x,y,z]", r_c);
+    printVec3Mm("pole_from_edge", pole - edge_ref);
   }
+  printVec3Mm("r_c [EE]", r_c_ee);
+  printVec3Mm("p_c from face [EE]", pole_from_face_ee);
+  printf("  %-16s   EE rows resolved at %s\n", "",
+         params.coupled_pole_freeze_at_contact ? "first contact"
+                                               : "the end of set up");
 
   // What the TCP actually feels after the shift. Translation is unchanged by
   // the congruence; rotation picks up skew(r_c)^T Kp skew(r_c), so those
@@ -144,25 +162,25 @@ void reportSetUpResult(const Parameters& params,
   const Vec3 k_rot = K_tcp.block<3, 3>(3, 3).diagonal();
   const Vec3 d_trans = D_tcp.block<3, 3>(0, 0).diagonal();
   const Vec3 d_rot = D_tcp.block<3, 3>(3, 3).diagonal();
-  printf("  K_TCP: translation [%.0f, %.0f, %.0f] N/m | "
-         "rotation [%.2f, %.2f, %.2f] Nm/rad\n",
-         k_trans(0), k_trans(1), k_trans(2), k_rot(0), k_rot(1), k_rot(2));
-  printf("         commanded KR was [%.2f, %.2f, %.2f]; the rest is the lever\n",
-         r.KR(0, 0), r.KR(1, 1), r.KR(2, 2));
-  printf("  D_TCP: translation [%.1f, %.1f, %.1f] Ns/m | "
-         "rotation [%.2f, %.2f, %.2f] Nms/rad\n",
-         d_trans(0), d_trans(1), d_trans(2), d_rot(0), d_rot(1), d_rot(2));
+  printSection("what the TCP feels");
+  printRow("K_TCP translation", k_trans, "N/m", "");
+  printRow("K_TCP rotation", k_rot, "Nm/rad", "");
+  printRow("commanded KR was", Vec3(r.KR.diagonal()), "Nm/rad",
+           "the rest is the lever");
+  printRow("D_TCP translation", d_trans, "Ns/m", "");
+  printRow("D_TCP rotation", d_rot, "Nms/rad", "");
 
   // The lever turns force into moment: the largest off-diagonal entry says
   // how strongly translation and rotation are coupled.
   const double k_coupling = K_tcp.block<3, 3>(3, 0).cwiseAbs().maxCoeff();
   const double d_coupling = D_tcp.block<3, 3>(3, 0).cwiseAbs().maxCoeff();
-  printf("  coupling: max |moment per unit translation| = %.1f Nm/m (K), "
-         "%.1f Nms/m (D)\n", k_coupling, d_coupling);
+  printf("  %-16s   max |moment per unit translation| = %.1f Nm/m (K), "
+         "%.1f Nms/m (D)\n", "coupling", k_coupling, d_coupling);
 
   const Eigen::SelfAdjointEigenSolver<Mat6x6> eig_k(K_tcp);
   const Eigen::SelfAdjointEigenSolver<Mat6x6> eig_d(D_tcp);
-  printf("  K_TCP eigenvalues %.2f .. %.0f | D_TCP %.2f .. %.0f%s\n",
+  printf("  %-16s   K_TCP %.2f .. %.0f | D_TCP %.2f .. %.0f%s\n",
+         "eigenvalues",
          eig_k.eigenvalues().minCoeff(), eig_k.eigenvalues().maxCoeff(),
          eig_d.eigenvalues().minCoeff(), eig_d.eigenvalues().maxCoeff(),
          (eig_k.eigenvalues().minCoeff() > 0.0 &&
