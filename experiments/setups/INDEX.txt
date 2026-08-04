@@ -1,4 +1,4 @@
-133 setups, 390 total runs
+138 setups, 403 total runs
 
 G1_coupled_block_diagonal          x3  Coupled 6x6 path with block-diagonal gains must reproduce the decoupled wrench exactly.
 G1_decoupled_baseline              x5  Decoupled wrench, no coupling.
@@ -83,6 +83,11 @@ MAIN_F3_baseline_150mm             x3  Mode-0 reference for the stronger 20 N, +
 MAIN_F3_damping_2p0_150mm          x3  Projected damping only under the stronger disturbance, nullspace_damping = 2.0 Nms/rad.
 MAIN_F4_ksigma_1p5_150mm           x3  Sigma-only response under the stronger disturbance, k_sigma = 1.5 Nm.
 MAIN_F4_ksigma_2p0_150mm           x3  Sigma-only response under the stronger disturbance, k_sigma = 2.0 Nm.
+PILOT_F_disturbance_20N_200mm      x1  Balanced automatic null-space disturbance pilot: 20 N at link 3 with a +200 mm local-z lever, mode 0.
+MAIN_F7_baseline_20N_200mm         x3  Mode-0 reference for the balanced 20 N, +200 mm link-3 point-force disturbance.
+MAIN_F7_damping_2p0_20N_200mm      x3  Projected damping only under the balanced disturbance, nullspace_damping = 2.0 Nms/rad.
+MAIN_F8_ksigma_1p5_20N_200mm       x3  Sigma-only response under the balanced disturbance, k_sigma = 1.5 Nm.
+MAIN_F8_ksigma_2p0_20N_200mm       x3  Sigma-only response under the balanced disturbance, k_sigma = 2.0 Nm.
 PILOT_F_disturbance_40N_200mm      x1  Stronger automatic null-space disturbance pilot: 40 N at link 3 with a +200 mm local-z lever, mode 0.
 MAIN_F5_baseline_40N_200mm         x3  Mode-0 reference for the stronger 40 N, +200 mm link-3 point-force disturbance.
 MAIN_F5_damping_2p0_40N_200mm      x3  Projected damping only under the stronger disturbance, nullspace_damping = 2.0 Nms/rad.

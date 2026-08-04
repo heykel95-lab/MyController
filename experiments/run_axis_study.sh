@@ -58,10 +58,10 @@ RUN_IDS=(
   MAIN_F2_ksigma_1p0
   MAIN_F2_ksigma_2p0
   MAIN_F2_ksigma_4p0
-  MAIN_F5_baseline_40N_200mm
-  MAIN_F5_damping_2p0_40N_200mm
-  MAIN_F6_ksigma_1p5_40N_200mm
-  MAIN_F6_ksigma_2p0_40N_200mm
+  MAIN_F7_baseline_20N_200mm
+  MAIN_F7_damping_2p0_20N_200mm
+  MAIN_F8_ksigma_1p5_20N_200mm
+  MAIN_F8_ksigma_2p0_20N_200mm
   MAIN_H1_rot_yEE
   MAIN_H1_rot_diag_m45
   MAIN_H1_rot_xEE
@@ -168,14 +168,14 @@ run_case() {
     return 2
   fi
 
-  # The 40 N, +200 mm follow-on applies more moment than the archived
+  # The 20 N, +200 mm follow-on applies more moment than the archived
   # +100 mm campaign.  Do not let the unattended runner reach it until one
   # mode-0 pilot has both completed and passed the waveform/motion/task gate.
   if [ "$letter" = "F" ]; then
-    local strong_pilot_dir="$HERE/results/PILOT_F_disturbance_40N_200mm/r01"
+    local strong_pilot_dir="$HERE/results/PILOT_F_disturbance_20N_200mm/r01"
     if ! repeat_complete "$strong_pilot_dir"; then
       echo "Stronger Case-F runs are blocked pending:" >&2
-      echo "  $HERE/run.sh PILOT_F_disturbance_40N_200mm 1" >&2
+      echo "  $HERE/run.sh PILOT_F_disturbance_20N_200mm 1" >&2
       return 2
     fi
     if ! python3 "$HERE/analysis/validate_nullspace_pilot.py" "$strong_pilot_dir"; then

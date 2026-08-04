@@ -1,0 +1,8 @@
+run_id:   PILOT_F_disturbance_20N_200mm
+repeats:  1
+
+purpose:
+  Balanced automatic null-space disturbance pilot: 20 N at link 3 with a +200 mm local-z lever, mode 0.
+
+pass criterion:
+  Accept only if it exceeds the original disturbance without clipping, a reflex, or more than 1 mm Cartesian error.
