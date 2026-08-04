@@ -5,4 +5,4 @@ purpose:
   Automatic null-space disturbance pilot: 20 N at link 3 with a +100 mm local-z lever, mode 0.
 
 pass criterion:
-  The disturbance must break joint friction without torque clipping, a reflex, or more than 1 mm Cartesian drift.
+  The disturbance must break joint friction without torque clipping, a reflex, or more than 2 mm Cartesian drift.

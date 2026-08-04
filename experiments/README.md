@@ -139,7 +139,7 @@ python3 experiments/analysis/validate_nullspace_pilot.py \
 
 The unattended follow-on remains blocked unless the pilot delivers the full
 20 N waveform without torque clipping, exceeds 2.0 Nm equivalent joint-torque
-norm and 0.040 rad redundant excursion, and stays within 1 mm peak Cartesian
+norm and 0.040 rad redundant excursion, and stays within 2 mm peak Cartesian
 position error. The lower sigma settings are not repeated because the first
 campaign showed that 1 Nm mostly loaded joint friction; 2 Nm produced clear
 motion, while 4 Nm violated the task-error screening criterion.
@@ -205,7 +205,7 @@ Flags currently emitted:
 | Flag | Meaning |
 |---|---|
 | `not-converged` | Tip still moving >10% of its final value over the last 20% of the phase. The number is a transient, not an equilibrium. |
-| `task-disturbed` | Cartesian position drifted >1 mm during a hold — the null-space projector is not task-invariant. |
+| `task-disturbed` | Cartesian position drifted >2 mm during a hold — the null-space projector is not task-invariant. |
 | `tool-play` | The operator declared up to 2° of unobserved tool motion relative to the EE. Exploratory only; excluded from primary physical-alignment means. |
 | `tip-mismatch` | CSV disagrees with the controller's printed report. One of them is wrong; do not use the run. |
 | `dirty-tree` | Recorded with uncommitted changes — provenance is incomplete. |

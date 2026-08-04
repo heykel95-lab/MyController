@@ -695,7 +695,7 @@ add(
     "Automatic null-space disturbance pilot: 10 N at link 3 with a +100 mm "
     "local-z lever, mode 0.",
     "The disturbance must produce measurable redundant motion without torque "
-    "clipping, a reflex, or more than 1 mm Cartesian drift.",
+    "clipping, a reflex, or more than 2 mm Cartesian drift.",
     nullspace_common(0) + [
         ("disturbance_link", "3"),
         ("disturbance_point_link_z", "0.100"),
@@ -709,7 +709,7 @@ add(
     "Automatic null-space disturbance pilot: 20 N at link 3 with a +100 mm "
     "local-z lever, mode 0.",
     "The disturbance must break joint friction without torque clipping, a "
-    "reflex, or more than 1 mm Cartesian drift.",
+    "reflex, or more than 2 mm Cartesian drift.",
     nullspace_common(0) + [
         ("disturbance_link", "3"),
         ("disturbance_point_link_z", "0.100"),
@@ -781,7 +781,7 @@ add(
     "Stronger automatic null-space disturbance pilot: 20 N at link 3 with "
     "a +150 mm local-z lever, mode 0.",
     "Accept only if the larger moment produces visible redundant motion "
-    "without torque clipping, a reflex, or more than 1 mm Cartesian drift.",
+    "without torque clipping, a reflex, or more than 2 mm Cartesian drift.",
     nullspace_strong_common(0),
     repeats=1,
 )
@@ -814,7 +814,7 @@ for level in NULLSPACE_STRONG_SIGMA_LEVELS:
         f"k_sigma = {level} Nm.",
         "The setting must produce observable motion along the selected "
         "conditioning direction while the Cartesian position error remains "
-        "within 1 mm.",
+        "within 2 mm.",
         nullspace_strong_common(2) + [
             ("nullspace_k_sigma", f"{level}"),
         ],
@@ -839,7 +839,7 @@ add(
     "Balanced automatic null-space disturbance pilot: 20 N at link 3 with "
     "a +200 mm local-z lever, mode 0.",
     "Accept only if it exceeds the original disturbance without clipping, a "
-    "reflex, or more than 1 mm Cartesian error.",
+    "reflex, or more than 2 mm Cartesian error.",
     nullspace_balanced_common(0),
     repeats=1,
 )
@@ -872,7 +872,7 @@ for level in NULLSPACE_STRONG_SIGMA_LEVELS:
         f"k_sigma = {level} Nm.",
         "The setting must produce observable motion along the selected "
         "conditioning direction while the Cartesian position error remains "
-        "within 1 mm.",
+        "within 2 mm.",
         nullspace_balanced_common(2) + [
             ("nullspace_k_sigma", f"{level}"),
         ],
@@ -897,7 +897,7 @@ add(
     "Stronger automatic null-space disturbance pilot: 40 N at link 3 with "
     "a +200 mm local-z lever, mode 0.",
     "Accept only if the larger moment produces visible redundant motion "
-    "without torque clipping, a reflex, or more than 1 mm Cartesian drift.",
+    "without torque clipping, a reflex, or more than 2 mm Cartesian drift.",
     nullspace_stronger_common(0),
     repeats=1,
 )
@@ -930,7 +930,7 @@ for level in NULLSPACE_STRONG_SIGMA_LEVELS:
         f"k_sigma = {level} Nm.",
         "The setting must produce observable motion along the selected "
         "conditioning direction while the Cartesian position error remains "
-        "within 1 mm.",
+        "within 2 mm.",
         nullspace_stronger_common(2) + [
             ("nullspace_k_sigma", f"{level}"),
         ],

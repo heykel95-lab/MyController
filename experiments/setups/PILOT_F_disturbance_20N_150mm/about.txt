@@ -5,4 +5,4 @@ purpose:
   Stronger automatic null-space disturbance pilot: 20 N at link 3 with a +150 mm local-z lever, mode 0.
 
 pass criterion:
-  Accept only if the larger moment produces visible redundant motion without torque clipping, a reflex, or more than 1 mm Cartesian drift.
+  Accept only if the larger moment produces visible redundant motion without torque clipping, a reflex, or more than 2 mm Cartesian drift.

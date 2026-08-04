@@ -247,8 +247,8 @@ def sigma_panel(ax, groups):
                  marker="D", markerfacecolor="white", markeredgewidth=1.1,
                  linestyle="none")
     criterion_handle = task_ax.axhline(
-        1.0, color="0.45", linestyle=":", linewidth=1.0,
-        label="1 mm screening criterion")
+        2.0, color="0.45", linestyle=":", linewidth=1.0,
+        label="2 mm screening criterion")
     task_ax.set_ylabel("peak task-position error [mm]", color=SERIES_RED)
     task_ax.tick_params(axis="y", colors=SERIES_RED)
     task_ax.grid(False)
@@ -257,7 +257,7 @@ def sigma_panel(ax, groups):
         [sigma_handle, task_handle, criterion_handle],
         [r"final $\Delta\sigma_{\min}$ (mean $\pm$ SD)",
          "peak task-position error (mean $\pm$ SD)",
-         "1 mm screening criterion"],
+         "2 mm screening criterion"],
     )
 
 

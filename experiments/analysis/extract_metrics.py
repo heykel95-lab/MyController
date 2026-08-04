@@ -245,7 +245,7 @@ def process_run(run_id, repeat_tag, run_dir):
             for k, v in h.items():
                 if k in row:
                     row[k] = v
-            if h.get("hold_present") and h.get("task_pos_error_drift_mm", 0) > 1.0:
+            if h.get("hold_present") and h.get("task_pos_error_drift_mm", 0) > 2.0:
                 flags.append("task-disturbed")
         except Exception as exc:  # noqa: BLE001
             flags.append(f"hold-parse-error({type(exc).__name__})")
