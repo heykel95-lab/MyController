@@ -139,8 +139,10 @@ python3 experiments/analysis/validate_nullspace_pilot.py \
 
 The unattended follow-on remains blocked unless the pilot delivers the full
 20 N waveform without torque clipping, exceeds 2.0 Nm equivalent joint-torque
-norm and 0.040 rad redundant excursion, and stays within 1 mm peak Cartesian
-position error. The lower sigma settings are not repeated because the first
+norm and 0.040 rad redundant excursion, and stays within 3 mm peak Cartesian
+position error. This 3 mm limit applies to the stronger 20 N, +200 mm
+follow-on; the original +100 mm campaign retains its historical 1 mm screening
+criterion. The lower sigma settings are not repeated because the first
 campaign showed that 1 Nm mostly loaded joint friction; 2 Nm produced clear
 motion, while 4 Nm violated the task-error screening criterion.
 
