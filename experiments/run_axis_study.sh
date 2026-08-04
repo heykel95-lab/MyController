@@ -260,8 +260,8 @@ run_case() {
       # Each automatic trial starts a new libfranka session and moves back to
       # q_init.  Allow residual motion from the preceding controller shutdown
       # to settle before the next joint-motion generator is constructed.
-      echo "Waiting 2 s for the arm to settle before the next trial..."
-      sleep 2
+      echo "Waiting 5 s for the arm to settle before the next trial..."
+      sleep 5
     fi
     if [ "$done_count" -lt "${#pending[@]}" ] && [ "$auto" != "auto" ]; then
       echo ""
