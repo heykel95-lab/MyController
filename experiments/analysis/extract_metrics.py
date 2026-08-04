@@ -51,10 +51,11 @@ FIELDS = [
     "pole_cmd_x_mm", "pole_cmd_y_mm", "pole_cmd_z_mm",
     "setup_Kp_t1", "setup_Kp_t2", "setup_Kp_n",
     "setup_KR_t1", "setup_KR_t2", "setup_KR_n",
-    "use_coupled_stiffness", "rc_t1_mm", "rc_t2_mm", "rc_n_mm",
+    "use_coupled_stiffness", "coupled_use_direct_rc_surface",
+    "coupled_use_pole_ee", "pole_ee_x_mm", "pole_ee_y_mm", "pole_ee_z_mm",
+    "rc_t1_mm", "rc_t2_mm", "rc_n_mm",
     "report_rc_t1_mm", "report_rc_t2_mm", "report_rc_n_mm",
-    "report_rc_ee_x_mm", "report_rc_ee_y_mm", "report_rc_ee_z_mm",
-    "report_pc_face_x_mm", "report_pc_face_y_mm", "report_pc_face_z_mm",
+    "report_pc_ee_x_mm", "report_pc_ee_y_mm", "report_pc_ee_z_mm",
     "tool_offset_t1_deg", "tool_offset_t2_deg",
     "align_improve_real_deg",
     "flags",
@@ -129,6 +130,11 @@ def study_params(params):
         "setup_KR_tangent2": "setup_KR_t2",
         "setup_KR_normal": "setup_KR_n",
         "use_coupled_stiffness": "use_coupled_stiffness",
+        "coupled_use_direct_rc_surface": "coupled_use_direct_rc_surface",
+        "coupled_use_pole_ee": "coupled_use_pole_ee",
+        "coupled_pole_ee_x": ("pole_ee_x_mm", 1000.0),
+        "coupled_pole_ee_y": ("pole_ee_y_mm", 1000.0),
+        "coupled_pole_ee_z": ("pole_ee_z_mm", 1000.0),
         "coupled_rc_tangent1": ("rc_t1_mm", 1000.0),
         "coupled_rc_tangent2": ("rc_t2_mm", 1000.0),
         "coupled_rc_normal": ("rc_n_mm", 1000.0),
@@ -264,7 +270,9 @@ def process_run(run_id, repeat_tag, run_dir):
         # would falsely reject an otherwise valid run.
         coupled = row["use_coupled_stiffness"] != "" and \
             float(row["use_coupled_stiffness"]) != 0.0
-        if coupled:
+        direct = row.get("coupled_use_direct_rc_surface", "") not in ("", "0",
+                                                                       "0.000000")
+        if coupled and direct:
             for axis in ("t1", "t2", "n"):
                 commanded = row[f"rc_{axis}_mm"]
                 reported = row[f"report_rc_{axis}_mm"]

@@ -589,8 +589,6 @@ void startKeyboardStopThread(const Parameters& /*params*/,
           target = &signals.setup_kr_request;
         } else if (std::sscanf(line.c_str(), "pc%d %lf", &index, &value) == 2) {
           target = &signals.setup_pole_mm_request;
-        } else if (std::sscanf(line.c_str(), "pe%d %lf", &index, &value) == 2) {
-          target = &signals.setup_edge_mm_request;
         } else if (std::sscanf(line.c_str(), "r%d %lf", &index, &value) == 2) {
           target = &signals.setup_rc_mm_request;
         }

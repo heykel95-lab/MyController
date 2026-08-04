@@ -1172,10 +1172,8 @@ RunResult runControlLoop(Parameters& params,
           std::numeric_limits<double>::quiet_NaN());
       const double rc_mm = signals.setup_rc_mm_request[i].exchange(
           std::numeric_limits<double>::quiet_NaN());
-      const double edge_mm = signals.setup_edge_mm_request[i].exchange(
-          std::numeric_limits<double>::quiet_NaN());
       if (!std::isfinite(kp) && !std::isfinite(kr) && !std::isfinite(pole_mm) &&
-          !std::isfinite(rc_mm) && !std::isfinite(edge_mm)) {
+          !std::isfinite(rc_mm)) {
         continue;
       }
       if (phase != ControlPhase::kHold || !params.hold_with_setup_gains) {
@@ -1194,15 +1192,13 @@ RunResult runControlLoop(Parameters& params,
         params.setup_KR_diag(i) = kr;
         setup_impedance_changed = true;
       }
-      // The compliance centre, in whichever frame is easiest to think in.
-      // Each key names one frame and always means that frame; the run stores
-      // whichever convention it was configured with, so a request is read as
-      // a change to one component of the current lever and written back
-      // converted. Typing in a frame the run does not store is exact at the
-      // moment it is typed and no longer exact once the tool turns, which is
-      // the difference between the conventions and not a rounding of it.
-      if (std::isfinite(pole_mm) || std::isfinite(rc_mm) ||
-          std::isfinite(edge_mm)) {
+      // The compliance centre, in either of the two frames the block prints.
+      // A request is read as a change to one component of the lever the
+      // spring is commanding now, and written back in whichever convention
+      // the run stores. Typing in the frame the run does not store is exact
+      // when typed and no longer exact once the tool turns, which is the
+      // difference between the conventions and not a rounding of it.
+      if (std::isfinite(pole_mm) || std::isfinite(rc_mm)) {
         if (!params.use_coupled_stiffness) {
           printf("Ignored: the compliance centre belongs to the coupled "
                  "spring, and the decoupled spring is in use.\n");
@@ -1233,11 +1229,6 @@ RunResult runControlLoop(Parameters& params,
             Vec3 rc_surface = R_alignment_target.transpose() * r_c_base;
             rc_surface(i) = 0.001 * rc_mm;
             r_c_base = R_alignment_target * rc_surface;
-          }
-          if (std::isfinite(edge_mm)) {
-            Vec3 from_edge = tcp_ref - edge_ref - r_c_base;
-            from_edge(i) = 0.001 * edge_mm;
-            r_c_base = tcp_ref - edge_ref - from_edge;
           }
 
           // Back into the convention this run stores.

@@ -127,40 +127,24 @@ void reportSetUpResult(const Parameters& params,
   } else {
     r_c = tcp_ref - (edge_ref + params.coupled_pole_from_edge);
   }
-  const Vec3 pole = tcp_ref - r_c;
   const Mat6x6 K_tcp = adjointTransformedGain(K_pole, r_c);
   const Mat6x6 D_tcp = adjointTransformedGain(D_pole, r_c);
 
-  // r_c = p_TCP - p_c, the lever the 6x6 spring is built about. The frame it
-  // was commanded in is the one worth reading; the other is the same vector.
-  const Vec3 r_c_surface = R_alignment_target.transpose() * r_c;
-  // The same lever on the tool. A pole commanded in the surface frame does not
-  // sit still in the tool: as the tilt changes, so do these numbers, which is
-  // what makes them the ones to report -- they say where on the tool the pivot
-  // was, in the frame the tool geometry is measured in.
+  // The same two rows the live block prints, and the point they are both
+  // measured from. A pole commanded in the surface frame does not sit still
+  // in the tool: p_c [EE] is where on the tool the pivot actually was.
   const Mat3& R_pole_ref =
       (params.coupled_use_pole_ee || !params.coupled_pole_freeze_at_contact)
           ? r.R_EE
           : r.R_contact_start;
-  const Vec3 r_c_ee = R_pole_ref.transpose() * r_c;
-  // p_c - p_EE = -r_c, and the grinding face centre is at
-  // tool_contact_face_center_ee from p_EE, so this is the pivot measured from
-  // the face the tool grinds with.
-  const Vec3 pole_from_face_ee = -r_c_ee - params.tool_contact_face_center_ee;
+  const Vec3 r_c_surface = R_alignment_target.transpose() * r_c;
+  const Vec3 p_c_ee = -(R_pole_ref.transpose() * r_c);
   printSection("centre of compliance");
   printf("  %-16s   r_c = p_TCP - p_c\n", "definition");
-  if (params.coupled_use_pole_ee) {
-    printVec3Mm("p_c [EE]", params.coupled_pole_ee);
-    printVec3Mm("r_c [t1,t2,n]", r_c_surface);
-  } else if (params.coupled_use_direct_rc_surface) {
-    printVec3Mm("r_c [t1,t2,n]", r_c_surface);
-  } else {
-    printVec3Mm("r_c [x,y,z]", r_c);
-    printVec3Mm("pole_from_edge", pole - edge_ref);
-  }
-  printVec3Mm("r_c [EE]", r_c_ee);
-  printVec3Mm("p_c from face [EE]", pole_from_face_ee);
-  printf("  %-16s   EE rows resolved at %s\n", "",
+  printVec3Mm("p_TCP [x,y,z]", tcp_ref);
+  printVec3Mm("p_c [EE]", p_c_ee);
+  printVec3Mm("r_c [t1,t2,n]", r_c_surface);
+  printf("  %-16s   p_c resolved at %s\n", "",
          (params.coupled_use_pole_ee || !params.coupled_pole_freeze_at_contact)
              ? "the end of set up"
              : "first contact");

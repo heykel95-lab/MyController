@@ -589,39 +589,10 @@ void printSetUpImpedanceLaw(const Parameters& params,
   } else {
     printf("  %-16s = auto, refit at the first cycle\n", "DR [t1,t2,n]");
   }
-  // Two rows, because the pole has two opposite-signed readings and mixing
-  // them up turns the press the wrong way: p_c is where the compliance centre
-  // sits, r_c = p_TCP - p_c is the lever the adjoint applies. The key is
-  // named after the row it writes, so neither can be typed into the other.
-  const char* pole_key_names = "";
-  if (params.use_coupled_stiffness && params.coupled_use_pole_ee) {
-    // A point on the tool: the numbers mean the same place at every tilt, and
-    // the same place in this hold as in the press that follows it.
-    row("p_c [EE]", Vec3(1000.0 * params.coupled_pole_ee), "mm",
-        "commanded: the pole on the tool, from p_EE");
-    pole_key_names = "pc1..pc3, the pole on the tool";
-  } else if (params.use_coupled_stiffness &&
-             params.coupled_use_direct_rc_surface) {
-    row("r_c [t1,t2,n]", Vec3(1000.0 * params.coupled_rc_surface), "mm",
-        "p_TCP - p_c, commanded");
-    pole_key_names = "r1..r3, the lever in the plane";
-  } else if (params.use_coupled_stiffness) {
-    row("p_c from edge", Vec3(1000.0 * params.coupled_pole_from_edge), "mm",
-        "commanded: where the pole sits");
-    pole_key_names = "pe1..pe3, the pole from the contact edge";
-    if (params.coupled_pole_freeze_at_contact) {
-      // Before contact the edge and the TCP coincide, so the lever is just
-      // the negated pole. From contact on it also carries the tool geometry,
-      // and the set-up report prints the resolved one.
-      row("r_c [x,y,z]", Vec3(-1000.0 * params.coupled_pole_from_edge), "mm",
-          "p_TCP - p_c, before contact");
-    } else {
-      printf("  %-16s = tracks the live contact edge each cycle\n", "r_c");
-    }
-  }
-  // The same pole on the tool. Commanded in the surface frame, it does not
-  // sit still in the tool: these are the numbers that say where on the tool
-  // the pivot is, in the frame the tool geometry is measured in.
+  // Two rows, always the same two, whatever the run stores: where the pivot
+  // is on the tool, and the lever it makes in the plane. They are opposite
+  // readings of one vector, and mixing them up turns the press the wrong way,
+  // so neither is ever left to be inferred from the other.
   if (params.use_coupled_stiffness) {
     const Vec3 r_c_base =
         params.coupled_use_pole_ee
@@ -629,27 +600,23 @@ void printSetUpImpedanceLaw(const Parameters& params,
         : params.coupled_use_direct_rc_surface
             ? Vec3(R_alignment_target * params.coupled_rc_surface)
             : Vec3(-params.coupled_pole_from_edge);
-    if (params.coupled_use_pole_ee) {
-      // Commanded on the tool, so the reading worth adding is the other one:
-      // where that point stands in the plane the press works against.
-      printRow("r_c [t1,t2,n]",
-               Vec3(1000.0 * (R_alignment_target.transpose() * r_c_base)), "mm",
-               "p_TCP - p_c, in the plane");
-    } else {
-      printRow("r_c [EE]", Vec3(1000.0 * (R_EE.transpose() * r_c_base)), "mm",
-               "the same pole, on the tool");
-    }
+    const bool pole_commanded = params.coupled_use_pole_ee;
+    printRow("p_c [EE]", Vec3(-1000.0 * (R_EE.transpose() * r_c_base)), "mm",
+             pole_commanded ? "commanded: the pole on the tool, from p_EE"
+                            : "the pole on the tool, from p_EE");
+    printRow("r_c [t1,t2,n]",
+             Vec3(1000.0 * (R_alignment_target.transpose() * r_c_base)), "mm",
+             pole_commanded ? "p_TCP - p_c, in the plane"
+                            : "commanded: p_TCP - p_c, in the plane");
   }
   if (tunable) {
     printf("  %-16s   kp1..kp3 <N/m> | kr1..kr3 <Nm/rad>\n", "keys");
     if (params.use_coupled_stiffness) {
-      // Every frame the pole can be named in, whichever one the run stores.
-      // The commanded row above says which that is; the others are converted
-      // at the moment they are typed.
-      printf("  %-16s   pc1..pc3 the pole on the tool, from p_EE\n", "");
-      printf("  %-16s   r1..r3   the lever r_c in the plane [t1,t2,n]\n", "");
-      printf("  %-16s   pe1..pe3 the pole from the contact edge [x,y,z]\n", "");
-      printf("  %-16s   all in mm; this run stores %s\n", "", pole_key_names);
+      // One key per row above, and either may be typed: the loop reads it as
+      // a change to that component of the lever and stores it in whichever
+      // convention the run was configured with.
+      printf("  %-16s   pc1..pc3 <mm> the p_c row | r1..r3 <mm> the r_c row\n",
+             "");
     }
     printf("  %-16s   s runs the sequence with them | t comes back here\n", "");
   }
