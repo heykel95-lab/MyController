@@ -839,7 +839,7 @@ add(
     "Balanced automatic null-space disturbance pilot: 20 N at link 3 with "
     "a +200 mm local-z lever, mode 0.",
     "Accept only if it exceeds the original disturbance without clipping, a "
-    "reflex, or more than 3 mm Cartesian error.",
+    "reflex, or more than 1 mm Cartesian error.",
     nullspace_balanced_common(0),
     repeats=1,
 )
@@ -872,7 +872,7 @@ for level in NULLSPACE_STRONG_SIGMA_LEVELS:
         f"k_sigma = {level} Nm.",
         "The setting must produce observable motion along the selected "
         "conditioning direction while the Cartesian position error remains "
-        "within 3 mm.",
+        "within 1 mm.",
         nullspace_balanced_common(2) + [
             ("nullspace_k_sigma", f"{level}"),
         ],

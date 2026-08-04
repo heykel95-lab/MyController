@@ -5,4 +5,4 @@ purpose:
   Balanced automatic null-space disturbance pilot: 20 N at link 3 with a +200 mm local-z lever, mode 0.
 
 pass criterion:
-  Accept only if it exceeds the original disturbance without clipping, a reflex, or more than 3 mm Cartesian error.
+  Accept only if it exceeds the original disturbance without clipping, a reflex, or more than 1 mm Cartesian error.

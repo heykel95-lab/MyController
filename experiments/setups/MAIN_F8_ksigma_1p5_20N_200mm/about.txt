@@ -9,4 +9,4 @@ purpose:
   Sigma-only response under the balanced disturbance, k_sigma = 1.5 Nm.
 
 pass criterion:
-  The setting must produce observable motion along the selected conditioning direction while the Cartesian position error remains within 3 mm.
+  The setting must produce observable motion along the selected conditioning direction while the Cartesian position error remains within 1 mm.
