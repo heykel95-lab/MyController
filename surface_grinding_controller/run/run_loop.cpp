@@ -1172,8 +1172,10 @@ RunResult runControlLoop(Parameters& params,
           std::numeric_limits<double>::quiet_NaN());
       const double rc_mm = signals.setup_rc_mm_request[i].exchange(
           std::numeric_limits<double>::quiet_NaN());
+      const double edge_mm = signals.setup_edge_mm_request[i].exchange(
+          std::numeric_limits<double>::quiet_NaN());
       if (!std::isfinite(kp) && !std::isfinite(kr) && !std::isfinite(pole_mm) &&
-          !std::isfinite(rc_mm)) {
+          !std::isfinite(rc_mm) && !std::isfinite(edge_mm)) {
         continue;
       }
       if (phase != ControlPhase::kHold || !params.hold_with_setup_gains) {
@@ -1192,31 +1194,62 @@ RunResult runControlLoop(Parameters& params,
         params.setup_KR_diag(i) = kr;
         setup_impedance_changed = true;
       }
-      // The compliance centre has one key per convention, named after what it
-      // writes: pc places the pole itself, r gives r_c = p_TCP - p_c. They
-      // have opposite signs, so the key that does not match the convention in
-      // use is refused rather than moving the pole the wrong way.
-      if (std::isfinite(pole_mm) || std::isfinite(rc_mm)) {
-        const bool direct = params.coupled_use_direct_rc_surface &&
-                            !params.coupled_use_pole_ee;
+      // The compliance centre, in whichever frame is easiest to think in.
+      // Each key names one frame and always means that frame; the run stores
+      // whichever convention it was configured with, so a request is read as
+      // a change to one component of the current lever and written back
+      // converted. Typing in a frame the run does not store is exact at the
+      // moment it is typed and no longer exact once the tool turns, which is
+      // the difference between the conventions and not a rounding of it.
+      if (std::isfinite(pole_mm) || std::isfinite(rc_mm) ||
+          std::isfinite(edge_mm)) {
         if (!params.use_coupled_stiffness) {
           printf("Ignored: the compliance centre belongs to the coupled "
                  "spring, and the decoupled spring is in use.\n");
-        } else if (std::isfinite(pole_mm) && params.coupled_use_pole_ee) {
-          params.coupled_pole_ee(i) = 0.001 * pole_mm;
-          setup_impedance_changed = true;
-        } else if (std::isfinite(pole_mm) && !direct) {
-          params.coupled_pole_from_edge(i) = 0.001 * pole_mm;
-          setup_impedance_changed = true;
-        } else if (std::isfinite(rc_mm) && direct) {
-          params.coupled_rc_surface(i) = 0.001 * rc_mm;
-          setup_impedance_changed = true;
-        } else if (direct) {
-          printf("Ignored: this run commands r_c = p_TCP - p_c; type r%d, "
-                 "not pc%d.\n", i + 1, i + 1);
         } else {
-          printf("Ignored: this run commands the pole from the contact edge; "
-                 "type pc%d, not r%d.\n", i + 1, i + 1);
+          const Vec3& tcp_ref = params.coupled_pole_freeze_at_contact
+                                    ? contact.tcp_at_contact
+                                    : contact.tcp;
+          const Vec3& edge_ref = params.coupled_pole_freeze_at_contact
+                                     ? contact.edge_at_contact
+                                     : contact.edge;
+          // The lever the spring is commanding right now, in the base frame.
+          Vec3 r_c_base;
+          if (params.coupled_use_pole_ee) {
+            r_c_base = -(R_EE * params.coupled_pole_ee);
+          } else if (params.coupled_use_direct_rc_surface) {
+            r_c_base = R_alignment_target * params.coupled_rc_surface;
+          } else {
+            r_c_base = tcp_ref - (edge_ref + params.coupled_pole_from_edge);
+          }
+
+          // One component of it, in the frame the key names.
+          if (std::isfinite(pole_mm)) {
+            Vec3 pole_ee = -(R_EE.transpose() * r_c_base);
+            pole_ee(i) = 0.001 * pole_mm;
+            r_c_base = -(R_EE * pole_ee);
+          }
+          if (std::isfinite(rc_mm)) {
+            Vec3 rc_surface = R_alignment_target.transpose() * r_c_base;
+            rc_surface(i) = 0.001 * rc_mm;
+            r_c_base = R_alignment_target * rc_surface;
+          }
+          if (std::isfinite(edge_mm)) {
+            Vec3 from_edge = tcp_ref - edge_ref - r_c_base;
+            from_edge(i) = 0.001 * edge_mm;
+            r_c_base = tcp_ref - edge_ref - from_edge;
+          }
+
+          // Back into the convention this run stores.
+          if (params.coupled_use_pole_ee) {
+            params.coupled_pole_ee = -(R_EE.transpose() * r_c_base);
+          } else if (params.coupled_use_direct_rc_surface) {
+            params.coupled_rc_surface =
+                R_alignment_target.transpose() * r_c_base;
+          } else {
+            params.coupled_pole_from_edge = tcp_ref - edge_ref - r_c_base;
+          }
+          setup_impedance_changed = true;
         }
       }
     }

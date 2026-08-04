@@ -123,10 +123,14 @@ Set-up impedance hold (t)
   nullspace mode from Nullspace.txt instead of asking, so the two cannot
   drift apart. While it holds, "kp3 900" [N/m], "kr1 8" [Nm/rad] and
   "pc1 -40" [mm] retune the spring and rebuild it in place. The compliance
-  centre has one key per convention, named after what it writes: pc1..pc3
-  place the pole itself and r1..r3 give r_c = p_TCP - p_c. The block prints
-  both readings, marks the one it accepts, and refuses the key that belongs
-  to another convention. Three conventions, tried in this order:
+  centre can be typed in any of the three frames it can be named in, whatever
+  the run stores: pc1..pc3 place the pole on the tool from p_EE, r1..r3 give
+  the lever r_c in the plane, pe1..pe3 place the pole from the contact edge.
+  The block prints the commanded row and the other reading of it, and says
+  which frame this run stores. A key in another frame is converted at the
+  moment it is typed, and stops being exact once the tool turns -- that is
+  the difference between the conventions, not a rounding of it. Three
+  conventions, tried in this order:
     coupled_use_pole_ee          pc1..pc3, a point on the tool from p_EE.
                                  Rides with the tool, so the same numbers are
                                  the same place at every tilt and in the press

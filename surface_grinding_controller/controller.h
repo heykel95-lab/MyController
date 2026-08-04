@@ -634,12 +634,13 @@ struct KeyboardSignals {
   // NaN = nothing pending. Retuning these rebuilds the gain matrices.
   std::array<std::atomic<double>, 3> setup_kp_request;
   std::array<std::atomic<double>, 3> setup_kr_request;
-  // The compliance centre, one array per convention, because the two name it
-  // from opposite ends: pc1..3 [mm] place the pole itself, r1..3 [mm] give
-  // r_c = p_TCP - p_c. A key that does not match the convention in use is
-  // refused rather than silently written into the parameter nothing reads.
+  // The compliance centre, one array per frame it can be named in [mm]:
+  // pc1..3 place the pole on the tool from p_EE, r1..3 give the lever
+  // r_c = p_TCP - p_c in the plane, pe1..3 place the pole from the contact
+  // edge. All three are accepted whatever the run stores; the loop converts.
   std::array<std::atomic<double>, 3> setup_pole_mm_request;
   std::array<std::atomic<double>, 3> setup_rc_mm_request;
+  std::array<std::atomic<double>, 3> setup_edge_mm_request;
 
   // Atomics are not copy-initializable, so the arrays are cleared here.
   KeyboardSignals() {
@@ -648,6 +649,7 @@ struct KeyboardSignals {
       setup_kp_request[i].store(none);
       setup_kr_request[i].store(none);
       setup_pole_mm_request[i].store(none);
+      setup_edge_mm_request[i].store(none);
       setup_rc_mm_request[i].store(none);
     }
   }
