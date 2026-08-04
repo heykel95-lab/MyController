@@ -124,10 +124,19 @@ Set-up impedance hold (t)
   drift apart. While it holds, "kp3 900" [N/m], "kr1 8" [Nm/rad] and
   "pc1 -40" [mm] retune the spring and rebuild it in place. The compliance
   centre has one key per convention, named after what it writes: pc1..pc3
-  place the pole itself, from the contact edge, and r1..r3 give
-  r_c = p_TCP - p_c in the surface frame. They have opposite signs, so the
-  block prints both rows, marks the one it accepts, and refuses the key
-  that belongs to the other convention.
+  place the pole itself and r1..r3 give r_c = p_TCP - p_c. The block prints
+  both readings, marks the one it accepts, and refuses the key that belongs
+  to another convention. Three conventions, tried in this order:
+    coupled_use_pole_ee          pc1..pc3, a point on the tool from p_EE.
+                                 Rides with the tool, so the same numbers are
+                                 the same place at every tilt and in the press
+                                 as in this hold. pc = 0 puts the pole at the
+                                 TCP, which is the decoupled spring exactly;
+                                 pc3 = 20 puts it on the grinding face.
+    coupled_use_direct_rc_surface  r1..r3, r_c in [t1,t2,n] of the plane.
+    (neither)                    pc1..pc3, the legacy pole from the contact
+                                 edge. Note 0 there is the pole AT the edge,
+                                 not at the TCP.
   s+Enter then runs the sequence with exactly those gains and t+Enter comes
   back to this hold, at the pose it started from, so tuning and trying
   alternate without leaving the run.

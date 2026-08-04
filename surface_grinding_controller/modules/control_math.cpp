@@ -454,7 +454,13 @@ Vec6 computeSpringWrench(const Parameters& params,
     D_tcp = blockDiagonal(Dp, DR);
   } else if (params.coupled_pole_manual) {
     Vec3 r_c;
-    if (params.coupled_use_direct_rc_surface) {
+    if (params.coupled_use_pole_ee) {
+      // A point on the tool: p_c = p_TCP + R_EE d_ee, so the lever is the
+      // negated offset, and it rides with the tool instead of standing still
+      // in the plane. coupled_pole_freeze_at_contact does not apply -- there
+      // is no contact reference to freeze.
+      r_c = -(contact.R_EE * params.coupled_pole_ee);
+    } else if (params.coupled_use_direct_rc_surface) {
       r_c = R_alignment_target * params.coupled_rc_surface;
     } else {
       // Legacy convention retained only for archived setup files.

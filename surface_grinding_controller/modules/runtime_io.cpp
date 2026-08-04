@@ -595,7 +595,15 @@ void printSetUpImpedanceLaw(const Parameters& params,
   // named after the row it writes, so neither can be typed into the other.
   const char* pole_keys = "";
   const char* pole_key_names = "";
-  if (params.use_coupled_stiffness && params.coupled_use_direct_rc_surface) {
+  if (params.use_coupled_stiffness && params.coupled_use_pole_ee) {
+    // A point on the tool: the numbers mean the same place at every tilt, and
+    // the same place in this hold as in the press that follows it.
+    row("p_c [EE]", Vec3(1000.0 * params.coupled_pole_ee), "mm",
+        "commanded: the pole on the tool, from p_EE");
+    pole_keys = "pc1..pc3 <mm>";
+    pole_key_names = "pc1..pc3";
+  } else if (params.use_coupled_stiffness &&
+             params.coupled_use_direct_rc_surface) {
     row("r_c [t1,t2,n]", Vec3(1000.0 * params.coupled_rc_surface), "mm",
         "p_TCP - p_c, commanded");
     pole_keys = "r1..r3 <mm>";
@@ -620,11 +628,21 @@ void printSetUpImpedanceLaw(const Parameters& params,
   // the pivot is, in the frame the tool geometry is measured in.
   if (params.use_coupled_stiffness) {
     const Vec3 r_c_base =
-        params.coupled_use_direct_rc_surface
+        params.coupled_use_pole_ee
+            ? Vec3(-(R_EE * params.coupled_pole_ee))
+        : params.coupled_use_direct_rc_surface
             ? Vec3(R_alignment_target * params.coupled_rc_surface)
             : Vec3(-params.coupled_pole_from_edge);
-    printRow("r_c [EE]", Vec3(1000.0 * (R_EE.transpose() * r_c_base)), "mm",
-             "the same pole, on the tool");
+    if (params.coupled_use_pole_ee) {
+      // Commanded on the tool, so the reading worth adding is the other one:
+      // where that point stands in the plane the press works against.
+      printRow("r_c [t1,t2,n]",
+               Vec3(1000.0 * (R_alignment_target.transpose() * r_c_base)), "mm",
+               "p_TCP - p_c, in the plane");
+    } else {
+      printRow("r_c [EE]", Vec3(1000.0 * (R_EE.transpose() * r_c_base)), "mm",
+               "the same pole, on the tool");
+    }
   }
   if (tunable) {
     if (params.use_coupled_stiffness) {

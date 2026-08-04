@@ -347,6 +347,8 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
   p.coupled_use_block_diagonal =
       getBool("coupled_use_block_diagonal", p.coupled_use_block_diagonal);
   p.coupled_pole_manual = getBool("coupled_pole_manual", p.coupled_pole_manual);
+  p.coupled_use_pole_ee = getBool("coupled_use_pole_ee", p.coupled_use_pole_ee);
+  p.coupled_pole_ee = getVec3Xyz("coupled_pole_ee", p.coupled_pole_ee);
   p.coupled_use_direct_rc_surface =
       getBool("coupled_use_direct_rc_surface", p.coupled_use_direct_rc_surface);
   p.coupled_rc_surface = getVec3Task("coupled_rc", p.coupled_rc_surface);

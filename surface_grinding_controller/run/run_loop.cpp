@@ -1091,6 +1091,7 @@ RunResult runControlLoop(Parameters& params,
     contact.edge = tool_contact_point;
     contact.tcp_at_contact = first_contact_tcp;
     contact.edge_at_contact = first_contact_point;
+    contact.R_EE = R_EE;
     const Vec6 wrench =
         computeSpringWrench(params, phase, Kp_used, Dp_used, KR_used, DR_used,
                             R_alignment_target, dx, dv, contact);
@@ -1196,10 +1197,14 @@ RunResult runControlLoop(Parameters& params,
       // have opposite signs, so the key that does not match the convention in
       // use is refused rather than moving the pole the wrong way.
       if (std::isfinite(pole_mm) || std::isfinite(rc_mm)) {
-        const bool direct = params.coupled_use_direct_rc_surface;
+        const bool direct = params.coupled_use_direct_rc_surface &&
+                            !params.coupled_use_pole_ee;
         if (!params.use_coupled_stiffness) {
           printf("Ignored: the compliance centre belongs to the coupled "
                  "spring, and the decoupled spring is in use.\n");
+        } else if (std::isfinite(pole_mm) && params.coupled_use_pole_ee) {
+          params.coupled_pole_ee(i) = 0.001 * pole_mm;
+          setup_impedance_changed = true;
         } else if (std::isfinite(pole_mm) && !direct) {
           params.coupled_pole_from_edge(i) = 0.001 * pole_mm;
           setup_impedance_changed = true;

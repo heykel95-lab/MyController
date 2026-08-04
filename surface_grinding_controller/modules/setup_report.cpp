@@ -118,7 +118,11 @@ void reportSetUpResult(const Parameters& params,
   const Vec3 tcp_ref = params.coupled_pole_freeze_at_contact ? r.first_contact_tcp
                                                              : r.p_EE;
   Vec3 r_c;
-  if (params.coupled_use_direct_rc_surface) {
+  if (params.coupled_use_pole_ee) {
+    // The pole rode with the tool, so the lever is resolved at the orientation
+    // the press ended in, which is the one the spring last commanded.
+    r_c = -(r.R_EE * params.coupled_pole_ee);
+  } else if (params.coupled_use_direct_rc_surface) {
     r_c = R_alignment_target * params.coupled_rc_surface;
   } else {
     r_c = tcp_ref - (edge_ref + params.coupled_pole_from_edge);
@@ -135,7 +139,9 @@ void reportSetUpResult(const Parameters& params,
   // what makes them the ones to report -- they say where on the tool the pivot
   // was, in the frame the tool geometry is measured in.
   const Mat3& R_pole_ref =
-      params.coupled_pole_freeze_at_contact ? r.R_contact_start : r.R_EE;
+      (params.coupled_use_pole_ee || !params.coupled_pole_freeze_at_contact)
+          ? r.R_EE
+          : r.R_contact_start;
   const Vec3 r_c_ee = R_pole_ref.transpose() * r_c;
   // p_c - p_EE = -r_c, and the grinding face centre is at
   // tool_contact_face_center_ee from p_EE, so this is the pivot measured from
@@ -143,7 +149,10 @@ void reportSetUpResult(const Parameters& params,
   const Vec3 pole_from_face_ee = -r_c_ee - params.tool_contact_face_center_ee;
   printSection("centre of compliance");
   printf("  %-16s   r_c = p_TCP - p_c\n", "definition");
-  if (params.coupled_use_direct_rc_surface) {
+  if (params.coupled_use_pole_ee) {
+    printVec3Mm("p_c [EE]", params.coupled_pole_ee);
+    printVec3Mm("r_c [t1,t2,n]", r_c_surface);
+  } else if (params.coupled_use_direct_rc_surface) {
     printVec3Mm("r_c [t1,t2,n]", r_c_surface);
   } else {
     printVec3Mm("r_c [x,y,z]", r_c);
@@ -152,8 +161,9 @@ void reportSetUpResult(const Parameters& params,
   printVec3Mm("r_c [EE]", r_c_ee);
   printVec3Mm("p_c from face [EE]", pole_from_face_ee);
   printf("  %-16s   EE rows resolved at %s\n", "",
-         params.coupled_pole_freeze_at_contact ? "first contact"
-                                               : "the end of set up");
+         (params.coupled_use_pole_ee || !params.coupled_pole_freeze_at_contact)
+             ? "the end of set up"
+             : "first contact");
 
   // What the TCP actually feels after the shift. Translation is unchanged by
   // the congruence; rotation picks up skew(r_c)^T Kp skew(r_c), so those

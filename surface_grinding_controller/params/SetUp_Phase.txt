@@ -74,6 +74,17 @@ coupled_use_block_diagonal = 0
 # 1 = use a deliberately commanded pole rather than a derived one.
 coupled_pole_manual = 1
 
+# 1 = the pole is a point on the tool, measured from p_EE in EE axes [m].
+# It rides with the tool, so the same numbers are the same physical point at
+# every tilt, and in the t hold as well as in the press. Tried before the two
+# below, and pc1..pc3 command it live.
+coupled_use_pole_ee = 0
+coupled_pole_ee_x = 0.0
+coupled_pole_ee_y = 0.0
+# The grinding face is at tool_contact_face_center_ee, so +0.020 puts the pole
+# on the face and more puts it past it, into the workpiece.
+coupled_pole_ee_z = 0.0
+
 # 1 = define the pole as r_c = p_TCP - p_c in the surface frame [m].
 # This is the preferred experiment convention.
 coupled_use_direct_rc_surface = 0

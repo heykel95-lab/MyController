@@ -245,6 +245,16 @@ struct Parameters {
   // K/D source: block diagonal or a deliberately commanded pole.
   bool coupled_use_block_diagonal = false;
   bool coupled_pole_manual = false;
+  // Where the pole is, in one of three conventions. They are tried in this
+  // order, so a file that sets more than one gets the first: EE, then direct
+  // surface lever, then the legacy edge offset.
+  //
+  // EE: the pole is a point on the tool, measured from p_EE in EE axes, so
+  // r_c = -R_EE * coupled_pole_ee. It rides with the tool, which makes it the
+  // only convention whose numbers mean the same physical point at every tilt
+  // and in both the set-up hold and the press.
+  bool coupled_use_pole_ee = false;
+  Vec3 coupled_pole_ee = Vec3::Zero();
   // Direct lever convention used by the new experiments:
   // r_c = p_TCP - p_c, resolved in [tangent1,tangent2,normal].
   bool coupled_use_direct_rc_surface = false;
@@ -651,6 +661,7 @@ struct ContactReference {
   Vec3 edge = Vec3::Zero();             // controlled contact point now
   Vec3 tcp_at_contact = Vec3::Zero();   // TCP frozen at first contact
   Vec3 edge_at_contact = Vec3::Zero();  // contact point frozen at first contact
+  Mat3 R_EE = Mat3::Identity();         // tool orientation now, for the EE pole
 };
 
 // Every gain matrix a run uses, all derived from the parameters alone.
