@@ -822,6 +822,65 @@ for level in NULLSPACE_STRONG_SIGMA_LEVELS:
     )
 
 
+# The +150 mm, 20 N candidate predicted only about 1.96 Nm at the Case-F pose
+# and was not moved on hardware.  The scheduled follow-on uses 40 N and a
+# +200 mm lever.  Its predicted torque is about 4.34 Nm, with a 5 Nm ceiling,
+# which is also the independent validation hard bound.  Any clipping rejects
+# the pilot rather than silently reducing the requested force.
+def nullspace_stronger_common(mode):
+    return merged_overrides(nullspace_common(mode), [
+        ("disturbance_point_link_z", "0.200"),
+        ("disturbance_force", "40.0"),
+        ("disturbance_max_tau_norm", "5.0"),
+    ])
+
+
+add(
+    "PILOT_F_disturbance_40N_200mm",
+    "Stronger automatic null-space disturbance pilot: 40 N at link 3 with "
+    "a +200 mm local-z lever, mode 0.",
+    "Accept only if the larger moment produces visible redundant motion "
+    "without torque clipping, a reflex, or more than 1 mm Cartesian drift.",
+    nullspace_stronger_common(0),
+    repeats=1,
+)
+
+add(
+    "MAIN_F5_baseline_40N_200mm",
+    "Mode-0 reference for the stronger 40 N, +200 mm link-3 point-force "
+    "disturbance.",
+    "Quantify the increased redundant excursion and verify the force and "
+    "joint-torque waveform before comparing any null-space gain.",
+    nullspace_stronger_common(0),
+    repeats=3,
+)
+
+add(
+    "MAIN_F5_damping_2p0_40N_200mm",
+    "Projected damping only under the stronger disturbance, "
+    "nullspace_damping = 2.0 Nms/rad.",
+    "Compare with the stronger mode-0 reference; damping should reduce the "
+    "excursion without imposing a preferred posture.",
+    nullspace_stronger_common(1) + [("nullspace_damping", "2.0")],
+    repeats=3,
+)
+
+for level in NULLSPACE_STRONG_SIGMA_LEVELS:
+    tag = f"{level:.1f}".replace(".", "p")
+    add(
+        f"MAIN_F6_ksigma_{tag}_40N_200mm",
+        f"Sigma-only response under the stronger disturbance, "
+        f"k_sigma = {level} Nm.",
+        "The setting must produce observable motion along the selected "
+        "conditioning direction while the Cartesian position error remains "
+        "within 1 mm.",
+        nullspace_stronger_common(2) + [
+            ("nullspace_k_sigma", f"{level}"),
+        ],
+        repeats=3,
+    )
+
+
 # Compact absolute-orientation validation on the separately calibrated tilted
 # plane. These reproduce the three baseline angle cases from horizontal Case A.
 # A final tuned condition is added only after horizontal Cases A--D select it.

@@ -1,4 +1,4 @@
-128 setups, 377 total runs
+133 setups, 390 total runs
 
 G1_coupled_block_diagonal          x3  Coupled 6x6 path with block-diagonal gains must reproduce the decoupled wrench exactly.
 G1_decoupled_baseline              x5  Decoupled wrench, no coupling.
@@ -83,6 +83,11 @@ MAIN_F3_baseline_150mm             x3  Mode-0 reference for the stronger 20 N, +
 MAIN_F3_damping_2p0_150mm          x3  Projected damping only under the stronger disturbance, nullspace_damping = 2.0 Nms/rad.
 MAIN_F4_ksigma_1p5_150mm           x3  Sigma-only response under the stronger disturbance, k_sigma = 1.5 Nm.
 MAIN_F4_ksigma_2p0_150mm           x3  Sigma-only response under the stronger disturbance, k_sigma = 2.0 Nm.
+PILOT_F_disturbance_40N_200mm      x1  Stronger automatic null-space disturbance pilot: 40 N at link 3 with a +200 mm local-z lever, mode 0.
+MAIN_F5_baseline_40N_200mm         x3  Mode-0 reference for the stronger 40 N, +200 mm link-3 point-force disturbance.
+MAIN_F5_damping_2p0_40N_200mm      x3  Projected damping only under the stronger disturbance, nullspace_damping = 2.0 Nms/rad.
+MAIN_F6_ksigma_1p5_40N_200mm       x3  Sigma-only response under the stronger disturbance, k_sigma = 1.5 Nm.
+MAIN_F6_ksigma_2p0_40N_200mm       x3  Sigma-only response under the stronger disturbance, k_sigma = 2.0 Nm.
 VALID_T0_00deg                     x3  Tilted-plane validation at the baseline gains with independent tool offsets (t1=+0 deg, t2=+0 deg).
 VALID_T1_t1_10deg                  x3  Tilted-plane validation at the baseline gains with independent tool offsets (t1=+10 deg, t2=+0 deg).
 VALID_T2_t2_10deg                  x3  Tilted-plane validation at the baseline gains with independent tool offsets (t1=+0 deg, t2=+10 deg).

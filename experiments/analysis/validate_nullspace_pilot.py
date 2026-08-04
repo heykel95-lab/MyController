@@ -7,7 +7,7 @@ Usage:
 The gate prevents the unattended stronger Case-F series from starting merely
 because a pilot process exited cleanly.  It requires a visibly larger redundant
 excursion than the first campaign, a larger applied joint-torque moment, the
-complete unclipped 20 N waveform, and Cartesian hold error below 1 mm.
+complete unclipped 40 N waveform, and Cartesian hold error below 1 mm.
 """
 
 import csv
@@ -20,8 +20,8 @@ from disturbance_quality import report  # noqa: E402
 
 
 MIN_EXCURSION_RAD = 0.040
-MIN_TAU_PEAK_NM = 2.000
-MIN_FORCE_PEAK_N = 19.9
+MIN_TAU_PEAK_NM = 4.000
+MIN_FORCE_PEAK_N = 39.8
 MIN_TORQUE_SCALE = 0.999
 MAX_TASK_ERROR_MM = 1.000
 

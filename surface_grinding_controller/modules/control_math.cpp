@@ -894,8 +894,8 @@ bool validateAutomaticDisturbance(const Parameters& params,
     error = "disturbance_point_link must be finite";
   } else if (!std::isfinite(params.disturbance_force) ||
              params.disturbance_force <= 0.0 ||
-             params.disturbance_force > 20.0) {
-    error = "disturbance_force must be in (0, 20] N";
+             params.disturbance_force > 40.0) {
+    error = "disturbance_force must be in (0, 40] N";
   } else if (!std::isfinite(params.disturbance_direction_sign) ||
              std::abs(params.disturbance_direction_sign) < 1e-12) {
     error = "disturbance_direction_sign must be non-zero and finite";
