@@ -1,0 +1,30 @@
+# MAIN_H2_fix_diag_m45
+# Applied on top of surface_grinding_controller/params/.
+# Only keys listed here differ from the nominal set.
+approach_orient_error_threshold = 0.035
+approach_orient_spin_error_threshold = 0.009
+approach_orient_timeout = 5.0
+setup_timeout = 5.0
+setup_push_end = 0.060
+setup_push_speed = 0.050
+grind_sweep_enabled = 0
+nullspace_mode = 1
+setup_translation_surface_frame = 1
+setup_Kp_surface_normal = 800.0
+setup_KR_normal = 50.0
+command_tool_twist = 1
+tool_target_offset_normal_deg = 115.05
+q_init_case = horizontal_table_search
+tool_target_offset_tangent1_deg = 3.41
+tool_target_offset_tangent2_deg = 9.40
+setup_KR_tangent1 = 5.0
+setup_KR_tangent2 = 5.0
+setup_Kp_surface_tangent1 = 2000.0
+setup_Kp_surface_tangent2 = 2000.0
+use_coupled_stiffness = 1
+coupled_use_block_diagonal = 0
+coupled_pole_manual = 1
+coupled_use_direct_rc_surface = 1
+coupled_rc_tangent1 = 0.054356
+coupled_rc_tangent2 = 0.025405
+coupled_rc_normal = 0.000000
