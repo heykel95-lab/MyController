@@ -18,9 +18,10 @@ nullspace_mode = 3
 # Damping of the nullspace velocity [Nms/rad]. Modes 1 and 3.
 nullspace_damping = 2.0
 
-# Sigma push torque [Nm]. Modes 2 and 3. Mode 2 is undamped, so raise it
-# cautiously and compare trials with the sigma diagnostics below.
-nullspace_k_sigma = 1.0
+# Sigma push torque [Nm]. Modes 2 and 3. The automatic hold study found that
+# 1 Nm mostly loaded joint friction; 2 Nm produced observable redundant motion.
+# Mode 2 is undamped, so do not raise this further without a screening run.
+nullspace_k_sigma = 2.0
 
 # --------------------------------------------------------------------
 # Sigma sampling (modes 2 and 3)
@@ -50,17 +51,31 @@ sigma_debug_log_period = 0.05
 max_sigma_debug_rows = 20000
 
 # --------------------------------------------------------------------
-# Scripted operator disturbance -- hold experiments only
+# Hold disturbance -- hold experiments only
 # --------------------------------------------------------------------
-# The controller prints a cue and marks it in the sigma log, so the push
-# lands at the same time in every repetition instead of whenever the
-# operator happened to react. The cue records the instruction; when the
-# hand arrived and how hard it pushed is not observable from the robot.
+# Cues preserve the hand-push protocol. Auto mode commands a repeatable
+# point-force equivalent inside the same torque loop.
 # 1 = print the cues during hold.
 disturbance_cues_enabled = 0
 
-# Cue times measured from the start of the run [s]. The run then holds
-# undisturbed until experiment_duration, which is the recovery window.
+# Hold-clock edges: cosine ramp, full-force hold, then cosine release [s].
 disturbance_push_time = 5.0
 disturbance_hold_time = 7.0
 disturbance_release_time = 8.0
+
+# 0 = no commanded disturbance. 1 = link-point push in plain h mode.
+disturbance_auto_enabled = 0
+
+# Point fixed in this joint frame: link number and local offset [m].
+disturbance_link = 4
+disturbance_point_link_x = 0.0
+disturbance_point_link_y = 0.0
+disturbance_point_link_z = 0.0
+
+# Magnitude [N]. Direction is chosen once to excite the redundant axis.
+disturbance_force = 4.0
+disturbance_direction_sign = 1.0
+
+# Release duration [s] and hard commanded joint-torque norm [Nm].
+disturbance_release_ramp_time = 1.0
+disturbance_max_tau_norm = 2.0

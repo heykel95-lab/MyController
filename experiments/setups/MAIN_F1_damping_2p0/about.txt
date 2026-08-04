@@ -6,7 +6,7 @@ plane profile: horizontal
 tool profile: grinding_tool
 
 purpose:
-  Null-space mode 1 under a scripted hold disturbance: projected damping only, nullspace_damping = 2.0.
+  Null-space mode 1 under the 20 N link-3 point-force disturbance: projected damping only, nullspace_damping = 2.0.
 
 pass criterion:
   Compare recovery, Cartesian task drift and joint motion against the mode-0 reference. Damping alone has no preferred posture, so the arm settles wherever the redundant axis stops.

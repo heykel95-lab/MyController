@@ -32,6 +32,12 @@ int main(int argc, char** argv) {
       fprintf(stderr, "ERROR: all stiffness entries must be finite and positive.\n");
       return 2;
     }
+    std::string disturbance_error;
+    if (!validateAutomaticDisturbance(params, disturbance_error)) {
+      fprintf(stderr, "ERROR: automatic disturbance: %s.\n",
+              disturbance_error.c_str());
+      return 2;
+    }
 
     printf("experiment preflight (no robot connection)\n");
     printf("q_init_case = %s\n", params.q_init_case.c_str());
@@ -114,6 +120,22 @@ int main(int argc, char** argv) {
     } else {
       printf("coupled set-up = %s\n",
              params.use_coupled_stiffness ? "block diagonal" : "off");
+    }
+
+    if (params.disturbance_auto_enabled) {
+      printf("automatic disturbance = link %d, point [%+.1f, %+.1f, %+.1f] mm\n",
+             params.disturbance_link,
+             1000.0 * params.disturbance_point_link(0),
+             1000.0 * params.disturbance_point_link(1),
+             1000.0 * params.disturbance_point_link(2));
+      printf("disturbance force = %.2f N, torque-norm limit = %.2f Nm\n",
+             params.disturbance_force,
+             params.disturbance_max_tau_norm);
+      printf("disturbance timing = %.1f -> %.1f -> %.1f + %.1f s\n",
+             params.disturbance_push_time,
+             params.disturbance_hold_time,
+             params.disturbance_release_time,
+             params.disturbance_release_ramp_time);
     }
 
     printf("preflight: PASS\n");

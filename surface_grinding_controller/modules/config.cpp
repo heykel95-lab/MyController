@@ -283,6 +283,23 @@ Parameters readParameters(const std::vector<std::string>& filenames) {
       getDouble("disturbance_hold_time", p.disturbance_hold_time);
   p.disturbance_release_time =
       getDouble("disturbance_release_time", p.disturbance_release_time);
+  p.disturbance_auto_enabled =
+      getBool("disturbance_auto_enabled", p.disturbance_auto_enabled);
+  p.disturbance_link = static_cast<int>(
+      getDouble("disturbance_link", p.disturbance_link));
+  p.disturbance_point_link =
+      getVec3Xyz("disturbance_point_link", p.disturbance_point_link);
+  p.disturbance_force =
+      getDouble("disturbance_force", p.disturbance_force);
+  p.disturbance_direction_sign =
+      getDouble("disturbance_direction_sign",
+                p.disturbance_direction_sign);
+  p.disturbance_release_ramp_time =
+      getDouble("disturbance_release_ramp_time",
+                p.disturbance_release_ramp_time);
+  p.disturbance_max_tau_norm =
+      getDouble("disturbance_max_tau_norm",
+                p.disturbance_max_tau_norm);
   p.approach_orient_min_time =
       getDouble("approach_orient_min_time", p.approach_orient_min_time);
   p.approach_orient_error_threshold =

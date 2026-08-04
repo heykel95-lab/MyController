@@ -18,6 +18,7 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -165,13 +166,18 @@ struct Parameters {
   bool constrain_rotation_about_alignment_tangent1 = true;
   bool constrain_rotation_about_alignment_tangent2 = true;
 
-  // Scripted operator disturbance for the hold comparison. The controller
-  // prints each cue and marks it in the sigma log, so the push lands at the
-  // same time in every repetition instead of whenever the operator reacted.
+  // Hold disturbance: hand-push cues or a repeatable point force on one link.
   bool disturbance_cues_enabled = false;
   double disturbance_push_time = 5.0;     // cue to displace the arm [s]
   double disturbance_hold_time = 7.0;     // cue to stop moving, still held [s]
   double disturbance_release_time = 8.0;  // cue to let go [s]
+  bool disturbance_auto_enabled = false;
+  int disturbance_link = 4;
+  Vec3 disturbance_point_link = Vec3::Zero();
+  double disturbance_force = 0.0;          // point-force magnitude [N]
+  double disturbance_direction_sign = 1.0;
+  double disturbance_release_ramp_time = 1.0;  // [s]
+  double disturbance_max_tau_norm = 0.0;       // hard joint-torque norm [Nm]
 
   // Phase 1: approach (orient, then descend).
   double approach_orient_min_time = 0.5;
@@ -269,7 +275,7 @@ struct Parameters {
   bool use_nullspace_optimization = true;
   NullspaceMode nullspace_mode = NullspaceMode::kDampingAndSigma;
   double nullspace_damping = 1.0;
-  double nullspace_k_sigma = 0.05;
+  double nullspace_k_sigma = 2.0;
   double nullspace_alpha = 0.03;
   double nullspace_sigma_deadband = 1e-6;
   double nullspace_svd_relative_tolerance = 1e-4;
@@ -353,7 +359,19 @@ enum class SigmaDebugEvent {
   // the instruction and not the load itself.
   kDisturbCuePush = 6,
   kDisturbCueHold = 7,
-  kDisturbCueRelease = 8
+  kDisturbCueRelease = 8,
+  kDisturbAutoPush = 9,
+  kDisturbAutoHold = 10,
+  kDisturbAutoRelease = 11
+};
+
+// Command equivalent to a force at one point on an intermediate link.
+struct AutomaticDisturbance {
+  double scale = 0.0;
+  double torque_scale = 1.0;
+  Vec3 point_base = Vec3::Zero();
+  Vec3 force_base = Vec3::Zero();
+  Vec7 tau = Vec7::Zero();
 };
 
 // Compact, preallocated diagnostic row for sigma-enabled hold experiments.
@@ -386,6 +404,7 @@ struct SigmaDebugRow {
   // params_effective would then no longer describe the run.
   double nullspace_damping = 0.0;
   double tau_cmd_norm = 0.0;
+  AutomaticDisturbance disturbance;
 
   // Peaks accumulated between compact samples so brief pushes are not lost.
   double peak_nullspace_speed = 0.0;
@@ -432,6 +451,8 @@ struct LogData {
   Vec3 contact_force_bias;
   Vec3 contact_moment_bias;
   double push;
+
+  AutomaticDisturbance disturbance;
 
   SigmaDiagnostics sigma;
   double tau_nullspace_norm;
@@ -759,6 +780,34 @@ Vec7 computeNullspaceTorque(
     const Vec7& dq,
     SigmaDiagnostics& sigma);
 
+// Checks the schedule and hard bounds before an automatic hold can run.
+bool validateAutomaticDisturbance(const Parameters& params,
+                                  std::string& error);
+
+// Smooth ramp: zero -> full -> held -> zero, on the hold-phase clock.
+double automaticDisturbanceScale(const Parameters& params,
+                                 double hold_time);
+
+// Linear velocity Jacobian of an offset point fixed in a link frame.
+Eigen::Matrix<double, 3, 7> pointJacobian(
+    const Mat6x7& link_jacobian,
+    const Mat3& R_link,
+    const Vec3& point_link);
+
+// Base-frame force direction giving the largest redundant-axis work at start.
+Vec3 automaticDisturbanceDirection(const Parameters& params,
+                                   const Model& model,
+                                   const RobotState& state,
+                                   const Mat6x7& ee_jacobian);
+
+// Joint torque equivalent of the configured point force at the current pose.
+AutomaticDisturbance computeAutomaticDisturbance(
+    const Parameters& params,
+    const Model& model,
+    const RobotState& state,
+    const Vec3& force_direction_base,
+    double hold_time);
+
 // True when the hand's measured stroke covers the widths this program
 // commands. A homing that ran with the tool clamped measures only the travel
 // left over, and every later move() and grasp() is clamped to that stroke.
@@ -886,6 +935,8 @@ void printSetUpImpedanceLaw(const Parameters& params,
 // The active nullspace law and what can be retyped while holding. Printed
 // when a hold starts and whenever the mode is switched live.
 void printNullspaceLaw(const Parameters& params);
+void printAutomaticDisturbance(const Parameters& params,
+                               const Vec3& force_direction_base);
 
 void printContactEdgeDebug(const Vec3& offset_ee,
                            const Vec3& p_EE_at_contact,

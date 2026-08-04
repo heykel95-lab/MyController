@@ -864,3 +864,163 @@ Vec7 computeNullspaceTorque(
 
   return sigma_only ? tau_sigma : tau_damping + tau_sigma;
 }
+
+namespace {
+
+Frame disturbanceFrame(int link) {
+  switch (link) {
+    case 1: return Frame::kJoint1;
+    case 2: return Frame::kJoint2;
+    case 3: return Frame::kJoint3;
+    case 4: return Frame::kJoint4;
+    case 5: return Frame::kJoint5;
+    case 6: return Frame::kJoint6;
+    case 7: return Frame::kJoint7;
+    default: return Frame::kJoint4;
+  }
+}
+
+}  // namespace
+
+bool validateAutomaticDisturbance(const Parameters& params,
+                                  std::string& error) {
+  error.clear();
+  if (!params.disturbance_auto_enabled) {
+    return true;
+  }
+  if (params.disturbance_link < 1 || params.disturbance_link > 7) {
+    error = "disturbance_link must be an integer from 1 to 7";
+  } else if (!params.disturbance_point_link.allFinite()) {
+    error = "disturbance_point_link must be finite";
+  } else if (!std::isfinite(params.disturbance_force) ||
+             params.disturbance_force <= 0.0 ||
+             params.disturbance_force > 20.0) {
+    error = "disturbance_force must be in (0, 20] N";
+  } else if (!std::isfinite(params.disturbance_direction_sign) ||
+             std::abs(params.disturbance_direction_sign) < 1e-12) {
+    error = "disturbance_direction_sign must be non-zero and finite";
+  } else if (!std::isfinite(params.disturbance_push_time) ||
+             !std::isfinite(params.disturbance_hold_time) ||
+             !std::isfinite(params.disturbance_release_time) ||
+             params.disturbance_push_time < 0.0 ||
+             params.disturbance_hold_time <= params.disturbance_push_time ||
+             params.disturbance_release_time < params.disturbance_hold_time) {
+    error = "disturbance times must satisfy 0 <= push < hold <= release";
+  } else if (!std::isfinite(params.disturbance_release_ramp_time) ||
+             params.disturbance_release_ramp_time <= 0.0) {
+    error = "disturbance_release_ramp_time must be positive";
+  } else if (!std::isfinite(params.disturbance_max_tau_norm) ||
+             params.disturbance_max_tau_norm <= 0.0 ||
+             params.disturbance_max_tau_norm > 5.0) {
+    error = "disturbance_max_tau_norm must be in (0, 5] Nm";
+  } else if (!std::isfinite(params.experiment_duration) ||
+             params.experiment_duration <=
+                 params.disturbance_release_time +
+                     params.disturbance_release_ramp_time) {
+    error = "experiment_duration must extend past the release ramp";
+  }
+  return error.empty();
+}
+
+double automaticDisturbanceScale(const Parameters& params,
+                                 double hold_time) {
+  if (!params.disturbance_auto_enabled ||
+      hold_time < params.disturbance_push_time) {
+    return 0.0;
+  }
+  if (hold_time < params.disturbance_hold_time) {
+    const double u =
+        (hold_time - params.disturbance_push_time) /
+        (params.disturbance_hold_time - params.disturbance_push_time);
+    return 0.5 - 0.5 * std::cos(M_PI * u);
+  }
+  if (hold_time < params.disturbance_release_time) {
+    return 1.0;
+  }
+  const double release_end =
+      params.disturbance_release_time +
+      params.disturbance_release_ramp_time;
+  if (hold_time >= release_end) {
+    return 0.0;
+  }
+  const double u =
+      (hold_time - params.disturbance_release_time) /
+      params.disturbance_release_ramp_time;
+  return 0.5 + 0.5 * std::cos(M_PI * u);
+}
+
+Eigen::Matrix<double, 3, 7> pointJacobian(
+    const Mat6x7& link_jacobian,
+    const Mat3& R_link,
+    const Vec3& point_link) {
+  const Vec3 lever_base = R_link * point_link;
+  return link_jacobian.topRows<3>() -
+         skewMatrix(lever_base) * link_jacobian.bottomRows<3>();
+}
+
+Vec3 automaticDisturbanceDirection(const Parameters& params,
+                                   const Model& model,
+                                   const RobotState& state,
+                                   const Mat6x7& ee_jacobian) {
+  Eigen::JacobiSVD<Mat6x7> svd(
+      ee_jacobian, Eigen::ComputeFullU | Eigen::ComputeFullV);
+  Vec7 null_direction = svd.matrixV().col(6);
+  Eigen::Index dominant = 0;
+  null_direction.cwiseAbs().maxCoeff(&dominant);
+  if (null_direction(dominant) < 0.0) {
+    null_direction = -null_direction;
+  }
+
+  const Frame frame = disturbanceFrame(params.disturbance_link);
+  const std::array<double, 42> jacobian_array =
+      model.zeroJacobian(frame, state);
+  const std::array<double, 16> pose_array = model.pose(frame, state);
+  Map<const Mat6x7> J_link(jacobian_array.data());
+  Map<const Mat4x4> T_link(pose_array.data());
+  const Eigen::Matrix<double, 3, 7> J_point =
+      pointJacobian(J_link, T_link.block<3, 3>(0, 0),
+                    params.disturbance_point_link);
+  const Vec3 point_velocity = J_point * null_direction;
+  if (!point_velocity.allFinite() || point_velocity.norm() <= 1e-9) {
+    return Vec3::Zero();
+  }
+  const double sign = params.disturbance_direction_sign > 0.0 ? 1.0 : -1.0;
+  return sign * point_velocity.normalized();
+}
+
+AutomaticDisturbance computeAutomaticDisturbance(
+    const Parameters& params,
+    const Model& model,
+    const RobotState& state,
+    const Vec3& force_direction_base,
+    double hold_time) {
+  AutomaticDisturbance command;
+  command.scale = automaticDisturbanceScale(params, hold_time);
+  if (command.scale <= 0.0) {
+    return command;
+  }
+
+  const Frame frame = disturbanceFrame(params.disturbance_link);
+  const std::array<double, 42> jacobian_array =
+      model.zeroJacobian(frame, state);
+  const std::array<double, 16> pose_array = model.pose(frame, state);
+  Map<const Mat6x7> J_link(jacobian_array.data());
+  Map<const Mat4x4> T_link(pose_array.data());
+  const Mat3 R_link = T_link.block<3, 3>(0, 0);
+  const Eigen::Matrix<double, 3, 7> J_point =
+      pointJacobian(J_link, R_link, params.disturbance_point_link);
+
+  command.point_base =
+      T_link.block<3, 1>(0, 3) + R_link * params.disturbance_point_link;
+  command.force_base = command.scale * params.disturbance_force *
+                       force_direction_base.normalized();
+  command.tau.noalias() = J_point.transpose() * command.force_base;
+
+  const double tau_norm = command.tau.norm();
+  if (tau_norm > params.disturbance_max_tau_norm) {
+    command.torque_scale = params.disturbance_max_tau_norm / tau_norm;
+    command.force_base *= command.torque_scale;
+    command.tau *= command.torque_scale;
+  }
+  return command;
+}

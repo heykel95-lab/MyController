@@ -109,9 +109,31 @@ RunResult runControlLoop(Parameters& params,
                                  : ControlPhase::kApproachDescend;
   const ControlPhase initial_phase =
       params.use_phase_sequence ? sequence_first_phase : ControlPhase::kHold;
+  Vec3 disturbance_force_direction_base = Vec3::Zero();
+  if (params.disturbance_auto_enabled) {
+    std::string error;
+    if (!validateAutomaticDisturbance(params, error)) {
+      throw std::runtime_error("automatic disturbance: " + error);
+    }
+    if (initial_phase != ControlPhase::kHold ||
+        params.hold_with_setup_gains) {
+      throw std::runtime_error(
+          "automatic disturbance requires the plain h hold mode");
+    }
+    const std::array<double, 42> initial_jacobian_array =
+        model.zeroJacobian(Frame::kEndEffector, initial_state);
+    Map<const Mat6x7> initial_jacobian(initial_jacobian_array.data());
+    disturbance_force_direction_base = automaticDisturbanceDirection(
+        params, model, initial_state, initial_jacobian);
+    if (disturbance_force_direction_base.norm() <= 1e-9) {
+      throw std::runtime_error(
+          "automatic disturbance point cannot excite the redundant axis");
+    }
+  }
   const bool sigma_hold_diagnostics_enabled =
       initial_phase == ControlPhase::kHold &&
-      (params.nullspace_mode == NullspaceMode::kSigmaOnly ||
+      (params.disturbance_auto_enabled || params.disturbance_cues_enabled ||
+       params.nullspace_mode == NullspaceMode::kSigmaOnly ||
        params.nullspace_mode == NullspaceMode::kDampingAndSigma);
   ControlPhase phase = initial_phase;
   // Where p returns to after hand guiding. It follows the s and t switches
@@ -306,6 +328,7 @@ RunResult runControlLoop(Parameters& params,
   bool gate_block_printed = false;
   if (phase == ControlPhase::kHold && !params.hold_with_setup_gains) {
     printNullspaceLaw(params);
+    printAutomaticDisturbance(params, disturbance_force_direction_base);
   }
 
   // ================================================================
@@ -581,13 +604,13 @@ RunResult runControlLoop(Parameters& params,
     }
 
     // ---------------------------------------------------------------
-    // Scripted operator disturbance.
+    // Scripted hold disturbance.
     // ---------------------------------------------------------------
     // Printed on a clock the run owns, so the push lands at the same time in
-    // every repetition. The cue is an instruction: when the hand actually
-    // arrived, and how hard, is not observable from here, which is why the
-    // logged event marks the cue and not the load.
-    if (params.disturbance_cues_enabled && phase == ControlPhase::kHold) {
+    // every repetition. Automatic runs also use these markers as phase edges.
+    if ((params.disturbance_cues_enabled ||
+         params.disturbance_auto_enabled) &&
+        phase == ControlPhase::kHold) {
       const auto cue = [&](const char* text, SigmaDebugEvent event) {
         printf("\n>>> %s  (t = %.1f s)\n", text, time);
         fflush(stdout);
@@ -606,21 +629,37 @@ RunResult runControlLoop(Parameters& params,
           appendSigmaDebugRow(row);
         }
       };
-      if (!disturb_push_cued && time >= params.disturbance_push_time) {
+      const double hold_time = time - phase_start_time;
+      if (!disturb_push_cued && hold_time >= params.disturbance_push_time) {
         disturb_push_cued = true;
-        cue("PUSH THE ARM NOW", SigmaDebugEvent::kDisturbCuePush);
+        cue(params.disturbance_auto_enabled
+                ? "AUTOMATIC PUSH START"
+                : "PUSH THE ARM NOW",
+            params.disturbance_auto_enabled
+                ? SigmaDebugEvent::kDisturbAutoPush
+                : SigmaDebugEvent::kDisturbCuePush);
       }
       // Separating "stop moving" from "let go" marks the transition. Without
       // it the driven stretch and the statically held one run together, and
       // the moment the hand stopped driving is only inferable.
-      if (!disturb_hold_cued && time >= params.disturbance_hold_time) {
+      if (!disturb_hold_cued && hold_time >= params.disturbance_hold_time) {
         disturb_hold_cued = true;
-        cue("STOP MOVING - hold it still", SigmaDebugEvent::kDisturbCueHold);
+        cue(params.disturbance_auto_enabled
+                ? "AUTOMATIC PUSH AT FULL FORCE"
+                : "STOP MOVING - hold it still",
+            params.disturbance_auto_enabled
+                ? SigmaDebugEvent::kDisturbAutoHold
+                : SigmaDebugEvent::kDisturbCueHold);
       }
-      if (!disturb_release_cued && time >= params.disturbance_release_time) {
+      if (!disturb_release_cued &&
+          hold_time >= params.disturbance_release_time) {
         disturb_release_cued = true;
-        cue("RELEASE - do not touch until the run ends",
-            SigmaDebugEvent::kDisturbCueRelease);
+        cue(params.disturbance_auto_enabled
+                ? "AUTOMATIC RELEASE START"
+                : "RELEASE - do not touch until the run ends",
+            params.disturbance_auto_enabled
+                ? SigmaDebugEvent::kDisturbAutoRelease
+                : SigmaDebugEvent::kDisturbCueRelease);
       }
     }
 
@@ -1286,6 +1325,13 @@ RunResult runControlLoop(Parameters& params,
         computeNullspaceTorque(
             params, model, state, J, dq, sigma_diagnostics);
 
+    AutomaticDisturbance disturbance;
+    if (phase == ControlPhase::kHold && params.disturbance_auto_enabled) {
+      disturbance = computeAutomaticDisturbance(
+          params, model, state, disturbance_force_direction_base,
+          time - phase_start_time);
+    }
+
     if (phase == ControlPhase::kHold &&
         sigma_hold_diagnostics_enabled &&
         params.print_sigma_debug &&
@@ -1313,7 +1359,8 @@ RunResult runControlLoop(Parameters& params,
     Array7 coriolis_array = model.coriolis(state);
     Map<const Vec7> coriolis(coriolis_array.data());
     const Vec7 tau_task = J.transpose() * wrench;
-    const Vec7 tau_cmd = tau_task + tau_nullspace + coriolis;
+    const Vec7 tau_cmd =
+        tau_task + tau_nullspace + disturbance.tau + coriolis;
 
     Vec7 sigma_debug_external_joint_torque_delta = Vec7::Zero();
     if (phase == ControlPhase::kHold &&
@@ -1390,6 +1437,7 @@ RunResult runControlLoop(Parameters& params,
         debug_row.tau_nullspace_norm = tau_nullspace.norm();
         debug_row.nullspace_damping = params.nullspace_damping;
         debug_row.tau_cmd_norm = tau_cmd.norm();
+        debug_row.disturbance = disturbance;
         debug_row.peak_nullspace_speed =
             peak_sigma_nullspace_speed;
         debug_row.peak_abs_speed_toward_better =
@@ -1448,6 +1496,7 @@ RunResult runControlLoop(Parameters& params,
       row.contact_force_bias = contact_force_bias;
       row.contact_moment_bias = contact_moment_bias;
       row.push = push_log;
+      row.disturbance = disturbance;
       row.sigma = sigma_diagnostics;
       row.tau_nullspace_norm = tau_nullspace.norm();
       row.nullspace_damping = params.nullspace_damping;
@@ -1500,6 +1549,7 @@ RunResult runControlLoop(Parameters& params,
         stop_row.tau_nullspace_norm = tau_nullspace.norm();
         stop_row.nullspace_damping = params.nullspace_damping;
         stop_row.tau_cmd_norm = tau_cmd.norm();
+        stop_row.disturbance = disturbance;
         stop_row.peak_nullspace_speed =
             std::max(peak_sigma_nullspace_speed,
                      sigma_diagnostics.nullspace_speed);

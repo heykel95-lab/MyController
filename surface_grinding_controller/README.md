@@ -109,6 +109,7 @@ Sequence (s)
 
 Hold (h)
   Locks the pose it starts from and asks for the nullspace mode 0-3.
+  Nullspace can also arm the bounded link-point push used by Case F.
   From hold, g+Enter hand-guides and p+Enter re-captures the pose.
   While holding, "d 3.5", "k 1.2" and "a 5" retune the nullspace damping,
   the sigma push and the probe alpha (typed in degrees) without stopping the
@@ -292,6 +293,11 @@ only the sampling step and does not scale the torque.
 Mode 1 uses `nullspace_damping`, mode 2 uses `nullspace_k_sigma`, mode 3 uses
 both — so the isolated terms and the combined response can be tuned
 independently and compared from the same hold pose.
+
+The configured sigma-torque default is 2 Nm. In the automatic hold study,
+1 Nm was largely below the joint-friction threshold, whereas 2 Nm produced
+observable redundant motion. Mode 2 has no projected damping; settings above
+2 Nm therefore require a separate task-drift and oscillation screening run.
 
 ### Sigma debug output
 

@@ -6,7 +6,7 @@ plane profile: horizontal
 tool profile: grinding_tool
 
 purpose:
-  Null-space mode 0 under a scripted hold disturbance: no null-space torque at all.
+  Null-space mode 0 under the 20 N link-3 point-force disturbance: no null-space control torque.
 
 pass criterion:
-  The reference the two swept modes are read against. Recovery here is whatever the arm does unaided along the redundant axis.
+  The reference the two swept modes are read against. Recovery here is whatever the arm does unaided along the redundant axis. The logged force and applied joint torque must reach the configured waveform.

@@ -1,0 +1,8 @@
+run_id:   PILOT_F_disturbance_10N
+repeats:  1
+
+purpose:
+  Automatic null-space disturbance pilot: 10 N at link 3 with a +100 mm local-z lever, mode 0.
+
+pass criterion:
+  The disturbance must produce measurable redundant motion without torque clipping, a reflex, or more than 1 mm Cartesian drift.

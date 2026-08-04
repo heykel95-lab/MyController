@@ -1,34 +1,28 @@
 #!/usr/bin/env python3
-"""Check what the operator actually did against what the run asked for.
+"""Check the hold disturbance actually applied in each Case F run.
 
   python3 experiments/analysis/disturbance_quality.py [run_dir ...]
 
 With no arguments it walks every archived MAIN_F run.
 
-The cue is an instruction, not a measurement. The hand can arrive before the
-push cue and can stay on well past the release cue, and neither is visible in
-the cue timestamps. This reads the null-space self-motion out of the general
-log and reports when the arm was actually being moved, so a trial can be
-segmented on what happened rather than on what was asked.
+New runs log the automatic link-point force and its equivalent joint torque,
+so their waveform is checked directly. Archived hand-push runs fall back to
+the null-space self-motion and cue timing used by the original protocol.
 
-Why the null-space speed and not the external wrench: a push on the elbow is a
-joint torque along the redundant direction, and that direction is orthogonal to
-the range of J-transpose. No end-effector wrench produces it, so the
-model-estimated external wrench is blind to it by construction. The self-motion
-it causes is not.
+The automatic input is not an end-effector wrench. It is the joint-torque
+equivalent of a force at a configured link point, which can excite the
+redundant direction while the end-effector hold remains active.
 
 Reported per run:
 
-  push start    first sustained motion along the redundant axis
-  motion end    last sustained motion; the hand left at or before this
-  overshoot     motion end minus the release cue. Positive means the push
-                continued after the cue, and the samples between the two are
-                not free recovery.
+  push start    first applied automatic force, or first sustained hand motion
+  motion end    end of the automatic release ramp, or last hand motion
   excursion     how far the arm travelled along the redundant axis, as the
                 integral of its projected speed. This is the disturbance size,
                 and it is the quantity that varied when the elbow was harder to
                 move on some trials.
   recovery from the time from which an analysis may treat the arm as released.
+  force / tau   peak applied values for an automatic disturbance.
 """
 
 import csv
@@ -58,19 +52,39 @@ def read_log(path):
         for name in need:
             if name not in idx:
                 return None
+        force_cols = [idx.get(f"disturbance_force_base_{axis}")
+                      for axis in "xyz"]
+        tau_cols = [idx.get(f"tau_disturbance_{joint}")
+                    for joint in range(1, 8)]
+        scale_col = idx.get("disturbance_scale")
+        torque_scale_col = idx.get("disturbance_torque_scale")
+        automatic = (scale_col is not None and
+                     all(col is not None for col in force_cols + tau_cols))
         rows = []
         for row in reader:
             if len(row) <= idx["nullspace_speed"]:
                 continue
             try:
-                rows.append((float(row[idx["time"]]),
-                             abs(float(row[idx["nullspace_speed"]]))))
+                values = [float(row[idx["time"]]),
+                          abs(float(row[idx["nullspace_speed"]]))]
+                if automatic:
+                    force = np.array([float(row[col]) for col in force_cols])
+                    tau = np.array([float(row[col]) for col in tau_cols])
+                    values += [float(row[scale_col]),
+                               float(np.linalg.norm(force)),
+                               float(np.linalg.norm(tau)),
+                               float(row[torque_scale_col])]
+                else:
+                    values += [0.0, 0.0, 0.0, 1.0]
+                rows.append(values)
             except ValueError:
                 continue
     if not rows:
         return None
     a = np.array(rows)
-    return a[:, 0], a[:, 1]
+    return dict(time=a[:, 0], speed=a[:, 1], scale=a[:, 2],
+                force=a[:, 3], tau=a[:, 4], torque_scale=a[:, 5],
+                automatic=bool(a[:, 2].max() > 1e-6))
 
 
 def cue_times(run_dir):
@@ -120,10 +134,31 @@ def report(run_dir):
     data = read_log(log)
     if data is None:
         return None
-    t, speed = data
+    t, speed = data["time"], data["speed"]
     push_cue, hold_cue, release_cue = cue_times(run_dir)
     if push_cue is None or release_cue is None:
         return None
+
+    if data["automatic"]:
+        active = data["scale"] > 1e-3
+        full = data["scale"] > 0.99
+        start = float(t[np.flatnonzero(active)[0]])
+        end = float(t[np.flatnonzero(active)[-1]])
+        driven = (t >= start) & (t <= end)
+        excursion = (float(np.trapz(speed[driven], t[driven]))
+                     if driven.any() else 0.0)
+        return dict(
+            run_dir=run_dir, no_motion=False, automatic=True,
+            push_cue=push_cue, release_cue=release_cue,
+            start=start, end=end, early=push_cue - start,
+            overshoot=end - release_cue,
+            excursion=excursion, recovery_from=end,
+            run_end=float(t[-1]),
+            force_peak=float(data["force"].max()),
+            tau_peak=float(data["tau"].max()),
+            torque_scale_min=float(data["torque_scale"][active].min()),
+            reached_full=bool(full.any()),
+        )
 
     windows = sustained_windows(t, speed)
     # Everything from the push cue onward, ignoring settling before it.
@@ -142,7 +177,7 @@ def report(run_dir):
     excursion = float(np.trapz(speed[driven], t[driven])) if driven.any() else 0.0
 
     return dict(
-        run_dir=run_dir, no_motion=False,
+        run_dir=run_dir, no_motion=False, automatic=False,
         push_cue=push_cue, release_cue=release_cue,
         start=start, end=end,
         early=push_cue - start,
@@ -169,22 +204,28 @@ def main():
         print("no MAIN_F runs with a general log found")
         return 0
 
-    print(f"{'run':<34}{'start':>7}{'end':>7}{'early':>7}"
-          f"{'over':>7}{'excur':>8}{'rec from':>9}  notes")
+    print(f"{'run':<34}{'start':>7}{'end':>7}{'excur':>8}"
+          f"{'force':>8}{'tau':>8}{'rec from':>9}  notes")
     for r in rows:
         label = "/".join(r["run_dir"].split(os.sep)[-2:])
         if r["no_motion"]:
-            print(f"{label:<34}{'-':>7}{'-':>7}{'-':>7}{'-':>7}{'-':>8}"
-                  f"{'-':>9}  NO MOTION - push missed?")
+            print(f"{label:<34}{'-':>7}{'-':>7}{'-':>8}{'-':>8}{'-':>8}"
+                  f"{'-':>9}  NO MOTION - hand push missed?")
             continue
         notes = []
-        if r["early"] > 0.2:
+        if not r["automatic"] and r["early"] > 0.2:
             notes.append(f"started {r['early']:.1f}s early")
-        if r["overshoot"] > 0.3:
+        if not r["automatic"] and r["overshoot"] > 0.3:
             notes.append(f"still moving {r['overshoot']:.1f}s past the hold cue")
+        if r["automatic"] and not r["reached_full"]:
+            notes.append("waveform never reached full scale")
+        if r["automatic"] and r["torque_scale_min"] < 0.999:
+            notes.append(f"torque limit active ({r['torque_scale_min']:.2f})")
+        force = r.get("force_peak", float("nan"))
+        tau = r.get("tau_peak", float("nan"))
         print(f"{label:<34}{r['start']:>7.1f}{r['end']:>7.1f}"
-              f"{r['early']:>+7.1f}{r['overshoot']:>+7.1f}"
-              f"{r['excursion']:>8.3f}{r['recovery_from']:>9.1f}"
+              f"{r['excursion']:>8.3f}{force:>8.2f}{tau:>8.2f}"
+              f"{r['recovery_from']:>9.1f}"
               f"  {'; '.join(notes)}")
 
     good = [r for r in rows if not r["no_motion"]]

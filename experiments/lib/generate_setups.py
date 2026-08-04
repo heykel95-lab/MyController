@@ -74,6 +74,13 @@ def add(run_id, purpose, criterion, overrides, repeats=3):
     SPEC.append((run_id, purpose, criterion, overrides, repeats))
 
 
+def merged_overrides(base, replacements):
+    """Return one ordered value per key, with replacements taking priority."""
+    merged = dict(base)
+    merged.update(replacements)
+    return list(merged.items())
+
+
 # ---- Gates -----------------------------------------------------------------
 add(
     "G1_coupled_block_diagonal",
@@ -635,8 +642,8 @@ for name, axis_offset_deg, edge_mm in (("y_long", 0.0, 120), ("x_short", -90.0, 
 
 
 # Case F: the null-space terms, isolated. This is a hold experiment, not a
-# contact sequence: the arm holds one pose while the operator displaces it on a
-# cue the run prints, and the recovery is what is compared.
+# contact sequence: the arm holds one pose while a smooth point-force command
+# displaces a point fixed to link 3, and the recovery is what is compared.
 #
 # The modes separate cleanly in the controller. Mode 1 returns projected
 # damping alone; mode 2 zeroes that damping and applies only the
@@ -657,7 +664,16 @@ def nullspace_common(mode):
         if pair[0] != "nullspace_mode"
     ] + [
         ("nullspace_mode", f"{mode}"),
-        ("disturbance_cues_enabled", "1"),
+        ("disturbance_cues_enabled", "0"),
+        ("disturbance_auto_enabled", "1"),
+        ("disturbance_link", "3"),
+        ("disturbance_point_link_x", "0.0"),
+        ("disturbance_point_link_y", "0.0"),
+        ("disturbance_point_link_z", "0.100"),
+        ("disturbance_force", "20.0"),
+        ("disturbance_direction_sign", "1.0"),
+        ("disturbance_max_tau_norm", "2.0"),
+        ("disturbance_release_ramp_time", "1.0"),
         ("disturbance_push_time", "5.0"),
         ("disturbance_hold_time", "7.0"),
         ("disturbance_release_time", "8.0"),
@@ -675,11 +691,41 @@ def nullspace_common(mode):
 
 
 add(
+    "PILOT_F_disturbance_10N",
+    "Automatic null-space disturbance pilot: 10 N at link 3 with a +100 mm "
+    "local-z lever, mode 0.",
+    "The disturbance must produce measurable redundant motion without torque "
+    "clipping, a reflex, or more than 1 mm Cartesian drift.",
+    nullspace_common(0) + [
+        ("disturbance_link", "3"),
+        ("disturbance_point_link_z", "0.100"),
+        ("disturbance_force", "10.0"),
+    ],
+    repeats=1,
+)
+
+add(
+    "PILOT_F_disturbance_20N",
+    "Automatic null-space disturbance pilot: 20 N at link 3 with a +100 mm "
+    "local-z lever, mode 0.",
+    "The disturbance must break joint friction without torque clipping, a "
+    "reflex, or more than 1 mm Cartesian drift.",
+    nullspace_common(0) + [
+        ("disturbance_link", "3"),
+        ("disturbance_point_link_z", "0.100"),
+        ("disturbance_force", "20.0"),
+    ],
+    repeats=1,
+)
+
+
+add(
     "MAIN_F0_baseline",
-    "Null-space mode 0 under a scripted hold disturbance: no null-space "
-    "torque at all.",
+    "Null-space mode 0 under the 20 N link-3 point-force disturbance: no "
+    "null-space control torque.",
     "The reference the two swept modes are read against. Recovery here is "
-    "whatever the arm does unaided along the redundant axis.",
+    "whatever the arm does unaided along the redundant axis. The logged "
+    "force and applied joint torque must reach the configured waveform.",
     nullspace_common(0),
     repeats=3,
 )
@@ -688,7 +734,8 @@ for level in NULLSPACE_LEVELS:
     tag = f"{level:.1f}".replace(".", "p")
     add(
         f"MAIN_F1_damping_{tag}",
-        f"Null-space mode 1 under a scripted hold disturbance: projected "
+        f"Null-space mode 1 under the 20 N link-3 point-force disturbance: "
+        f"projected "
         f"damping only, nullspace_damping = {level}.",
         "Compare recovery, Cartesian task drift and joint motion against the "
         "mode-0 reference. Damping alone has no preferred posture, so the arm "
@@ -701,13 +748,76 @@ for level in NULLSPACE_LEVELS:
     tag = f"{level:.1f}".replace(".", "p")
     add(
         f"MAIN_F2_ksigma_{tag}",
-        f"Null-space mode 2 under a scripted hold disturbance: "
+        f"Null-space mode 2 under the 20 N link-3 point-force disturbance: "
         f"smallest-singular-value bias only, k_sigma = {level}.",
         "Accept a setting only if the commanded null-space direction is "
         "actually followed by joint motion and the Cartesian task drift stays "
         "within its registered limit. Torque without motion is below the "
         "friction threshold, not optimisation.",
         nullspace_common(2) + [("nullspace_k_sigma", f"{level}")],
+        repeats=1 if level == 4.0 else 3,
+    )
+
+
+# Stronger follow-on requested after the first automatic campaign.  These use
+# new run IDs so the archived +100 mm Case-F records are never reinterpreted as
+# having received the larger moment.  The +150 mm virtual point gives the same
+# 20 N force a larger lever about link 3, while the 2.5 Nm ceiling limits the
+# increase before any hardware pilot is accepted.  Sigma settings below
+# 1.5 Nm are omitted because the first campaign showed that 1 Nm mostly loaded
+# joint friction without producing a useful conditioning response.
+NULLSPACE_STRONG_SIGMA_LEVELS = (1.5, 2.0)
+
+
+def nullspace_strong_common(mode):
+    return merged_overrides(nullspace_common(mode), [
+        ("disturbance_point_link_z", "0.150"),
+        ("disturbance_max_tau_norm", "2.5"),
+    ])
+
+
+add(
+    "PILOT_F_disturbance_20N_150mm",
+    "Stronger automatic null-space disturbance pilot: 20 N at link 3 with "
+    "a +150 mm local-z lever, mode 0.",
+    "Accept only if the larger moment produces visible redundant motion "
+    "without torque clipping, a reflex, or more than 1 mm Cartesian drift.",
+    nullspace_strong_common(0),
+    repeats=1,
+)
+
+add(
+    "MAIN_F3_baseline_150mm",
+    "Mode-0 reference for the stronger 20 N, +150 mm link-3 point-force "
+    "disturbance.",
+    "Quantify the increased redundant excursion and verify the force and "
+    "joint-torque waveform before comparing any null-space gain.",
+    nullspace_strong_common(0),
+    repeats=3,
+)
+
+add(
+    "MAIN_F3_damping_2p0_150mm",
+    "Projected damping only under the stronger disturbance, "
+    "nullspace_damping = 2.0 Nms/rad.",
+    "Compare with the stronger mode-0 reference; damping should reduce the "
+    "excursion without imposing a preferred posture.",
+    nullspace_strong_common(1) + [("nullspace_damping", "2.0")],
+    repeats=3,
+)
+
+for level in NULLSPACE_STRONG_SIGMA_LEVELS:
+    tag = f"{level:.1f}".replace(".", "p")
+    add(
+        f"MAIN_F4_ksigma_{tag}_150mm",
+        f"Sigma-only response under the stronger disturbance, "
+        f"k_sigma = {level} Nm.",
+        "The setting must produce observable motion along the selected "
+        "conditioning direction while the Cartesian position error remains "
+        "within 1 mm.",
+        nullspace_strong_common(2) + [
+            ("nullspace_k_sigma", f"{level}"),
+        ],
         repeats=3,
     )
 
@@ -978,7 +1088,9 @@ def write_setups():
         # driven with h; every contact case runs the sequence with s. The
         # runner and the unattended driver both read this rather than guessing
         # from the run id.
-        startup_mode = "h" if run_id.startswith("MAIN_F") else "s"
+        startup_mode = (
+            "h" if run_id.startswith(("MAIN_F", "PILOT_F")) else "s"
+        )
         with open(os.path.join(d, "startup_mode.txt"), "w") as f:
             f.write(startup_mode + "\n")
 

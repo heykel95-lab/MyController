@@ -1,4 +1,4 @@
-121 setups, 364 total runs
+128 setups, 377 total runs
 
 G1_coupled_block_diagonal          x3  Coupled 6x6 path with block-diagonal gains must reproduce the decoupled wrench exactly.
 G1_decoupled_baseline              x5  Decoupled wrench, no coupling.
@@ -69,13 +69,20 @@ MAIN_H3_rcn_p060                   x3  Case H: the H1 Y_EE condition with the po
 MAIN_H3_rcn_p120                   x3  Case H: the H1 Y_EE condition with the pole moved along the normal to r_c,n = +120 mm -- 100 mm under the plane.
 MAIN_E1_tilt_about_y_long          x3  Tilt 10 deg about the tool's own Y_EE axis, so the 120 mm edge leads.
 MAIN_E1_tilt_about_x_short         x3  Tilt 10 deg about the tool's own X_EE axis, so the 40 mm edge leads.
-MAIN_F0_baseline                   x3  Null-space mode 0 under a scripted hold disturbance: no null-space torque at all.
-MAIN_F1_damping_1p0                x3  Null-space mode 1 under a scripted hold disturbance: projected damping only, nullspace_damping = 1.0.
-MAIN_F1_damping_2p0                x3  Null-space mode 1 under a scripted hold disturbance: projected damping only, nullspace_damping = 2.0.
-MAIN_F1_damping_4p0                x3  Null-space mode 1 under a scripted hold disturbance: projected damping only, nullspace_damping = 4.0.
-MAIN_F2_ksigma_1p0                 x3  Null-space mode 2 under a scripted hold disturbance: smallest-singular-value bias only, k_sigma = 1.0.
-MAIN_F2_ksigma_2p0                 x3  Null-space mode 2 under a scripted hold disturbance: smallest-singular-value bias only, k_sigma = 2.0.
-MAIN_F2_ksigma_4p0                 x3  Null-space mode 2 under a scripted hold disturbance: smallest-singular-value bias only, k_sigma = 4.0.
+PILOT_F_disturbance_10N            x1  Automatic null-space disturbance pilot: 10 N at link 3 with a +100 mm local-z lever, mode 0.
+PILOT_F_disturbance_20N            x1  Automatic null-space disturbance pilot: 20 N at link 3 with a +100 mm local-z lever, mode 0.
+MAIN_F0_baseline                   x3  Null-space mode 0 under the 20 N link-3 point-force disturbance: no null-space control torque.
+MAIN_F1_damping_1p0                x3  Null-space mode 1 under the 20 N link-3 point-force disturbance: projected damping only, nullspace_damping = 1.0.
+MAIN_F1_damping_2p0                x3  Null-space mode 1 under the 20 N link-3 point-force disturbance: projected damping only, nullspace_damping = 2.0.
+MAIN_F1_damping_4p0                x3  Null-space mode 1 under the 20 N link-3 point-force disturbance: projected damping only, nullspace_damping = 4.0.
+MAIN_F2_ksigma_1p0                 x3  Null-space mode 2 under the 20 N link-3 point-force disturbance: smallest-singular-value bias only, k_sigma = 1.0.
+MAIN_F2_ksigma_2p0                 x3  Null-space mode 2 under the 20 N link-3 point-force disturbance: smallest-singular-value bias only, k_sigma = 2.0.
+MAIN_F2_ksigma_4p0                 x1  Null-space mode 2 under the 20 N link-3 point-force disturbance: smallest-singular-value bias only, k_sigma = 4.0.
+PILOT_F_disturbance_20N_150mm      x1  Stronger automatic null-space disturbance pilot: 20 N at link 3 with a +150 mm local-z lever, mode 0.
+MAIN_F3_baseline_150mm             x3  Mode-0 reference for the stronger 20 N, +150 mm link-3 point-force disturbance.
+MAIN_F3_damping_2p0_150mm          x3  Projected damping only under the stronger disturbance, nullspace_damping = 2.0 Nms/rad.
+MAIN_F4_ksigma_1p5_150mm           x3  Sigma-only response under the stronger disturbance, k_sigma = 1.5 Nm.
+MAIN_F4_ksigma_2p0_150mm           x3  Sigma-only response under the stronger disturbance, k_sigma = 2.0 Nm.
 VALID_T0_00deg                     x3  Tilted-plane validation at the baseline gains with independent tool offsets (t1=+0 deg, t2=+0 deg).
 VALID_T1_t1_10deg                  x3  Tilted-plane validation at the baseline gains with independent tool offsets (t1=+10 deg, t2=+0 deg).
 VALID_T2_t2_10deg                  x3  Tilted-plane validation at the baseline gains with independent tool offsets (t1=+0 deg, t2=+10 deg).

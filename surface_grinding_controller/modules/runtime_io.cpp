@@ -56,6 +56,12 @@ const char* sigmaDebugEventName(SigmaDebugEvent event) {
       return "disturb_cue_hold";
     case SigmaDebugEvent::kDisturbCueRelease:
       return "disturb_cue_release";
+    case SigmaDebugEvent::kDisturbAutoPush:
+      return "disturb_auto_push";
+    case SigmaDebugEvent::kDisturbAutoHold:
+      return "disturb_auto_hold";
+    case SigmaDebugEvent::kDisturbAutoRelease:
+      return "disturb_auto_release";
     case SigmaDebugEvent::kStop:
       return "stop";
     case SigmaDebugEvent::kException:
@@ -129,6 +135,14 @@ void writeLogToCsv(
            << "nullspace_velocity_dominant_joint,"
            << "nullspace_velocity_dominant_fraction,sigma_Jn_norm,"
            << "tau_nullspace_norm,nullspace_damping,"
+           << "disturbance_scale,disturbance_torque_scale,"
+           << "disturbance_point_base_x,disturbance_point_base_y,"
+           << "disturbance_point_base_z,"
+           << "disturbance_force_base_x,disturbance_force_base_y,"
+           << "disturbance_force_base_z,"
+           << "tau_disturbance_1,tau_disturbance_2,tau_disturbance_3,"
+           << "tau_disturbance_4,tau_disturbance_5,tau_disturbance_6,"
+           << "tau_disturbance_7,"
            << "tau_cmd_1,tau_cmd_2,tau_cmd_3,tau_cmd_4,tau_cmd_5,tau_cmd_6,tau_cmd_7"
            << "\n";
 
@@ -183,6 +197,12 @@ void writeLogToCsv(
              << row.sigma.jacobian_null_residual << ","
              << row.tau_nullspace_norm << ","
              << row.nullspace_damping << ","
+             << row.disturbance.scale << ","
+             << row.disturbance.torque_scale << ",";
+    writeVec3(log_file, row.disturbance.point_base);
+    writeVec3(log_file, row.disturbance.force_base);
+    writeVec7(log_file, row.disturbance.tau);
+    log_file
              << row.tau_cmd(0) << "," << row.tau_cmd(1) << ","
              << row.tau_cmd(2) << "," << row.tau_cmd(3) << ","
              << row.tau_cmd(4) << "," << row.tau_cmd(5) << ","
@@ -221,6 +241,8 @@ bool writeSigmaDebugToCsv(
       << "command_force_norm_N,command_moment_norm_Nm,"
       << "tau_task_norm_Nm,tau_nullspace_norm_Nm,tau_cmd_norm_Nm,"
       << "nullspace_damping_Nms_rad,"
+      << "disturbance_scale,disturbance_force_norm_N,"
+      << "disturbance_tau_norm_Nm,disturbance_torque_scale,"
       << "external_force_delta_norm_N,"
       << "external_moment_delta_norm_Nm,"
       << "external_joint_torque_delta_norm_Nm,"
@@ -343,6 +365,10 @@ bool writeSigmaDebugToCsv(
         << row.tau_nullspace_norm << ","
         << row.tau_cmd_norm << ","
         << row.nullspace_damping << ","
+        << row.disturbance.scale << ","
+        << row.disturbance.force_base.norm() << ","
+        << row.disturbance.tau.norm() << ","
+        << row.disturbance.torque_scale << ","
         << row.external_force_delta.norm() << ","
         << row.external_moment_delta.norm() << ","
         << row.external_joint_torque_delta.norm() << ","
@@ -661,6 +687,28 @@ void printNullspaceLaw(const Parameters& params) {
            params.nullspace_alpha);
   }
   printf("  %-16s   0/1/2/3 switch mode\n", "");
+}
+
+void printAutomaticDisturbance(const Parameters& params,
+                               const Vec3& force_direction_base) {
+  if (!params.disturbance_auto_enabled) {
+    return;
+  }
+  printSection("automatic link-point push");
+  printf("  %-16s   joint %d frame\n", "link", params.disturbance_link);
+  printf("  %-16s   [%+.1f, %+.1f, %+.1f] mm\n", "point [link]",
+         1000.0 * params.disturbance_point_link(0),
+         1000.0 * params.disturbance_point_link(1),
+         1000.0 * params.disturbance_point_link(2));
+  printf("  %-16s   [%+.3f, %+.3f, %+.3f]\n", "direction [base]",
+         force_direction_base(0), force_direction_base(1),
+         force_direction_base(2));
+  printf("  %-16s   %.2f N | tau norm <= %.2f Nm\n", "force",
+         params.disturbance_force, params.disturbance_max_tau_norm);
+  printf("  %-16s   ramp %.1f--%.1f | hold to %.1f | release %.1f s\n",
+         "time [s]", params.disturbance_push_time,
+         params.disturbance_hold_time, params.disturbance_release_time,
+         params.disturbance_release_ramp_time);
 }
 
 void printPhaseHeader(ControlPhase phase) {

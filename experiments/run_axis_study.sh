@@ -58,6 +58,10 @@ RUN_IDS=(
   MAIN_F2_ksigma_1p0
   MAIN_F2_ksigma_2p0
   MAIN_F2_ksigma_4p0
+  MAIN_F3_baseline_150mm
+  MAIN_F3_damping_2p0_150mm
+  MAIN_F4_ksigma_1p5_150mm
+  MAIN_F4_ksigma_2p0_150mm
   MAIN_H1_rot_yEE
   MAIN_H1_rot_diag_m45
   MAIN_H1_rot_xEE
@@ -73,6 +77,7 @@ RUN_IDS=(
 
 repeats_for() {
   case "$1" in
+    MAIN_F2_ksigma_4p0) echo 1 ;;
     MAIN_A*|MAIN_B*|MAIN_C*|MAIN_D*|MAIN_E*|MAIN_F*|MAIN_H*) echo 3 ;;
     *) echo 0 ;;
   esac
@@ -161,6 +166,21 @@ run_case() {
   if [ -z "$run_ids" ]; then
     echo "No case $letter in this runner. Cases present: A, B, C, D, E, F, H." >&2
     return 2
+  fi
+
+  # The +150 mm follow-on deliberately applies more moment than the archived
+  # +100 mm campaign.  Do not let the unattended runner reach it until one
+  # mode-0 pilot has both completed and passed the waveform/motion/task gate.
+  if [ "$letter" = "F" ]; then
+    local strong_pilot_dir="$HERE/results/PILOT_F_disturbance_20N_150mm/r01"
+    if ! repeat_complete "$strong_pilot_dir"; then
+      echo "Stronger Case-F runs are blocked pending:" >&2
+      echo "  $HERE/run.sh PILOT_F_disturbance_20N_150mm 1" >&2
+      return 2
+    fi
+    if ! python3 "$HERE/analysis/validate_nullspace_pilot.py" "$strong_pilot_dir"; then
+      return 2
+    fi
   fi
 
   for run_id in $run_ids; do

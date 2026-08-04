@@ -48,6 +48,28 @@ FIGURES = os.path.join(EXP, "figures")
 # Switch here if the thesis loads a font package; nothing else needs changing.
 FONT_STYLE = "latex"
 
+# The categorical palette begins with the agreed black, red, blue and yellow.
+# Further distinct colours are available when a plot genuinely needs more than
+# four curves. Marker shape duplicates colour for monochrome print.
+SERIES_BLACK = "#000000"
+SERIES_RED = "#c00000"
+SERIES_BLUE = "#0057b8"
+SERIES_YELLOW = "#e0ad00"
+SERIES_GREEN = "#008450"
+SERIES_PURPLE = "#7b3294"
+SERIES_CYAN = "#008c95"
+SERIES_ORANGE = "#e66100"
+SERIES_COLOURS = (
+    SERIES_BLACK,
+    SERIES_RED,
+    SERIES_BLUE,
+    SERIES_YELLOW,
+    SERIES_GREEN,
+    SERIES_PURPLE,
+    SERIES_CYAN,
+    SERIES_ORANGE,
+)
+
 _FONT_STYLES = {
     "latex": {
         "font.serif": ["Latin Modern Roman", "CMU Serif", "cmr10",
@@ -66,9 +88,19 @@ plt.rcParams.update({
     "pdf.fonttype": 42,
     "ps.fonttype": 42,
     "font.size": 9,
+    "axes.prop_cycle": matplotlib.cycler(color=SERIES_COLOURS),
+    "axes.edgecolor": "#1a1a1a",
+    "axes.linewidth": 0.8,
     "axes.grid": True,
     "axes.grid.axis": "y",
     "grid.alpha": 0.3,
+    "grid.linewidth": 0.6,
+    "xtick.direction": "out",
+    "ytick.direction": "out",
+    "xtick.major.width": 0.8,
+    "ytick.major.width": 0.8,
+    "lines.linewidth": 1.25,
+    "lines.markersize": 5.5,
     # One legend everywhere: no box, no shadow, the same size relative to the
     # body text, and tight enough not to crowd the data.
     "legend.frameon": False,
@@ -119,7 +151,10 @@ def errorbar_from_buckets(ax, buckets, label, color, marker="o"):
         errs.append(np.std(vals, ddof=1) if len(vals) > 1 else 0.0)
     if plotted:
         ax.errorbar(plotted, means, yerr=errs, marker=marker, capsize=3,
-                    label=label, color=color, linewidth=1.5)
+                    label=label, color=color, linewidth=1.25,
+                    elinewidth=1.0, capthick=1.0, markersize=5.5,
+                    markerfacecolor="white", markeredgecolor=color,
+                    markeredgewidth=1.1)
     # Excluded runs drawn hollow so nothing is hidden. Labelled once per axes,
     # so the legend says what a hollow marker is instead of leaving it to a
     # caption the figure may get separated from.
@@ -127,6 +162,7 @@ def errorbar_from_buckets(ax, buckets, label, color, marker="o"):
     for x in xs:
         for v in buckets[x]["bad"]:
             ax.plot(x, v, marker="o", mfc="none", mec="0.6", ms=5,
+                    mew=1.0,
                     linestyle="none",
                     label=None if labelled else EXCLUDED_LABEL)
             labelled = True
@@ -150,27 +186,86 @@ def sweep_axis(ax, values, pad=0.12):
 
 # Figures carry no internal title: the thesis caption identifies each one, and
 # a title inside the axes repeats it on the page.
-def figure_legend(fig, ax, ncol=3):
+def _legend_items_in_colour_order(handles, labels, ncol):
+    """Sort categorical colours, put diagnostics last, and preserve row order."""
+    colour_rank = {
+        matplotlib.colors.to_hex(colour).lower(): rank
+        for rank, colour in enumerate(SERIES_COLOURS)
+    }
+
+    def handle_colour(handle):
+        candidate = handle
+        if hasattr(handle, "lines") and handle.lines:
+            candidate = handle.lines[0]
+        if not hasattr(candidate, "get_color"):
+            return ""
+        try:
+            return matplotlib.colors.to_hex(candidate.get_color()).lower()
+        except (TypeError, ValueError):
+            return ""
+
+    items = list(zip(handles, labels))
+    items.sort(
+        key=lambda item: (
+            len(SERIES_COLOURS) + 1
+            if item[1] == EXCLUDED_LABEL
+            else colour_rank.get(handle_colour(item[0]), len(SERIES_COLOURS)),
+        )
+    )
+
+    # Matplotlib fills a multi-column legend down each column. Reorder the
+    # handles so that reading across the rendered rows still gives
+    # the declared palette order, followed by diagnostics.
+    count = len(items)
+    columns = min(max(1, ncol), count)
+    if columns > 1:
+        ordered = []
+        for column in range(columns):
+            rows_in_column = count // columns + (column < count % columns)
+            for row in range(rows_in_column):
+                index = row * columns + column
+                if index < count:
+                    ordered.append(items[index])
+        items = ordered
+    return [item[0] for item in items], [item[1] for item in items]
+
+
+def axis_legend(ax, ncol=1, **kwargs):
+    handles, labels = ax.get_legend_handles_labels()
+    handles, labels = _legend_items_in_colour_order(handles, labels, ncol)
+    if handles:
+        ax.legend(handles, labels, ncol=ncol, **kwargs)
+
+
+def figure_legend(fig, axes, ncol=3):
     """One legend under a multi-panel figure.
 
     An in-axes legend on a narrow subplot lands on the y label or the data.
     Below the figure it belongs to every panel at once, which is what a shared
     series list means anyway, and bbox_inches="tight" keeps it in the crop.
     """
-    handles, labels = ax.get_legend_handles_labels()
+    handles, labels = [], []
+    for ax in np.atleast_1d(axes).flat:
+        axis_handles, axis_labels = ax.get_legend_handles_labels()
+        for handle, label in zip(axis_handles, axis_labels):
+            if label and label not in labels:
+                handles.append(handle)
+                labels.append(label)
     if not handles:
         return
+    handles, labels = _legend_items_in_colour_order(handles, labels, ncol)
     fig.legend(handles, labels, loc="lower center", ncol=ncol,
-               bbox_to_anchor=(0.5, -0.04), fontsize=8)
+               bbox_to_anchor=(0.5, 0.01), fontsize=8)
+    rows = int(np.ceil(len(handles) / min(ncol, len(handles))))
+    fig._thesis_legend_bottom = 0.10 + 0.06 * (rows - 1)
 
 
 def save(fig, name):
     os.makedirs(FIGURES, exist_ok=True)
     path = os.path.join(FIGURES, name)
-    if fig._suptitle is None:
-        fig.tight_layout()
-    else:
-        fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.94))
+    bottom = getattr(fig, "_thesis_legend_bottom", 0.0)
+    top = 1.0 if fig._suptitle is None else 0.94
+    fig.tight_layout(rect=(0.0, bottom, 1.0, top))
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
     print(f"  wrote {os.path.relpath(path, EXP)}")
@@ -204,7 +299,7 @@ def fig_a2_stiffness(rows):
         errorbar_from_buckets(ax, buckets, "measured", "C0")
         ax.set_xlabel(r"$K_{R,t_1}=K_{R,t_2}$ [Nm/rad]")
         ax.set_ylabel(ylabel)
-    figure_legend(fig, axes[0])
+    figure_legend(fig, axes)
     fig.suptitle("Rotational stiffness sweep", fontsize=10)
     return save(fig, "A2_stiffness_sweep.pdf")
 
@@ -241,7 +336,7 @@ def fig_d_axis_stiffness(rows):
         errorbar_from_buckets(ax, t2, r"$t_2$ excitation", "C1", marker="s")
         ax.set_xlabel(r"excited-axis $K_R$ [Nm/rad]")
         ax.set_ylabel(ylabel)
-    figure_legend(fig, axes[0])
+    figure_legend(fig, axes)
     fig.suptitle("Axis-specific rotational stiffness", fontsize=10)
     return save(fig, "D_axis_stiffness.pdf")
 
@@ -281,7 +376,7 @@ def fig_d_initial_angle(rows):
         )
     ax.set_xlabel("initial tool-plane angle [deg]")
     ax.set_ylabel("physical-plane improvement [deg]")
-    ax.legend()
+    axis_legend(ax)
     ax.set_title("D0/D3: initial-angle response", fontsize=10)
     return save(fig, "D_initial_angle.pdf")
 
@@ -320,7 +415,7 @@ def fig_main_initial_angle(rows):
     ax.axhline(0.0, color="0.45", linewidth=1)
     ax.set_xlabel("measured initial tool-plane angle [deg]")
     ax.set_ylabel("excited-axis error removed [deg]")
-    ax.legend()
+    axis_legend(ax)
     return save(fig, "MAIN_A_angle.pdf")
 
 
@@ -358,7 +453,7 @@ def fig_main_rotational_stiffness(rows):
         sweep_axis(ax, (5, 15, 50))
         ax.set_xlabel(r"excited-axis $K_R$ [Nm/rad]")
         ax.set_ylabel(ylabel)
-    figure_legend(fig, axes[0])
+    figure_legend(fig, axes)
     return save(fig, "MAIN_B_KR.pdf")
 
 
@@ -396,7 +491,7 @@ def fig_main_translational_stiffness(rows):
         sweep_axis(ax, (300.0, 800.0, 2000.0))
         ax.set_xlabel(r"cross-direction $K_p$ [N/m]")
         ax.set_ylabel(ylabel)
-    figure_legend(fig, axes[0])
+    figure_legend(fig, axes)
     return save(fig, "MAIN_C_KP.pdf")
 
 
@@ -414,7 +509,7 @@ def fig_main_interaction(rows):
     for axis, ax in enumerate(axes, start=1):
         kr_key = f"setup_KR_t{axis}"
         kp_key = "setup_Kp_t2" if axis == 1 else "setup_Kp_t1"
-        for kp, color, marker in ((300.0, "C2", "s"), (2000.0, "C0", "o")):
+        for kp, color, marker in ((300.0, "C0", "s"), (2000.0, "C1", "o")):
             buckets = {}
             for row in selected:
                 is_axis = (
@@ -438,7 +533,7 @@ def fig_main_interaction(rows):
         ax.set_xlabel(rf"$K_{{R,t_{axis}}}$ [Nm/rad]")
         ax.set_title(rf"$t_{axis}$ excitation", fontsize=9)
     axes[0].set_ylabel("excited-axis error removed [deg]")
-    figure_legend(fig, axes[0])
+    figure_legend(fig, axes)
     return save(fig, "MAIN_C_interaction.pdf")
 
 
@@ -472,7 +567,7 @@ def fig_main_compliance_centre(rows):
                 buckets[x]["bad" if data_suspect(row) else "good"].append(y)
             errorbar_from_buckets(
                 ax, buckets,
-                rf"$t_{axis}$ error; perpendicular lever",
+                rf"$t_{axis}$, swept lever",
                 color, marker=marker,
             )
         # D3 has no perpendicular lever to sit on the x axis: its pole is
@@ -492,7 +587,7 @@ def fig_main_compliance_centre(rows):
                 ax.axhline(
                     float(np.mean(vals)), color=color, linewidth=1.1,
                     linestyle=":",
-                    label=rf"$t_{axis}$ error; pole at face centre",
+                    label=rf"$t_{axis}$, face centre",
                 )
         # Zero means "no correction" for the improvement panel only. On the
         # load and time panels it forces the axis down to zero and squashes the
@@ -500,18 +595,18 @@ def fig_main_compliance_centre(rows):
         if key == "axis_improvement":
             ax.axhline(0.0, color="0.45", linewidth=1)
         sweep_axis(ax, (-60, 0, 60))
-        ax.set_xlabel("commanded perpendicular lever component [mm]")
+        ax.set_xlabel("perpendicular lever [mm]")
         ax.set_ylabel(ylabel)
-    figure_legend(fig, axes[0], ncol=4)
+    figure_legend(fig, axes, ncol=5)
     return save(fig, "MAIN_D_CoC.pdf")
 
 
 # Categorical slots 1 and 2 of the validated default palette. Two series only:
 # the all-pairs floors hold for the first three slots, and marker shape carries
 # identity as well as hue so the figure survives greyscale printing.
-SERIES_B2 = "#2a78d6"
-SERIES_B3 = "#eb6834"
-SERIES_B4 = "#1baf7a"   # slot 3; first three slots validate all-pairs
+SERIES_B2 = SERIES_BLACK
+SERIES_B3 = SERIES_RED
+SERIES_B4 = SERIES_BLUE
 INK = "#0b0b0b"
 INK_MUTED = "#52514e"
 
@@ -539,7 +634,7 @@ def fig_main_tool_axis_tilt(rows):
         (r"about $Y_{EE}$ (120 mm edge)", ("MAIN_E1_tilt_about_y_long",), None, "C2"),
         (r"about $X_{EE}$ (40 mm edge)", ("MAIN_E1_tilt_about_x_short",), None, "C3"),
     ]
-    labels, means, errs, colors = [], [], [], []
+    labels, means, errs, colors, markers = [], [], [], [], []
     for label, prefixes, axis, color in groups:
         vals = []
         for row in rows:
@@ -558,20 +653,27 @@ def fig_main_tool_axis_tilt(rows):
         means.append(float(np.mean(vals)))
         errs.append(float(np.std(vals, ddof=1)) if len(vals) > 1 else 0.0)
         colors.append(color)
+        markers.append(("o", "s", "^", "D")[len(markers)])
     if not means:
         return None
 
     fig, ax = plt.subplots(figsize=(5.6, 3.4))
     xs = np.arange(len(means))
-    for i, (x, m, e, c, lb) in enumerate(zip(xs, means, errs, colors, labels)):
-        ax.bar(x, m, yerr=e, capsize=3, color=c, width=0.6,
-               edgecolor="0.25", linewidth=0.6, label=lb)
+    for x, m, e, c, marker, lb in zip(
+        xs, means, errs, colors, markers, labels
+    ):
+        ax.errorbar(
+            x, m, yerr=e, capsize=3, color=c, marker=marker,
+            markersize=6, markerfacecolor="white", markeredgecolor=c,
+            markeredgewidth=1.1, elinewidth=1.0, capthick=1.0,
+            linestyle="none", label=lb,
+        )
     ax.set_xticks(xs)
     ax.set_xticklabels(["surface\n$t_1$", "surface\n$t_2$",
                         "tool\n$Y_{EE}$", "tool\n$X_{EE}$"][:len(means)])
     ax.set_ylabel("alignment error removed [deg]")
     ax.axhline(0.0, color="0.45", linewidth=1)
-    ax.legend(ncol=2, fontsize=7)
+    axis_legend(ax, ncol=2, fontsize=7)
     return save(fig, "MAIN_E_tool_axis.pdf")
 
 
@@ -634,7 +736,10 @@ def fig_plane_validation(rows):
         ):
             ax.errorbar(
                 x_base + offset, means, yerr=errors, label=profile,
-                color=color, marker=marker, linewidth=1.5, capsize=3,
+                color=color, marker=marker, linewidth=1.25, capsize=3,
+                elinewidth=1.0, capthick=1.0, markersize=5.5,
+                markerfacecolor="white", markeredgecolor=color,
+                markeredgewidth=1.1,
             )
 
     axes[0].set_ylabel("measured initial error [deg]")
@@ -642,7 +747,7 @@ def fig_plane_validation(rows):
     for ax in axes:
         ax.set_xticks(x_base)
         ax.set_xticklabels([definition[0] for definition in definitions])
-    axes[0].legend()
+    axis_legend(axes[0])
     fig.suptitle("Horizontal primary and tilted validation", fontsize=10)
     return save(fig, "PLANE_validation.pdf")
 
@@ -685,7 +790,8 @@ def fig_b_pole_axis(rows):
             x, y = _pole_points(rows, prefix, xkey)
             if not x.size:
                 continue
-            ax.plot(x, y, marker, color=color, ms=7, mew=0.8, mec="white",
+            ax.plot(x, y, marker, color=color, ms=6, mew=1.0, mec=color,
+                    mfc="white",
                     linestyle="none", label=label)
             allx.append(x)
             ally.append(y)
@@ -713,7 +819,7 @@ def fig_b_pole_axis(rows):
         ax.set_xlabel(xlabel, color=INK_MUTED)
     axes[0].set_ylabel("alignment gained toward the real plane [deg]",
                        color=INK_MUTED)
-    axes[0].legend(fontsize=8, loc="lower right", frameon=False)
+    axis_legend(axes[0], fontsize=8, loc="lower right", frameon=False)
     fig.suptitle("B: both in-plane pole components govern alignment; "
                  "the normal component does not", fontsize=10, color=INK)
     return save(fig, "B_pole_component.pdf")
@@ -779,7 +885,7 @@ def fig_b_pole_surface(rows):
     ax.set_ylabel("pole offset along $t_2$ [mm]", color=INK_MUTED)
     ax.set_title(f"Fitted pole surface, $R^2$ = {r2:.3f} over {len(P)} runs; "
                  "shaded only where runs support it", fontsize=9, color=INK)
-    ax.legend(fontsize=7, loc="lower right", framealpha=0.9)
+    axis_legend(ax, fontsize=7, loc="lower right", framealpha=0.9)
     ax.grid(False)
     return save(fig, "B_pole_surface.pdf")
 
@@ -857,7 +963,7 @@ def fig_main_general_pole(rows):
             continue
         no_pole.setdefault(x, {"good": [], "bad": []})
         no_pole[x]["bad" if data_suspect(row) else "good"].append(y)
-    errorbar_from_buckets(axes[0], no_pole, "no pole (Case E)", INK_MUTED,
+    errorbar_from_buckets(axes[0], no_pole, "no pole (Case E)", SERIES_BLUE,
                           marker="^")
 
     axes[0].axhline(0.0, color="0.45", linewidth=1)
@@ -877,7 +983,7 @@ def fig_main_general_pole(rows):
         buckets.setdefault(x, {"good": [], "bad": []})
         buckets[x]["bad" if data_suspect(row) else "good"].append(y)
     errorbar_from_buckets(axes[1], buckets, "lever along the normal",
-                          SERIES_B4, marker="D")
+                          SERIES_YELLOW, marker="D")
     # r_c = p_TCP - p_c, and the TCP stands about 20 mm off the plane at
     # contact: positive is under the plane, and +20 is in it.
     axes[1].axvline(20.0, color="0.45", linewidth=1, linestyle="--")
@@ -889,7 +995,7 @@ def fig_main_general_pole(rows):
     axes[1].set_xlabel(r"$r_{c,n}$ [mm]   (positive = pole under the plane)")
     axes[1].set_ylabel("alignment removed [deg]")
 
-    figure_legend(fig, axes[0], ncol=3)
+    figure_legend(fig, axes, ncol=3)
     return save(fig, "MAIN_H_general_pole.pdf")
 
 
@@ -925,7 +1031,7 @@ def fig_c2_nullspace(rows):
         ax.set_ylabel(ylabel)
     axes[1].axhline(0.0, color="0.3", linewidth=1)
     axes[1].set_title("must stay near zero", fontsize=8)
-    figure_legend(fig, axes[0])
+    figure_legend(fig, axes)
     fig.suptitle("C2/C3: null-space modes and task invariance", fontsize=10)
     return save(fig, "C2_nullspace_modes.pdf")
 
@@ -948,7 +1054,7 @@ def fig_g2_convergence(rows):
     errorbar_from_buckets(ax, buckets, "final tip", "C0")
     ax.set_xlabel("set-up phase duration [s]")
     ax.set_ylabel("final tip angle [deg]")
-    ax.legend()
+    axis_legend(ax)
     ax.set_title("G2: is 4 s long enough to reach equilibrium?", fontsize=10)
     return save(fig, "G2_equilibrium.pdf")
 

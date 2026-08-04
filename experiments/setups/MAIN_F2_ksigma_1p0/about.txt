@@ -6,7 +6,7 @@ plane profile: horizontal
 tool profile: grinding_tool
 
 purpose:
-  Null-space mode 2 under a scripted hold disturbance: smallest-singular-value bias only, k_sigma = 1.0.
+  Null-space mode 2 under the 20 N link-3 point-force disturbance: smallest-singular-value bias only, k_sigma = 1.0.
 
 pass criterion:
   Accept a setting only if the commanded null-space direction is actually followed by joint motion and the Cartesian task drift stays within its registered limit. Torque without motion is below the friction threshold, not optimisation.
