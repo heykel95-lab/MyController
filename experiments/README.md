@@ -137,12 +137,14 @@ python3 experiments/analysis/validate_nullspace_pilot.py \
 ./experiments/run_axis_study.sh case F auto
 ```
 
-The unattended follow-on remains blocked unless the pilot delivers the full
-20 N waveform without torque clipping, exceeds 2.0 Nm equivalent joint-torque
-norm and 0.040 rad redundant excursion, and stays within 2 mm peak Cartesian
-position error. The lower sigma settings are not repeated because the first
-campaign showed that 1 Nm mostly loaded joint friction; 2 Nm produced clear
-motion, while 4 Nm violated the task-error screening criterion.
+The pilot delivered the full 20 N waveform without torque clipping, exceeded
+2.0 Nm equivalent joint-torque norm and 0.040 rad redundant excursion, and
+stayed within 2 mm peak Cartesian position error. The completed follow-on
+contains three repetitions each of the mode-0 reference, projected damping at
+2.0 N m s/rad, and sigma-only control at 1.5 and 2.0 N m. The 1 N m sigma
+setting was omitted because the first campaign showed that it mostly loaded
+joint friction. The earlier 4 N m record remains a single screening run and is
+not part of the final matched campaign.
 
 The rejected 40 N, +200 mm pilot is not scheduled for repetition. It reached
 the 5 Nm torque ceiling, reduced the force waveform, and exceeded the Cartesian

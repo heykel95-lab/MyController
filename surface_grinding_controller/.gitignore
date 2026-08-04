@@ -10,6 +10,7 @@ tools/home_gripper
 tools/capture_plane_point
 tools/capture_tool_axis
 tools/inspect_experiment_config
+tools/inspect_nullspace_disturbance
 
 # Run logs
 logs/

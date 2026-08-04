@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Summarise and plot the automatic Case-F null-space experiment.
+"""Summarise and plot the final automatic Case-F null-space experiment.
 
 The point force is generated inside the controller, so this analysis uses the
 logged disturbance scale rather than a cue time to define the driven interval.
 It writes both the small derived table used by the thesis and a vector PDF.
 
-The 4 Nm sigma setting was a safety-screening run.  It is retained visibly but
-is never assigned a sample standard deviation or presented as a repeated mean.
+The final campaign uses the clean 20 N, +200 mm records acquired after the
+disturbance and inter-trial hardware gates had been fixed.
 """
 
 import csv
@@ -36,13 +36,10 @@ RESULTS = os.path.join(EXP, "results")
 SUMMARY = os.path.join(EXP, "derived", "MAIN_F_automatic_summary.csv")
 
 CONDITIONS = (
-    ("MAIN_F0_baseline", "damping", 0.0),
-    ("MAIN_F1_damping_1p0", "damping", 1.0),
-    ("MAIN_F1_damping_2p0", "damping", 2.0),
-    ("MAIN_F1_damping_4p0", "damping", 4.0),
-    ("MAIN_F2_ksigma_1p0", "sigma", 1.0),
-    ("MAIN_F2_ksigma_2p0", "sigma", 2.0),
-    ("MAIN_F2_ksigma_4p0", "sigma", 4.0),
+    ("MAIN_F7_baseline_20N_200mm", "damping", 0.0),
+    ("MAIN_F7_damping_2p0_20N_200mm", "damping", 2.0),
+    ("MAIN_F8_ksigma_1p5_20N_200mm", "sigma", 1.5),
+    ("MAIN_F8_ksigma_2p0_20N_200mm", "sigma", 2.0),
 )
 
 
@@ -144,7 +141,7 @@ def write_summary(groups):
                 "study": group["study"],
                 "gain": f"{group['gain']:g}",
                 "n": len(runs),
-                "provenance_status": "provisional-dirty-tree",
+                "provenance_status": "clean-committed",
                 "excursion_mean_rad": f"{np.mean(excursion):.9g}",
                 "excursion_sd_rad": (f"{sample_sd(excursion):.9g}"
                                       if len(runs) > 1 else ""),
@@ -180,8 +177,9 @@ def damping_panel(ax, groups):
               if curves.shape[0] > 1 else np.zeros_like(mean))
         label = rf"$d_{{\mathrm{{null}}}}={group['gain']:g}$"
         ax.plot(common_t, mean, color=colour, marker="o", markevery=40,
+                linewidth=1.25,
                 markerfacecolor="white", markeredgecolor=colour,
-                markeredgewidth=1.0, label=label)
+                markeredgewidth=1.1, label=label)
         ax.fill_between(common_t, mean - sd, mean + sd, color=colour,
                         alpha=0.10, linewidth=0)
     ax.set_xlabel("time after disturbance onset [s]")
@@ -217,7 +215,8 @@ def sigma_panel(ax, groups):
         gains[repeated], sigma_means[repeated],
         yerr=sigma_sd[repeated], color=SERIES_BLACK, marker="o",
         markerfacecolor="white", markeredgecolor=SERIES_BLACK,
-        markeredgewidth=1.1, capsize=3,
+        markeredgewidth=1.1, linewidth=1.25, elinewidth=1.0,
+        capthick=1.0, capsize=3,
         label=r"final $\Delta\sigma_{\min}$ (mean $\pm$ SD)")
     ax.plot(gains[screening], sigma_means[screening], color=SERIES_BLACK,
             marker="D", markerfacecolor="white", markeredgewidth=1.1,
@@ -228,20 +227,24 @@ def sigma_panel(ax, groups):
     ax.set_xticks(gains)
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0),
                         useMathText=True)
-    ax.text(0.01, 0.97, "(b)", transform=ax.transAxes,
+    ax.text(0.01, 0.82, "(b)", transform=ax.transAxes,
             ha="left", va="top")
-    ax.annotate("screening run\n($n=1$)",
-                xy=(gains[screening][0], sigma_means[screening][0]),
-                xytext=(3.15, 1.3e-5), fontsize=7, ha="center",
-                arrowprops={"arrowstyle": "-", "color": "0.35",
-                            "linewidth": 0.8})
+    if np.any(screening):
+        ax.annotate("screening run\n($n=1$)",
+                    xy=(gains[screening][0], sigma_means[screening][0]),
+                    xytext=(gains[screening][0] - 0.2,
+                            sigma_means[screening][0]),
+                    fontsize=7, ha="right",
+                    arrowprops={"arrowstyle": "-", "color": "0.35",
+                                "linewidth": 0.8})
 
     task_ax = ax.twinx()
     task_handle = task_ax.errorbar(
         gains[repeated], task_means[repeated],
         yerr=task_sd[repeated], color=SERIES_RED, marker="s",
         markerfacecolor="white", markeredgecolor=SERIES_RED,
-        markeredgewidth=1.1, capsize=3,
+        markeredgewidth=1.1, linewidth=1.25, elinewidth=1.0,
+        capthick=1.0, capsize=3,
         label="peak task-position error (mean $\pm$ SD)")
     task_ax.plot(gains[screening], task_means[screening], color=SERIES_RED,
                  marker="D", markerfacecolor="white", markeredgewidth=1.1,
