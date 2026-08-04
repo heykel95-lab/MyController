@@ -1,0 +1,7 @@
+run_id:        PILOT_F_disturbance_10N
+repeat:        1
+timestamp:     2026-08-04T17:14:49+02:00
+git_commit:    df9b8c7eacf4cc9723f8159226b7c5763400abac
+git_dirty:     yes
+host:          Computer19
+controller_exit: 0

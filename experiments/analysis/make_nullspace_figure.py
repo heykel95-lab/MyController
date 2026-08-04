@@ -171,7 +171,7 @@ def damping_panel(ax, groups):
             np.interp(common_t, run["relative_time"],
                       run["cumulative_excursion"])
             for run in group["runs"]
-        ])
+        ]) * (180.0 / np.pi)
         mean = np.mean(curves, axis=0)
         sd = (np.std(curves, axis=0, ddof=1)
               if curves.shape[0] > 1 else np.zeros_like(mean))
@@ -183,7 +183,7 @@ def damping_panel(ax, groups):
         ax.fill_between(common_t, mean - sd, mean + sd, color=colour,
                         alpha=0.10, linewidth=0)
     ax.set_xlabel("time after disturbance onset [s]")
-    ax.set_ylabel("cumulative null-space excursion [rad]")
+    ax.set_ylabel("cumulative null-space excursion [deg]")
     ax.text(0.01, 0.97, "(a)", transform=ax.transAxes,
             ha="left", va="top")
     axis_legend(ax, ncol=2, loc="upper left", bbox_to_anchor=(0.0, 0.89))
@@ -222,7 +222,7 @@ def sigma_panel(ax, groups):
             marker="D", markerfacecolor="white", markeredgewidth=1.1,
             linestyle="none")
     ax.axhline(0.0, color="0.45", linestyle="--", linewidth=1.0)
-    ax.set_xlabel(r"conditioning torque $k_\sigma$ [Nm]")
+    ax.set_xlabel(r"conditioning torque $k_\sigma$ [N m]")
     ax.set_ylabel(r"final $\Delta\sigma_{\min}$")
     ax.set_xticks(gains)
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0),

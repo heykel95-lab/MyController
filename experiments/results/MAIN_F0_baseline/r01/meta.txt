@@ -1,0 +1,11 @@
+run_id:        MAIN_F0_baseline
+repeat:        1
+timestamp:     2026-08-04T17:17:30+02:00
+git_commit:    df9b8c7eacf4cc9723f8159226b7c5763400abac
+git_dirty:     yes
+host:          Computer19
+plane_profile: horizontal
+tool_profile:  grinding_tool
+tool_mount_status: rigid
+tool_mount_play_bound_deg: 0.0
+controller_exit: 0

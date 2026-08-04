@@ -1,0 +1,12 @@
+run_id:   MAIN_F8_ksigma_1p5_21N_150mm
+repeats:  3
+
+plane profile: horizontal
+
+tool profile: grinding_tool
+
+purpose:
+  Sigma-only response under the balanced disturbance, k_sigma = 1.5 Nm.
+
+pass criterion:
+  The setting must produce observable motion along the selected conditioning direction while the Cartesian position error remains within 1 mm.

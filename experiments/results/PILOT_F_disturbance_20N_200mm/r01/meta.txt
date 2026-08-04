@@ -1,0 +1,7 @@
+run_id:        PILOT_F_disturbance_20N_200mm
+repeat:        1
+timestamp:     2026-08-04T18:26:17+02:00
+git_commit:    8a58cce78b0963aa8981045b94ba50d1745063f8
+git_dirty:     no
+host:          Computer19
+controller_exit: 0
