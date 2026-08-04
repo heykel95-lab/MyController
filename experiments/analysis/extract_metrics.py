@@ -53,6 +53,8 @@ FIELDS = [
     "setup_KR_t1", "setup_KR_t2", "setup_KR_n",
     "use_coupled_stiffness", "rc_t1_mm", "rc_t2_mm", "rc_n_mm",
     "report_rc_t1_mm", "report_rc_t2_mm", "report_rc_n_mm",
+    "report_rc_ee_x_mm", "report_rc_ee_y_mm", "report_rc_ee_z_mm",
+    "report_pc_face_x_mm", "report_pc_face_y_mm", "report_pc_face_z_mm",
     "tool_offset_t1_deg", "tool_offset_t2_deg",
     "align_improve_real_deg",
     "flags",

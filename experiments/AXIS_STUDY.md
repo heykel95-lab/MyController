@@ -135,6 +135,74 @@ Use three repeats initially. Compare alignment, task drift, joint motion and
 smallest singular value. This case determines whether the active sigma torque
 changes the contact response.
 
+## Case H: one pole for every tilt direction, and which side of the plane
+
+Case D found the lever that corrects each surface axis. Case H asks whether one
+lever can serve every tilt direction, and settles the normal coordinate.
+
+The press force is normal, \(f=-Fn_s\), so the moment it makes about the TCP is
+
+\[
+m = f\times r_c = F\,(r_{c,t_2},\,-r_{c,t_1},\,0).
+\]
+
+Only the tangential lever turns the tool, and it turns it perpendicular to
+itself. A tilt \(\theta\) about \(u=(\cos a,\sin a)\) in the tangent plane needs
+a corrective moment along \(-u\), so it needs the lever
+
+\[
+r_{c,t} = \rho\,(\sin a,\,-\cos a),
+\]
+
+perpendicular to the tilt axis and rotating with it. Case D measured both ends
+of that rule and both agree: \(a=0^\circ\) needs \(r_{c,t_2}=-60\,\mathrm{mm}\)
+(7.0 to 0.9 deg), \(a=90^\circ\) needs \(r_{c,t_1}=+60\,\mathrm{mm}\) (8.5 to
+2.1 deg), and the same levers on the wrong axis or with the wrong sign removed
+nothing.
+
+The rule therefore predicts that **no fixed pole serves every direction**. Case
+H tests that prediction rather than assuming it, at \(\rho=60\,\mathrm{mm}\) and
+a \(10^\circ\) tilt, with the directions named in the tool frame as Case E named
+them.
+
+| Setup | Tilt | Lever \(r_{c}\) [mm] |
+|---|---|---|
+| `MAIN_H1_rot_yEE` | 10 deg about \(Y_{EE}\) | \((+54.4,+25.4,0)\) |
+| `MAIN_H1_rot_diag_m45` | 45 deg between the tool axes | rule lever |
+| `MAIN_H1_rot_xEE` | 10 deg about \(X_{EE}\) | \((+25.4,-54.4,0)\) |
+| `MAIN_H1_rot_diag_p45` | the other diagonal | rule lever |
+| `MAIN_H2_fix_diag_m45` | as H1 | fixed at the \(Y_{EE}\) lever |
+| `MAIN_H2_fix_xEE` | as H1 | fixed at the \(Y_{EE}\) lever |
+| `MAIN_H2_fix_diag_p45` | as H1 | fixed at the \(Y_{EE}\) lever |
+| `MAIN_H3_rcn_m060` | 10 deg about \(Y_{EE}\) | H1 lever, \(r_{c,n}=-60\) |
+| `MAIN_H3_rcn_p020` | same | \(r_{c,n}=+20\) |
+| `MAIN_H3_rcn_p060` | same | \(r_{c,n}=+60\) |
+| `MAIN_H3_rcn_p120` | same | \(r_{c,n}=+120\) |
+
+**H1** — the rule holds off the surface axes if the fraction removed is the same
+at every direction. Each H1 run has a matched decoupled reference in Case E at
+the identical commanded tilt, which removed about 1.1 deg of 6.8 with no pole.
+
+**H2** — the general-pole claim itself. The rule predicts the loss follows the
+cosine of the direction change and reaches nothing at 90 deg, where Case D
+already measured a wrong-axis lever removing 0.0 deg.
+
+**H3** — above, in, or under the plane. The normal lever makes no moment against
+a normal press: it drops out of \(f\times r_c\) entirely, and enters only through
+the tangential stiffness as \(K_{p,t}r_n^2\) of added rotational stiffness, which
+resists the correction. The prediction is a loss symmetric in the sign of
+\(r_{c,n}\), growing as \(r_n^2\), and measurable only past
+\(|r_n|\approx\sqrt{K_R/K_{p,t}}=\sqrt{5/2000}\approx 50\,\mathrm{mm}\).
+`MAIN_D3` tested \(+20\,\mathrm{mm}\) and changed nothing, which is consistent
+but far too small to separate the prediction from no effect at all. Since
+\(r_c=p_{\mathrm{TCP}}-p_c\), a positive normal lever puts the pole **below** the
+TCP; the TCP stands about 20 mm off the plane at contact, so \(+20\) is the pole
+in the plane, \(+60\) and \(+120\) are under it, and \(-60\) is 80 mm above it.
+An asymmetry between above and under is not in the rule and would be the
+contact, not the spring.
+
+Case H contributes 33 trials.
+
 ## Evaluation outputs
 
 - scalar physical-plane alignment before and after set-up;

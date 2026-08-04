@@ -377,6 +377,21 @@ def parse_setup_report(terminal_log_path):
                 (out["report_rc_t1_mm"],
                  out["report_rc_t2_mm"],
                  out["report_rc_n_mm"]) = values
+            # The same lever resolved onto the tool. A pole commanded in the
+            # surface frame moves in the tool as the tilt changes, so this is
+            # the column that says where on the tool the pivot actually was.
+            elif line.startswith("r_c [EE]"):
+                vec = line.split("[", 2)[2].split("]")[0]
+                (out["report_rc_ee_x_mm"],
+                 out["report_rc_ee_y_mm"],
+                 out["report_rc_ee_z_mm"]) = [
+                    float(value) for value in vec.split(",")]
+            elif line.startswith("p_c from face [EE]"):
+                vec = line.split("[", 2)[2].split("]")[0]
+                (out["report_pc_face_x_mm"],
+                 out["report_pc_face_y_mm"],
+                 out["report_pc_face_z_mm"]) = [
+                    float(value) for value in vec.split(",")]
     return out
 
 

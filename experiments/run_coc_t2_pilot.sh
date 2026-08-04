@@ -18,7 +18,7 @@ repeat_complete() {
   [ -d "$run_dir" ] &&
     [ -s "$run_dir/surface_grinding_controller_log.csv" ] &&
     grep -q '^controller_exit: 0$' "$run_dir/meta.txt" 2>/dev/null &&
-    grep -q '^=== Set-up result ===$' "$run_dir/terminal.log" 2>/dev/null
+    grep -q '^ *SET-UP RESULT$' "$run_dir/terminal.log" 2>/dev/null
 }
 
 show_status() {

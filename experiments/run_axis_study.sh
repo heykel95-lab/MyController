@@ -16,6 +16,10 @@
 # Case D was enabled on 2026-07-31, once A--C were complete and its gains had
 # been selected from them. See the note above the Case D block in
 # lib/generate_setups.py for what the screening chose and why.
+#
+# Case H continues from Case D's result: D found the lever that aligns each
+# surface axis, H asks whether one lever can serve every tilt direction and
+# whether the pole belongs above the plane, in it, or under it.
 
 set -u
 
@@ -54,11 +58,22 @@ RUN_IDS=(
   MAIN_F2_ksigma_1p0
   MAIN_F2_ksigma_2p0
   MAIN_F2_ksigma_4p0
+  MAIN_H1_rot_yEE
+  MAIN_H1_rot_diag_m45
+  MAIN_H1_rot_xEE
+  MAIN_H1_rot_diag_p45
+  MAIN_H2_fix_diag_m45
+  MAIN_H2_fix_xEE
+  MAIN_H2_fix_diag_p45
+  MAIN_H3_rcn_m060
+  MAIN_H3_rcn_p020
+  MAIN_H3_rcn_p060
+  MAIN_H3_rcn_p120
 )
 
 repeats_for() {
   case "$1" in
-    MAIN_A*|MAIN_B*|MAIN_C*|MAIN_D*|MAIN_E*|MAIN_F*) echo 3 ;;
+    MAIN_A*|MAIN_B*|MAIN_C*|MAIN_D*|MAIN_E*|MAIN_F*|MAIN_H*) echo 3 ;;
     *) echo 0 ;;
   esac
 }
@@ -70,7 +85,7 @@ repeats_for() {
 repeat_complete() {
   local run_dir="$1" run_id marker
   run_id="$(basename "$(dirname "$run_dir")")"
-  marker='^=== Set-up result ===$'
+  marker='^ *SET-UP RESULT$'
   if [ "$(cat "$HERE/setups/$run_id/startup_mode.txt" 2>/dev/null)" = "h" ]; then
     marker='RELEASE'
   fi
@@ -144,7 +159,7 @@ run_case() {
 
   run_ids="$(case_run_ids "$letter")"
   if [ -z "$run_ids" ]; then
-    echo "No case $letter in this runner. Cases present: A, B, C, D, E, F." >&2
+    echo "No case $letter in this runner. Cases present: A, B, C, D, E, F, H." >&2
     return 2
   fi
 
@@ -243,7 +258,7 @@ case "${1:-status}" in
     ;;
   case)
     if [ $# -lt 2 ]; then
-      echo "usage: $(basename "$0") case <A|B|C|D|E|F> [auto]" >&2
+      echo "usage: $(basename "$0") case <A|B|C|D|E|F|H> [auto]" >&2
       exit 2
     fi
     run_case "$2" "${3:-}" || exit $?
@@ -251,7 +266,7 @@ case "${1:-status}" in
     ;;
   next)
     if ! next_trial="$(find_next)"; then
-      echo "Cases A--F are complete."
+      echo "Cases A--H are complete."
       exit 0
     fi
     read -r run_id repeat_index <<< "$next_trial"
@@ -264,7 +279,7 @@ case "${1:-status}" in
     show_status
     ;;
   *)
-    echo "usage: $(basename "$0") [status|next|case <A|B|C|D|E|F> [auto]]" >&2
+    echo "usage: $(basename "$0") [status|next|case <A|B|C|D|E|F|H> [auto]]" >&2
     exit 2
     ;;
 esac

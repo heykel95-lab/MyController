@@ -784,6 +784,115 @@ def fig_b_pole_surface(rows):
     return save(fig, "B_pole_surface.pdf")
 
 
+# Case H directions, named in the tool frame and placed on a real axis: the
+# angle each tilt axis makes with Y_EE. A fixed pole is optimal at 0 by
+# construction, so the x axis is also "how far the tilt has turned away from
+# the pole", which is what the fixed-pole series is measuring.
+H_DIRECTION_DEG = {
+    "yEE": 0.0,
+    "diag_m45": -45.0,
+    "xEE": -90.0,
+    "diag_p45": 45.0,
+}
+H_NO_POLE = {
+    "MAIN_E1_tilt_about_y_long": 0.0,
+    "MAIN_E1_tilt_about_x_short": -90.0,
+}
+
+
+def _h_direction(run_id, prefix):
+    name = run_id[len(prefix):]
+    return H_DIRECTION_DEG.get(name, float("nan"))
+
+
+def fig_main_general_pole(rows):
+    """Is there one pole for every tilt direction, and which side of the plane?
+
+    The press force is normal, so m = f x r_c leaves only the tangential lever
+    turning the tool, perpendicular to itself: a tilt about u needs the lever
+    rho (sin a, -cos a), which rotates with the tilt. The left panel puts that
+    prediction against a pole held fixed. The right panel moves the same lever
+    along the normal, where the rule says it makes no moment at all and can
+    only add K_p,t r_n^2 of rotational stiffness against the correction.
+    """
+    selected = _main_rows(rows, ("MAIN_H",))
+    if not selected:
+        return None
+    fig, axes = plt.subplots(1, 2, figsize=(9.0, 3.3))
+
+    # Left: the lever that follows the tilt against the one that does not.
+    for prefix, label, color, marker in (
+        ("MAIN_H1_rot_", "lever follows the tilt", SERIES_B2, "o"),
+        ("MAIN_H2_fix_", "one fixed lever", SERIES_B3, "s"),
+    ):
+        buckets = {}
+        for row in selected:
+            if not row["run_id"].startswith(prefix):
+                continue
+            x = _h_direction(row["run_id"], prefix)
+            y = fnum(row, "align_improve_real_deg")
+            if np.isnan(x) or np.isnan(y):
+                continue
+            buckets.setdefault(x, {"good": [], "bad": []})
+            buckets[x]["bad" if data_suspect(row) else "good"].append(y)
+        # The fixed lever is the rotating one at 0 deg, so it is drawn there
+        # too rather than leaving its own optimum off its curve.
+        if prefix == "MAIN_H2_fix_" and buckets:
+            shared = [
+                fnum(row, "align_improve_real_deg") for row in selected
+                if row["run_id"] == "MAIN_H1_rot_yEE" and not data_suspect(row)
+            ]
+            shared = [v for v in shared if not np.isnan(v)]
+            if shared:
+                buckets[0.0] = {"good": shared, "bad": []}
+        errorbar_from_buckets(axes[0], buckets, label, color, marker=marker)
+
+    # The matched no-pole runs: Case E commanded these same two tilts with the
+    # decoupled spring, which is the floor any pole has to beat.
+    no_pole = {}
+    for row in _main_rows(rows, ("MAIN_E1_",)):
+        x = H_NO_POLE.get(row["run_id"], float("nan"))
+        y = fnum(row, "align_improve_real_deg")
+        if np.isnan(x) or np.isnan(y):
+            continue
+        no_pole.setdefault(x, {"good": [], "bad": []})
+        no_pole[x]["bad" if data_suspect(row) else "good"].append(y)
+    errorbar_from_buckets(axes[0], no_pole, "no pole (Case E)", INK_MUTED,
+                          marker="^")
+
+    axes[0].axhline(0.0, color="0.45", linewidth=1)
+    sweep_axis(axes[0], (-90, -45, 0, 45))
+    axes[0].set_xlabel("tilt axis, from $Y_{EE}$ [deg]")
+    axes[0].set_ylabel("alignment removed [deg]")
+
+    # Right: the same lever, moved along the normal.
+    buckets = {}
+    for row in selected:
+        if not row["run_id"].startswith(("MAIN_H3_", "MAIN_H1_rot_yEE")):
+            continue
+        x = fnum(row, "rc_n_mm")
+        y = fnum(row, "align_improve_real_deg")
+        if np.isnan(x) or np.isnan(y):
+            continue
+        buckets.setdefault(x, {"good": [], "bad": []})
+        buckets[x]["bad" if data_suspect(row) else "good"].append(y)
+    errorbar_from_buckets(axes[1], buckets, "lever along the normal",
+                          SERIES_B4, marker="D")
+    # r_c = p_TCP - p_c, and the TCP stands about 20 mm off the plane at
+    # contact: positive is under the plane, and +20 is in it.
+    axes[1].axvline(20.0, color="0.45", linewidth=1, linestyle="--")
+    axes[1].annotate("pole in the plane", xy=(20.0, 0.02), xycoords=("data", "axes fraction"),
+                     rotation=90, fontsize=7, color=INK_MUTED,
+                     ha="right", va="bottom")
+    axes[1].axhline(0.0, color="0.45", linewidth=1)
+    sweep_axis(axes[1], (-60, 0, 20, 60, 120))
+    axes[1].set_xlabel(r"$r_{c,n}$ [mm]   (positive = pole under the plane)")
+    axes[1].set_ylabel("alignment removed [deg]")
+
+    figure_legend(fig, axes[0], ncol=3)
+    return save(fig, "MAIN_H_general_pole.pdf")
+
+
 def fig_c2_nullspace(rows):
     """Null-space modes: sigma recovery and the task-invariance proof."""
     sub = [r for r in rows if r["run_id"].startswith("C2_hold_mode")]
@@ -863,6 +972,7 @@ def main():
         fig_main_interaction,
         fig_main_compliance_centre,
         fig_main_tool_axis_tilt,
+        fig_main_general_pole,
         fig_plane_validation,
         fig_b_pole_axis,
         fig_b_pole_surface,

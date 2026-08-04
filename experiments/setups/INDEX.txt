@@ -1,4 +1,4 @@
-110 setups, 331 total runs
+121 setups, 364 total runs
 
 G1_coupled_block_diagonal          x3  Coupled 6x6 path with block-diagonal gains must reproduce the decoupled wrench exactly.
 G1_decoupled_baseline              x5  Decoupled wrench, no coupling.
@@ -56,6 +56,17 @@ MAIN_D2_t2_rc_t1_p000              x3  Case D coarse centre-of-compliance sweep:
 MAIN_D2_t2_rc_t1_p060              x3  Case D coarse centre-of-compliance sweep: +10 deg about t2, direct r_c,t1=+60 mm.
 MAIN_D3_t1_rc_face_centre          x3  Case D: compliance centre at the grinding-face centre, +10 deg about t1.
 MAIN_D3_t2_rc_face_centre          x3  Case D: compliance centre at the grinding-face centre, +10 deg about t2.
+MAIN_H1_rot_yEE                    x3  Case H: 10 deg tilt about Y_EE, the 120 mm edge leading, with the lever the moment rule asks for: r_c,t = (+54.4, +25.4) mm, 60 mm perpendicular to the tilt axis.
+MAIN_H1_rot_diag_m45               x3  Case H: 10 deg tilt 45 deg between the tool axes, with the lever the moment rule asks for: r_c,t = (+56.4, -20.5) mm, 60 mm perpendicular to the tilt axis.
+MAIN_H1_rot_xEE                    x3  Case H: 10 deg tilt about X_EE, the 40 mm edge leading, with the lever the moment rule asks for: r_c,t = (+25.4, -54.4) mm, 60 mm perpendicular to the tilt axis.
+MAIN_H1_rot_diag_p45               x3  Case H: 10 deg tilt 45 deg between the tool axes, the other way, with the lever the moment rule asks for: r_c,t = (+20.5, +56.4) mm, 60 mm perpendicular to the tilt axis.
+MAIN_H2_fix_diag_m45               x3  Case H: the same fixed lever as MAIN_H1_rot_yEE, r_c,t = (+54.4, +25.4) mm, against a 10 deg tilt 45 deg between the tool axes.
+MAIN_H2_fix_xEE                    x3  Case H: the same fixed lever as MAIN_H1_rot_yEE, r_c,t = (+54.4, +25.4) mm, against a 10 deg tilt about X_EE, the 40 mm edge leading.
+MAIN_H2_fix_diag_p45               x3  Case H: the same fixed lever as MAIN_H1_rot_yEE, r_c,t = (+54.4, +25.4) mm, against a 10 deg tilt 45 deg between the tool axes, the other way.
+MAIN_H3_rcn_m060                   x3  Case H: the H1 Y_EE condition with the pole moved along the normal to r_c,n = -60 mm -- 80 mm above the plane.
+MAIN_H3_rcn_p020                   x3  Case H: the H1 Y_EE condition with the pole moved along the normal to r_c,n = +20 mm -- in the plane, at the contact face.
+MAIN_H3_rcn_p060                   x3  Case H: the H1 Y_EE condition with the pole moved along the normal to r_c,n = +60 mm -- 40 mm under the plane.
+MAIN_H3_rcn_p120                   x3  Case H: the H1 Y_EE condition with the pole moved along the normal to r_c,n = +120 mm -- 100 mm under the plane.
 MAIN_E1_tilt_about_y_long          x3  Tilt 10 deg about the tool's own Y_EE axis, so the 120 mm edge leads.
 MAIN_E1_tilt_about_x_short         x3  Tilt 10 deg about the tool's own X_EE axis, so the 40 mm edge leads.
 MAIN_F0_baseline                   x3  Null-space mode 0 under a scripted hold disturbance: no null-space torque at all.

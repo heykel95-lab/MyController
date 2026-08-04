@@ -1,0 +1,12 @@
+run_id:   MAIN_H1_rot_diag_p45
+repeats:  3
+
+plane profile: horizontal
+
+tool profile: grinding_tool
+
+purpose:
+  Case H: 10 deg tilt 45 deg between the tool axes, the other way, with the lever the moment rule asks for: r_c,t = (+20.5, +56.4) mm, 60 mm perpendicular to the tilt axis.
+
+pass criterion:
+  The fraction removed must be the same at every direction. If it is, the rule holds off the surface axes too and the pole is a function of the tilt, not a constant. A direction that removes markedly less is the face aspect ratio entering, and is the result to report.

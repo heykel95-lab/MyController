@@ -482,6 +482,133 @@ for axis in (1, 2):
     )
 
 
+# Case H: is there one pole that serves every tilt direction?
+#
+# The press force is normal, f = -F n, so the moment it makes about the TCP is
+#
+#   m = f x r_c = F (r_c,t2, -r_c,t1, 0).
+#
+# Only the tangential lever turns the tool, and it turns it perpendicular to
+# itself. A tilt of theta about u = (cos a, sin a) in the tangent plane needs a
+# corrective moment along -u, so the lever it needs is
+#
+#   r_c,t = rho (sin a, -cos a),
+#
+# perpendicular to the tilt axis and rotating with it. Case D measured the two
+# ends of that rule and both agree: a = 0 needs r_c,t2 = -60 (7.0 -> 0.9 deg),
+# a = 90 needs r_c,t1 = +60 (8.5 -> 2.1 deg), and the same levers on the wrong
+# axis or with the wrong sign removed nothing at all.
+#
+# The rule says no single lever can serve every direction, which is what a
+# general pole would have to do. H1 tests the rule at the two directions Case D
+# did not measure; H2 holds one pole fixed while the direction turns, which is
+# the general-pole claim itself; H3 asks the remaining question, whether the
+# pole belongs above the plane, in it, or under it.
+#
+# Directions are named in the tool frame, as Case E named them: the twist puts
+# the 120 mm long axis 25.05 deg from t2, so a tilt about Y_EE leads with the
+# long edge and one about X_EE with the short edge.
+# Shared by Cases H and E: both tilt the tool by this much, so their
+# conditions are matched and the pole levers can be compared across them.
+TOOL_TILT_DEG = 10.0
+POLE_RHO_MM = 60.0
+POLE_DIRECTIONS = (
+    ("yEE", 0.0, "about Y_EE, the 120 mm edge leading"),
+    ("diag_m45", -45.0, "45 deg between the tool axes"),
+    ("xEE", -90.0, "about X_EE, the 40 mm edge leading"),
+    ("diag_p45", 45.0, "45 deg between the tool axes, the other way"),
+)
+
+
+def pole_direction(axis_offset_deg):
+    """Commanded tilt and the lever the moment rule asks for, in mm."""
+    a = math.radians(MAIN_TWIST_DEG + axis_offset_deg)
+    tilt = (TOOL_TILT_DEG * math.cos(a), TOOL_TILT_DEG * math.sin(a))
+    lever = (POLE_RHO_MM * math.sin(a), -POLE_RHO_MM * math.cos(a))
+    return tilt, lever
+
+
+def direct_pole_overrides(tilt_deg, rc_mm):
+    """Case A gains, plus a directly commanded r_c in the surface frame."""
+    return [
+        pair for pair in main_gain_overrides(tilt_deg[0], tilt_deg[1])
+        if pair[0] != "use_coupled_stiffness"
+    ] + [
+        ("use_coupled_stiffness", "1"),
+        ("coupled_use_block_diagonal", "0"),
+        ("coupled_pole_manual", "1"),
+        ("coupled_use_direct_rc_surface", "1"),
+        ("coupled_rc_tangent1", f"{rc_mm[0] / 1000.0:.6f}"),
+        ("coupled_rc_tangent2", f"{rc_mm[1] / 1000.0:.6f}"),
+        ("coupled_rc_normal", f"{rc_mm[2] / 1000.0:.6f}"),
+    ]
+
+
+# H1: the lever follows the tilt direction, as the rule says it must.
+for name, axis_offset_deg, description in POLE_DIRECTIONS:
+    tilt, lever = pole_direction(axis_offset_deg)
+    add(
+        f"MAIN_H1_rot_{name}",
+        f"Case H: {TOOL_TILT_DEG:.0f} deg tilt {description}, with the lever "
+        f"the moment rule asks for: r_c,t = ({lever[0]:+.1f}, {lever[1]:+.1f}) "
+        f"mm, {POLE_RHO_MM:.0f} mm perpendicular to the tilt axis.",
+        "The fraction removed must be the same at every direction. If it is, "
+        "the rule holds off the surface axes too and the pole is a function of "
+        "the tilt, not a constant. A direction that removes markedly less is "
+        "the face aspect ratio entering, and is the result to report.",
+        direct_pole_overrides(tilt, (lever[0], lever[1], 0.0)),
+        repeats=3,
+    )
+
+# H2: one pole, every direction. This is the general-pole claim, tested by
+# holding the Y_EE lever while the tilt turns away from it.
+_, FIXED_LEVER = pole_direction(0.0)
+for name, axis_offset_deg, description in POLE_DIRECTIONS[1:]:
+    tilt, _ = pole_direction(axis_offset_deg)
+    add(
+        f"MAIN_H2_fix_{name}",
+        f"Case H: the same fixed lever as MAIN_H1_rot_yEE, "
+        f"r_c,t = ({FIXED_LEVER[0]:+.1f}, {FIXED_LEVER[1]:+.1f}) mm, against a "
+        f"{TOOL_TILT_DEG:.0f} deg tilt {description}.",
+        "Against its matched H1 run: how much a fixed pole loses when the tilt "
+        "turns away from it. The rule predicts the loss follows the cosine of "
+        "the direction change and reaches nothing at 90 deg, where Case D "
+        "already measured a wrong-axis lever removing 0.0 deg.",
+        direct_pole_overrides(tilt, (FIXED_LEVER[0], FIXED_LEVER[1], 0.0)),
+        repeats=3,
+    )
+
+# H3: above the plane, in it, or under it. The normal lever makes no moment
+# against a normal press -- it drops out of f x r_c entirely -- and enters only
+# as K_p,t r_n^2 of extra rotational stiffness, which resists the correction.
+# So the prediction is a symmetric loss about r_n = 0 that only becomes
+# visible past |r_n| ~ sqrt(K_R / K_p,t) = sqrt(5/2000) = 50 mm. MAIN_D3
+# tested +20 mm and changed nothing, which is consistent but far too small to
+# separate the prediction from no effect at all.
+#
+# r_c = p_TCP - p_c, so a positive normal lever puts the pole BELOW the TCP.
+# The TCP stands about 20 mm off the plane at contact, so +20 is the pole in
+# the plane, +60 and +120 are under it, and -60 is 80 mm above it.
+H3_TILT, H3_LEVER = pole_direction(0.0)
+for rc_n_mm, where in ((-60.0, "80 mm above the plane"),
+                       (20.0, "in the plane, at the contact face"),
+                       (60.0, "40 mm under the plane"),
+                       (120.0, "100 mm under the plane")):
+    tag = f"{'m' if rc_n_mm < 0 else 'p'}{abs(int(rc_n_mm)):03d}"
+    add(
+        f"MAIN_H3_rcn_{tag}",
+        f"Case H: the H1 Y_EE condition with the pole moved along the normal "
+        f"to r_c,n = {rc_n_mm:+.0f} mm -- {where}.",
+        "Against MAIN_H1_rot_yEE, which is the same lever with r_c,n = 0. The "
+        "moment rule predicts a symmetric loss in the sign of r_c,n, growing "
+        "with r_c,n^2 and worth about K_p,t r_n^2 against a 5 N m/rad K_R. An "
+        "asymmetry between above and under is not in the rule and would be "
+        "the contact, not the spring.",
+        direct_pole_overrides(H3_TILT, (H3_LEVER[0], H3_LEVER[1], rc_n_mm)),
+        repeats=3,
+    )
+
+
 # Case E: tilt about the tool's own axes rather than the surface's. The
 # commanded twist puts the 120 mm long axis 25.05 deg away from t2, so every
 # tilt so far has tipped the long and short axes together in some mixture and
@@ -489,7 +616,6 @@ for axis in (1, 2):
 # t2 correcting more than t1 is a property of the plane or of a face three
 # times longer than it is wide. A tilt about a tool axis is the same command
 # resolved onto the surface axes it is oblique to.
-TOOL_TILT_DEG = 10.0
 for name, axis_offset_deg, edge_mm in (("y_long", 0.0, 120), ("x_short", -90.0, 40)):
     a = math.radians(MAIN_TWIST_DEG + axis_offset_deg)
     t1_deg = TOOL_TILT_DEG * math.cos(a)

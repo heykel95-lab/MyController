@@ -1,0 +1,12 @@
+run_id:   MAIN_H2_fix_diag_m45
+repeats:  3
+
+plane profile: horizontal
+
+tool profile: grinding_tool
+
+purpose:
+  Case H: the same fixed lever as MAIN_H1_rot_yEE, r_c,t = (+54.4, +25.4) mm, against a 10 deg tilt 45 deg between the tool axes.
+
+pass criterion:
+  Against its matched H1 run: how much a fixed pole loses when the tilt turns away from it. The rule predicts the loss follows the cosine of the direction change and reaches nothing at 90 deg, where Case D already measured a wrong-axis lever removing 0.0 deg.

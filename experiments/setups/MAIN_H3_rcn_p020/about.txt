@@ -1,0 +1,12 @@
+run_id:   MAIN_H3_rcn_p020
+repeats:  3
+
+plane profile: horizontal
+
+tool profile: grinding_tool
+
+purpose:
+  Case H: the H1 Y_EE condition with the pole moved along the normal to r_c,n = +20 mm -- in the plane, at the contact face.
+
+pass criterion:
+  Against MAIN_H1_rot_yEE, which is the same lever with r_c,n = 0. The moment rule predicts a symmetric loss in the sign of r_c,n, growing with r_c,n^2 and worth about K_p,t r_n^2 against a 5 N m/rad K_R. An asymmetry between above and under is not in the rule and would be the contact, not the spring.
