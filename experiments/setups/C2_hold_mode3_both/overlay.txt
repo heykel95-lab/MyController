@@ -3,3 +3,12 @@
 # Only keys listed here differ from the nominal set.
 nullspace_mode = 3
 print_sigma_debug = 1
+
+# The pole convention these trials were archived with. Pinned here because the
+# nominal set now defaults to the surface convention Case H used; without this
+# the same setup would press about a different lever than its archive.
+coupled_use_pole_ee = 0
+coupled_use_direct_rc_surface = 0
+coupled_pole_from_edge_x = -0.04
+coupled_pole_from_edge_y = 0.08
+coupled_pole_from_edge_z = 0.0

@@ -1176,6 +1176,30 @@ for tol in (0.001, 0.0001, 0.00001):
     )
 
 
+# A setup declares its pole convention if it names any of these, or if it turns
+# the coupled spring off or onto the block diagonal, where no pole is read.
+POLE_CONVENTION_KEYS = {
+    "coupled_use_pole_ee",
+    "coupled_use_direct_rc_surface",
+    "coupled_pole_from_edge_x",
+    "coupled_pole_from_edge_y",
+    "coupled_pole_from_edge_z",
+    "use_coupled_stiffness",
+    "coupled_use_block_diagonal",
+}
+
+ARCHIVED_POLE_CONVENTION = """
+# The pole convention these trials were archived with. Pinned here because the
+# nominal set now defaults to the surface convention Case H used; without this
+# the same setup would press about a different lever than its archive.
+coupled_use_pole_ee = 0
+coupled_use_direct_rc_surface = 0
+coupled_pole_from_edge_x = -0.04
+coupled_pole_from_edge_y = 0.08
+coupled_pole_from_edge_z = 0.0
+"""
+
+
 def write_setups():
     os.makedirs(SETUPS, exist_ok=True)
     index = []
@@ -1191,14 +1215,23 @@ def write_setups():
             plane_profile = "tilted"
             tool_profile = "grinding_tool"
 
+        # A setup that says nothing about the pole would follow whatever the
+        # nominal set defaults to, which is the surface convention Case H
+        # introduced. These trials were archived pressing about the edge pole,
+        # so the convention they ran with is written out rather than inherited.
+        keys = {key for key, _ in overrides}
+        inherits_pole = not (keys & POLE_CONVENTION_KEYS)
+
         with open(os.path.join(d, "overlay.txt"), "w") as f:
             f.write(f"# {run_id}\n")
             f.write("# Applied on top of surface_grinding_controller/params/.\n")
             f.write("# Only keys listed here differ from the nominal set.\n")
-            if not overrides:
+            if not overrides and not inherits_pole:
                 f.write("# (nominal configuration, no overrides)\n")
             for key, value in overrides:
                 f.write(f"{key} = {value}\n")
+            if inherits_pole:
+                f.write(ARCHIVED_POLE_CONVENTION)
 
         # Which startup key drives this setup. Case F holds a pose and is
         # driven with h; every contact case runs the sequence with s. The
