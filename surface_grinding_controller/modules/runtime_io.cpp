@@ -615,10 +615,11 @@ void printSetUpImpedanceLaw(const Parameters& params,
   } else {
     printf("  %-16s = auto, refit at the first cycle\n", "DR [t1,t2,n]");
   }
-  // Two rows, always the same two, whatever the run stores: where the pivot
-  // is on the tool, and the lever it makes in the plane. They are opposite
-  // readings of one vector, and mixing them up turns the press the wrong way,
-  // so neither is ever left to be inferred from the other.
+  // The pivot, as the lever it makes in the plane. The same vector read from
+  // the tool is p_c [EE], and the two are easy to mistake for two settings, so
+  // the hold shows only the one that is typed and holds still while it holds:
+  // a pole commanded against the plane moves in the tool at every tilt. The
+  // phase block keeps both, and the set-up report resolves them at contact.
   if (params.use_coupled_stiffness) {
     const Vec3 r_c_base =
         params.coupled_use_pole_ee
@@ -627,9 +628,11 @@ void printSetUpImpedanceLaw(const Parameters& params,
             ? Vec3(R_alignment_target * params.coupled_rc_surface)
             : Vec3(-params.coupled_pole_from_edge);
     const bool pole_commanded = params.coupled_use_pole_ee;
-    printRow("p_c [EE]", Vec3(-1000.0 * (R_EE.transpose() * r_c_base)), "mm",
-             pole_commanded ? "commanded: the pole on the tool, from p_EE"
-                            : "the pole on the tool, from p_EE");
+    if (!tunable) {
+      printRow("p_c [EE]", Vec3(-1000.0 * (R_EE.transpose() * r_c_base)), "mm",
+               pole_commanded ? "commanded: the pole on the tool, from p_EE"
+                              : "the pole on the tool, from p_EE");
+    }
     printRow("r_c [t1,t2,n]",
              Vec3(1000.0 * (R_alignment_target.transpose() * r_c_base)), "mm",
              pole_commanded ? "p_TCP - p_c, in the plane"
@@ -645,11 +648,13 @@ void printSetUpImpedanceLaw(const Parameters& params,
     printf("  %-16s   kp1..kp3 <N/m> | kr1..kr3 <Nm/rad> | t1,t2 <deg>\n",
            "keys");
     if (params.use_coupled_stiffness) {
-      // One key per row above, and either may be typed: the loop reads it as
-      // a change to that component of the lever and stores it in whichever
-      // convention the run was configured with.
-      printf("  %-16s   pc1..pc3 <mm> the p_c row | r1..r3 <mm> the r_c row\n",
-             "");
+      // Either may be typed: the loop reads it as a change to that component
+      // of the lever and stores it in whichever convention the run was
+      // configured with. pc1..pc3 keeps its key though its row is not shown
+      // here, since a key that works and is not listed is worse than a row
+      // that is named by what it moves.
+      printf("  %-16s   r1..r3 <mm> the r_c row | pc1..pc3 <mm> the pole on "
+             "the tool\n", "");
     }
     printf("  %-16s   s runs the sequence with them | t comes back here\n", "");
   }

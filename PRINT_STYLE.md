@@ -140,7 +140,15 @@ commit or leave the line alone.
 | `stop:` line, `\|`-separated `t= tip= F= M=` | `analysis/sgc_log.py` | cross-checks the CSV metrics |
 | `alignment:` line, `before= after= gain=` | `analysis/sgc_log.py` | alignment gain |
 | `r_c [t1,t2,n]` row | `analysis/sgc_log.py` | commanded centre of compliance |
+| `p_c [EE]` row | `analysis/sgc_log.py` | where on the tool the pivot sat |
 
 The three read from the transcript are matched on the stripped line, so they
 may be indented — but they must stay at the start of it, and their `key=value`
 parts must keep their separators.
+
+The two compliance-centre rows are matched without a `break`, so the reader
+keeps the last one in the transcript: the set-up report. Both must therefore
+survive there, and the quality gate in `analysis/extract_metrics.py` that
+compares them with the overlay fails open if they do not. Elsewhere they are
+free — the set-up hold prints `r_c` alone, and no campaign transcript contains
+that block, since an automated contact trial is driven with `s`.

@@ -130,8 +130,10 @@ Set-up impedance hold (t)
   centre can be typed in any of the three frames it can be named in, whatever
   the run stores: pc1..pc3 place the pole on the tool from p_EE, r1..r3 give
   the lever r_c in the plane, pe1..pe3 place the pole from the contact edge.
-  The block prints the commanded row and the other reading of it, and says
-  which frame this run stores. A key in another frame is converted at the
+  The block prints r_c alone, the row that is typed and that holds still
+  while the hold holds: p_c moves in the tool at every tilt, and beside r_c
+  it reads as a second setting rather than the same lever. The phase block
+  and the set-up report keep both. A key in another frame is converted at the
   moment it is typed, and stops being exact once the tool turns -- that is
   the difference between the conventions, not a rounding of it. Three
   conventions, tried in this order:
