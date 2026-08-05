@@ -636,7 +636,14 @@ void printSetUpImpedanceLaw(const Parameters& params,
                             : "commanded: p_TCP - p_c, in the plane");
   }
   if (tunable) {
-    printf("  %-16s   kp1..kp3 <N/m> | kr1..kr3 <Nm/rad>\n", "keys");
+    // The tilt belongs to the sequence, not to this hold, so it is listed with
+    // the keys the hold accepts and named for the run it will act on.
+    printRow("tilt for s", Vec3(params.tool_target_offset_tangent1_deg,
+                                params.tool_target_offset_tangent2_deg,
+                                params.tool_target_offset_normal_deg),
+             "deg", "about [t1,t2,n], commanded by the next sequence");
+    printf("  %-16s   kp1..kp3 <N/m> | kr1..kr3 <Nm/rad> | t1,t2 <deg>\n",
+           "keys");
     if (params.use_coupled_stiffness) {
       // One key per row above, and either may be typed: the loop reads it as
       // a change to that component of the lever and stores it in whichever

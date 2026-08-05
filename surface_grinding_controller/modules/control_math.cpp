@@ -576,6 +576,22 @@ void startKeyboardStopThread(const Parameters& /*params*/,
       if (!std::getline(std::cin, line)) {
         break;
       }
+      // The tilt the next sequence will command: "t1 10", "t2 -5" [deg].
+      // Checked before the nullspace block below, which would otherwise read
+      // the 1 of t1 as an alpha in degrees.
+      {
+        int index = 0;
+        double value = 0.0;
+        if (std::sscanf(line.c_str(), "t%d %lf", &index, &value) == 2) {
+          if ((index == 1 || index == 2) && std::isfinite(value)) {
+            signals.setup_tilt_deg_request[index - 1].store(value);
+          } else {
+            printf("Tilt index must be 1 or 2 and the value finite.\n");
+          }
+          continue;
+        }
+      }
+
       // Set-up impedance for the t mode: "kp2 1500", "kr3 40", "pc1 -20".
       // Checked before the single-letter keys, which would otherwise swallow
       // the leading k. pc is tried before r so the two names stay distinct.

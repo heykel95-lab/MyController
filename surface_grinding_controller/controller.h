@@ -661,6 +661,10 @@ struct KeyboardSignals {
   // stores; the loop reads it as one component and converts.
   std::array<std::atomic<double>, 3> setup_pole_mm_request;
   std::array<std::atomic<double>, 3> setup_rc_mm_request;
+  // The tilt the next sequence will command, about tangent1 and tangent2
+  // [deg]. Typed in the t hold, where it changes nothing until s starts the
+  // sequence that uses it. NaN = nothing pending.
+  std::array<std::atomic<double>, 2> setup_tilt_deg_request;
 
   // Atomics are not copy-initializable, so the arrays are cleared here.
   KeyboardSignals() {
@@ -670,6 +674,9 @@ struct KeyboardSignals {
       setup_kr_request[i].store(none);
       setup_pole_mm_request[i].store(none);
       setup_rc_mm_request[i].store(none);
+    }
+    for (int i = 0; i < 2; ++i) {
+      setup_tilt_deg_request[i].store(none);
     }
   }
 };

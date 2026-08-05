@@ -123,7 +123,10 @@ Set-up impedance hold (t)
   pushed by hand and measured on its own. Like a sequence run it takes the
   nullspace mode from Nullspace.txt instead of asking, so the two cannot
   drift apart. While it holds, "kp3 900" [N/m], "kr1 8" [Nm/rad] and
-  "pc1 -40" [mm] retune the spring and rebuild it in place. The compliance
+  "pc1 -40" [mm] retune the spring and rebuild it in place, and "t1 10",
+  "t2 -5" [deg] set the tilt the next sequence will command -- which changes
+  nothing while the hold holds its captured pose, and everything the moment s
+  starts. The compliance
   centre can be typed in any of the three frames it can be named in, whatever
   the run stores: pc1..pc3 place the pole on the tool from p_EE, r1..r3 give
   the lever r_c in the plane, pe1..pe3 place the pole from the contact edge.

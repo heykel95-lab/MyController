@@ -474,6 +474,9 @@ RunResult runControlLoop(Parameters& params,
         printSection("s: sequence from the pose held");
         printVec3Mm("p_start", p_start);
         printf("  %-16s   the one commanded now\n", "impedance");
+        printf("  %-16s   t1 %.2f deg | t2 %.2f deg\n", "tilt",
+               params.tool_target_offset_tangent1_deg,
+               params.tool_target_offset_tangent2_deg);
       }
     } else if (run_mode_request == 't') {
       if (phase == ControlPhase::kManualGuide) {
@@ -1196,6 +1199,29 @@ RunResult runControlLoop(Parameters& params,
       } else {
         printf("Ignored: nullspace tuning is only accepted while holding.\n");
       }
+    }
+
+    // The tilt the next sequence will command. It changes nothing while the
+    // hold holds -- the hold keeps the pose it captured -- so the new value is
+    // printed when it is accepted, and again by the s block that acts on it.
+    for (int i = 0; i < 2; ++i) {
+      const double tilt_deg = signals.setup_tilt_deg_request[i].exchange(
+          std::numeric_limits<double>::quiet_NaN());
+      if (!std::isfinite(tilt_deg)) {
+        continue;
+      }
+      if (phase != ControlPhase::kHold || !params.hold_with_setup_gains) {
+        printf("Ignored: the commanded tilt is only settable in the t hold.\n");
+        continue;
+      }
+      if (i == 0) {
+        params.tool_target_offset_tangent1_deg = tilt_deg;
+      } else {
+        params.tool_target_offset_tangent2_deg = tilt_deg;
+      }
+      printf("commanded tilt for s -> t1 %.2f deg | t2 %.2f deg\n",
+             params.tool_target_offset_tangent1_deg,
+             params.tool_target_offset_tangent2_deg);
     }
 
     // Set-up impedance, retuned while the t mode holds. The gain matrices are
