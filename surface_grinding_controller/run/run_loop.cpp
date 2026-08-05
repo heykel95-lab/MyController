@@ -802,8 +802,16 @@ RunResult runControlLoop(Parameters& params,
             (external_force - contact_force_bias).dot(descend_direction);
 
         // Gate: freeze the tool at the clearance height until a bare Enter.
+        // Once armed it stays armed. The gate holds the pose the tool reached,
+        // which is within one descend step of the clearance height, so the
+        // height it is compared against sits on the threshold and crosses it
+        // on measurement noise. Re-testing it each cycle then released the
+        // gate for single cycles, and on those the descend clock advanced and
+        // commanded the tool further down, so the longer the gate waited the
+        // harder it pushed when it let go.
         bool gate_blocking = false;
-        if (params.pause_before_set_up && clearance_reached && !gate_set_up_passed) {
+        if (params.pause_before_set_up && !gate_set_up_passed &&
+            (gate_set_up_armed || clearance_reached)) {
           if (!gate_set_up_armed) {
             gate_set_up_armed = true;
             // Hold the actual pose reached at the gate.
