@@ -915,11 +915,17 @@ RunResult runControlLoop(Parameters& params,
           next_debug_time = time + params.debug_period;
         }
 
-        // End on contact moment jump or time limit.
+        // End on contact moment jump or time limit. Once the grind gate has
+        // armed the phase keeps reaching it, whatever the criterion reads now:
+        // a press ended on the moment threshold sits at that threshold, so the
+        // test crosses back on measurement noise, and a cycle that returned
+        // here early would skip the gate, leave its clock unfrozen and ramp the
+        // commanded depth while the operator reads the report.
         const bool stopped_on_moment =
             phase_time >= params.setup_min_time &&
             moment_delta_norm >= params.setup_moment_threshold;
-        if (!stopped_on_moment && phase_time < params.setup_timeout) {
+        if (!gate_grind_armed && !stopped_on_moment &&
+            phase_time < params.setup_timeout) {
           break;
         }
 
