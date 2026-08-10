@@ -352,3 +352,53 @@ lever spacing, \(20\,\mathrm{mm}\). If the sampled grid puts the turnover at an
 endpoint, the honest statement is that the optimum is not bracketed, and the
 grid is extended rather than the endpoint reported as the optimum — which is
 the mistake the B3 postscript above records.
+
+### J — outcome: the sign rule holds, the magnitude is not symmetric
+
+Recorded 2026-08-10, 18 trials, all passing the contact gate, all `rigid`
+mount, loads 38.4 to 45.3 N. Excited-axis error removed, deg:
+
+| lever | \(t_1\), \(+10^\circ\) (D) | \(t_1\), \(-10^\circ\) (J) | \(t_2\), \(+10^\circ\) (D) | \(t_2\), \(-10^\circ\) (J) |
+|---:|---:|---:|---:|---:|
+| \(-60\) | **+6.41** ± 0.30 | −0.63 ± 0.01 | +0.03 ± 0.06 | **+5.70** ± 0.20 |
+| \(0\) | +0.73 ± 0.00 | −0.36 ± 0.01 | +1.31 ± 0.01 | −0.90 ± 0.07 |
+| \(+60\) | +0.58 ± 0.01 | **+3.13** ± 0.13 | **+6.44** ± 0.43 | −1.58 ± 0.03 |
+
+**J3 holds on both axes, and it was the falsifier.** The lever Case D selected,
+applied to the mirrored tilt, removes nothing: −0.63 against a −0.36 no-lever
+baseline on \(t_1\), −1.58 against −0.90 on \(t_2\). Had the same pole kept
+working, the pole would have been a property of this fixture and the selection
+law would be dead. It is not.
+
+**J2 holds.** \(t_2\) mirrored at +5.70 against its twin's +6.44, 89%, inside
+the 25% band.
+
+**J1 fails.** \(t_1\) mirrored at +3.13 against +6.41, 49%, outside the band.
+
+**J4 fails on both axes.** The mirrored zero-lever runs drift *away* from flat,
+−0.36 and −0.90, where their positive counterparts moved toward it, +0.73 and
++1.31.
+
+The axis expectation was also backwards. J2 predicted \(t_2\) would meet its
+band less cleanly than \(t_1\), because the declared mount play is a rotation
+about \(Y_{EE}\), 25 deg from \(t_2\). \(t_2\) mirrored better. Whatever
+produced the \(t_1\) gap, it is not the slip axis that was named in advance.
+
+By the scoring rule written before any run: J1 or J2 failing while J3 holds
+means the rule has the sign right and the magnitude is not symmetric, and that
+is a fixture result rather than part of the rule. That is what is reported.
+
+**A candidate for the asymmetry, offered as a candidate.** First contact is
+about 1 deg larger in the mirrored direction on both axes: \(+8.00\) against
+\(-7.03\) on \(t_1\), \(+9.41\) against \(-8.33\) on \(t_2\). The calibrated
+plane carries \(b=+0.988^\circ\) of its own tilt, so a \(-10^\circ\) command
+starts further from the physical surface than a \(+10^\circ\) one does, and the
+same lever is given the same 5 s to remove a larger error. This accounts for
+the direction of J1 and J4 on both axes. It does not obviously account for the
+*size* of the \(t_1\) gap, where half the correction is missing against a 1 deg
+larger starting error, so it is not presented as the explanation.
+
+The consequence for the thesis is a strengthening rather than a retreat.
+Direction and sign follow a law that survived its falsifier on both axes;
+magnitude depends on conditions and is not recoverable from one number. That is
+the question Case K measures.

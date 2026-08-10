@@ -90,8 +90,20 @@ coupled_pole_ee_z = 0.0
 # lever is fixed in the plane, so it does not move at first contact and the row
 # printed in the t hold is the row the press applies. r1..r3 command it live.
 coupled_use_direct_rc_surface = 1
-coupled_rc_tangent1 = 0.05
-coupled_rc_tangent2 = 0.0
+# Paired with the tilt in Tool_Orientation.txt, which commands +10 deg about
+# tangent1. The moment rule puts the lever perpendicular to the tilt axis, so a
+# t1 tilt is corrected on t2 and nothing on t1 does anything: Case D measured a
+# wrong-axis lever removing +0.03 deg. The sign is not free either -- Case D's
+# +60 removed +0.58 against +0.73 for no lever at all, so the wrong sign is
+# marginally worse than leaving this at zero.
+#
+# -60 mm is the measured pairing: MAIN_D1_t1_rc_t2_m060, +6.41 +/- 0.30 deg
+# removed over three repeats. Case J then showed the pairing is a sign rule
+# rather than a property of this fixture -- the mirrored tilt is corrected by
+# +60 and this same -60 removes nothing from it -- so reverse this sign if the
+# commanded tilt above is ever reversed.
+coupled_rc_tangent1 = 0.0
+coupled_rc_tangent2 = -0.060
 coupled_rc_normal = 0.0
 
 # Legacy base-frame pole position, measured from the contact edge [m], kept
