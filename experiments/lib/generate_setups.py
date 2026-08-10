@@ -751,6 +751,62 @@ for axis in (1, 2):
             )
 
 
+# Case L: the mirror, given the lever the law actually asks for.
+#
+# Case J ran both mirrored tilts at 60 mm, because 60 mm was what Case D had.
+# Case K then showed that 60 mm is not a setting but a coincidence: the useful
+# lever is the one that brings the residual to zero, and it grows with the
+# rotation required. The mirrored tilts arrive at contact about 1 deg further
+# out than their positive twins, so by K's own law they were under-levered, and
+# J's asymmetry is partly an artefact of holding the lever fixed.
+#
+# Partly, not wholly. Against K's residual-vs-initial slope at the same 60 mm,
+# t2's mirror misses by +1.41 deg, which the extra initial angle covers. t1's
+# misses by +4.40 deg, which nothing measured covers. That is the loose end.
+#
+# rho* is read off K as the lever where the signed residual crosses zero,
+# interpolated per axis and extrapolated to the mirrored starting angle:
+#
+#   t1:  2.07 deg -> 30.1 mm,  6.55 deg -> 67.4 mm   (8.35 mm/deg)
+#        mirrored starts at 7.94 deg -> 79 mm
+#   t2:  3.87 deg -> 61.7 mm,  8.23 deg -> 83.9 mm   (5.09 mm/deg)
+#        mirrored starts at 9.41 deg -> 90 mm
+#
+# The t1 case is the diagnostic one and its lever is inside the tested grid. If
+# +80 mm brings the mirrored t1 residual to zero, the deficit was the lever and
+# the law holds in both directions. If it does not, the deficit is real
+# direction-dependence and the law is incomplete on t1 -- which is the result
+# worth having, because nothing else in the campaign would show it.
+#
+# The t2 case is the weaker of the two twice over: its 10 deg crossing was
+# extrapolated rather than bracketed, and 90 mm then extrapolates again, past
+# the 80 mm the campaign has ever run. It is included because it also tests
+# rho* itself out of sample, but it is the one to drop if the arm objects. The
+# contact gate checks every trial, and the runner stops the case on the first
+# that does not pass.
+L_CONDITIONS = (
+    (1, 2, +80.0, 79.0, "the diagnostic case: inside the tested grid"),
+    (2, 1, -90.0, 90.0, "also tests rho* out of sample, past any tested lever"),
+)
+for axis, rc_axis, rc_mm, rho_star, note in L_CONDITIONS:
+    tilt = (-TOOL_TILT_DEG, 0.0) if axis == 1 else (0.0, -TOOL_TILT_DEG)
+    rc = ((rc_mm, 0.0, 0.0) if rc_axis == 1 else (0.0, rc_mm, 0.0))
+    add(
+        f"MAIN_L{axis}_t{axis}neg_rc_t{rc_axis}_rho{abs(int(rc_mm)):03d}",
+        f"Case L: {-TOOL_TILT_DEG:+.0f} deg about t{axis} with the lever Case K "
+        f"asks for at that starting angle, r_c,t{rc_axis}={rc_mm:+.0f} mm "
+        f"(rho* = {rho_star:.0f} mm) -- {note}.",
+        f"Against MAIN_J{axis}_t{axis}neg_rc_t{rc_axis}_"
+        f"{'p060' if rc_mm > 0 else 'm060'}, the same tilt at 60 mm, and "
+        f"against the positive-tilt twin in Case D. The residual must reach "
+        f"about zero if the mirrored direction obeys the same rho*(|theta|) "
+        f"as the positive one. A residual that stays where 60 mm left it is "
+        f"direction-dependence the moment rule does not contain.",
+        direct_pole_overrides(tilt, rc),
+        repeats=3,
+    )
+
+
 # Case F: the null-space terms, isolated. This is a hold experiment, not a
 # contact sequence: the arm holds one pose while a smooth point-force command
 # displaces a point fixed to link 3, and the recovery is what is compared.

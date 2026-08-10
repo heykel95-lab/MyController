@@ -402,3 +402,82 @@ The consequence for the thesis is a strengthening rather than a retreat.
 Direction and sign follow a law that survived its falsifier on both axes;
 magnitude depends on conditions and is not recoverable from one number. That is
 the question Case K measures.
+
+### K — outcome: no single optimum, and the turnover is not what was predicted
+
+Recorded 2026-08-10, 42 trials, all passing the contact gate, loads 31.5 to
+46.4 N. Error removed and signed residual left, deg:
+
+| \|r_c\| | \(t_1\) 5°: rm / left | \(t_1\) 10°: rm / left | \(t_2\) 5°: rm / left | \(t_2\) 10°: rm / left |
+|---:|---:|---:|---:|---:|
+| 20 | +1.14 / −0.93 | +1.69 / −4.86 | +1.40 / −2.47 | +1.43 / −6.81 |
+| 40 | +1.13 / +0.92 | +3.22 / −3.52 | +1.65 / −2.30 | +2.03 / −6.23 |
+| 60 | +0.70 / +1.33 | **+6.41** / −0.56 | **+3.74** / −0.23 | +6.44 / −1.89 |
+| 80 | +0.61 / +1.44 | +5.75 / +0.95 | +1.57 / +2.44 | **+7.89** / −0.31 |
+
+**K2 holds, and it is the headline.** The turnover moves with the tilt: \(t_1\)
+peaks at 20--40 mm at 5° and 60 mm at 10°; \(t_2\) peaks at 60 mm at 5° and has
+not turned by 80 mm at 10°. Both differ by more than the 20 mm lever spacing.
+\(\rho^\star\) is a function of \(|\theta|\), and no single lever is optimal.
+
+**K3 holds on both axes.** At 5° with 80 mm the signed residual crosses zero:
+\(t_1\) ends at +1.44 from −2.03, \(t_2\) at +2.44 from −3.97. On \(t_1\) the
+crossing begins as early as 40 mm.
+
+**K1 holds on three of four.** \(t_2\) at 10° has not turned over by 80 mm, so
+its optimum is **not bracketed**. Per the rule written above, the honest
+statement is that the grid must be extended, not that 80 mm is the optimum.
+
+**K4 fails.** The steady load was predicted flat and is not: it falls with the
+lever, \(t_1\) at 10° going 44.1 → 31.5 N from 20 to 80 mm. It falls furthest
+where the correction is largest, so this is the tool rolling onto the face and
+relieving the commanded penetration rather than the lever loading the contact.
+The contact is not invariant across the sweep, which the design assumed.
+
+#### The mechanism is not the one predicted
+
+K1's reasoning was that the point shift adds \(K_{p,t}\lVert r_c\rVert^2\) of
+rotational stiffness which eventually resists the correction. That is not what
+the data shows. The applied moment \(F\lVert r_c\rVert\) **rises monotonically
+in all sixteen conditions**, 0.91 → 3.34 N·m and equivalents; it never
+saturates and never turns over.
+
+The turnover is overshoot. The peak of "error removed" lands exactly at the
+last lever before the signed residual crosses zero, in four conditions of four:
+
+| condition | peak removed | residual crosses zero |
+|---|---|---|
+| \(t_1\) 5° | 20 mm | between 20 and 40 |
+| \(t_1\) 10° | 60 mm | between 60 and 80 |
+| \(t_2\) 5° | 60 mm | between 60 and 80 |
+| \(t_2\) 10° | 80 mm | never (still rising) |
+
+So \(\rho^\star\) is not a tuning optimum but a geometric one: **the lever that
+just brings the residual to zero**, growing with \(|\theta|\) because more
+initial error needs more rotation. That is a stronger and more predictive
+result than the saturation the prediction assumed, and it was not anticipated.
+
+#### K refutes the plane-tilt candidate offered for J
+
+The J outcome above offered the plane's own \(+0.988^\circ\) tilt as a
+candidate: the mirrored command starts about 1 deg further out. K measures that
+sensitivity directly over a 5 deg span instead of 1 deg, and it has the wrong
+sign. Within the positive direction more initial error means **more**
+correction, +1.15 deg/deg on \(t_1\) and +0.62 on \(t_2\). Extrapolating K's
+residual-vs-initial slope at the same 60 mm to the mirrored starting angles:
+
+| | predicted \|residual\| | measured | miss |
+|---|---:|---:|---:|
+| \(t_2\) | 2.30 | 3.71 | +1.41 |
+| \(t_1\) | 0.41 | 4.82 | **+4.40** |
+
+\(t_2\)'s mirror is modestly off and is largely covered by its larger starting
+angle needing a longer lever, which is \(\rho^\star(|\theta|)\) working as
+stated. \(t_1\)'s is not covered by anything measured. The candidate is
+withdrawn as an explanation for \(t_1\), and that deficit stands open.
+
+Case L tests it: the same two mirrored tilts at the lever \(\rho^\star\) asks
+for at their starting angle, 80 mm on \(t_1\) and 90 mm on \(t_2\). If 80 mm
+brings the mirrored \(t_1\) residual to zero, the J deficit was an
+under-levered condition and the law holds in both directions. If it does not,
+the deficit is direction-dependence the moment rule does not contain.

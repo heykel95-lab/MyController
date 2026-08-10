@@ -1,0 +1,12 @@
+run_id:   MAIN_L2_t2neg_rc_t1_rho090
+repeats:  3
+
+plane profile: horizontal
+
+tool profile: grinding_tool
+
+purpose:
+  Case L: -10 deg about t2 with the lever Case K asks for at that starting angle, r_c,t1=-90 mm (rho* = 90 mm) -- also tests rho* out of sample, past any tested lever.
+
+pass criterion:
+  Against MAIN_J2_t2neg_rc_t1_m060, the same tilt at 60 mm, and against the positive-tilt twin in Case D. The residual must reach about zero if the mirrored direction obeys the same rho*(|theta|) as the positive one. A residual that stays where 60 mm left it is direction-dependence the moment rule does not contain.

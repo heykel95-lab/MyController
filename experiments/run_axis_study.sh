@@ -107,12 +107,18 @@ RUN_IDS=(
   MAIN_K2_t2_10deg_rho020
   MAIN_K2_t2_10deg_rho040
   MAIN_K2_t2_10deg_rho080
+  # Case L: the two mirrored conditions at the lever Case K's zero-crossing
+  # law asks for at their starting angle. t1 first -- it is the diagnostic one
+  # and its lever is inside the tested grid, where t2's is extrapolated past
+  # any lever the campaign has run.
+  MAIN_L1_t1neg_rc_t2_rho080
+  MAIN_L2_t2neg_rc_t1_rho090
 )
 
 repeats_for() {
   case "$1" in
     MAIN_F2_ksigma_4p0) echo 1 ;;
-    MAIN_A*|MAIN_B*|MAIN_C*|MAIN_D*|MAIN_E*|MAIN_F*|MAIN_H*|MAIN_J*|MAIN_K*)
+    MAIN_A*|MAIN_B*|MAIN_C*|MAIN_D*|MAIN_E*|MAIN_F*|MAIN_H*|MAIN_J*|MAIN_K*|MAIN_L*)
       echo 3 ;;
     *) echo 0 ;;
   esac
@@ -180,13 +186,14 @@ case_run_ids() {
   done
 }
 
-# Cases J and K enter regimes the campaign has not been in: J commands its
-# first negative tilts, K sweeps the lever a third past anything archived. A
-# trial that archives cleanly can still be wrong -- the tilt not mirroring at
-# first contact, a press that never reached the plane, a load past the point
-# the protocol says to stop at -- and unattended, the sweep would go on to
-# repeat that seventeen more times. So each J and K trial is checked before the
-# next one starts, in both driving modes.
+# Cases J, K and L enter regimes the campaign has not been in: J commands its
+# first negative tilts, K sweeps the lever a third past anything archived, and
+# L goes past that again at 90 mm. A trial that archives cleanly can still be
+# wrong -- the tilt not mirroring at first contact, a press that never reached
+# the plane, a load past the point the protocol says to stop at -- and
+# unattended, the sweep would go on to repeat that for every trial left. So
+# each J, K and L trial is checked before the next one starts, in both driving
+# modes, and the case stops on the first that does not pass.
 #
 # The check is deliberately not a hypothesis test. Its bounds come from the
 # archive, and it passes all 108 archived MAIN contact trials, including the
@@ -195,7 +202,7 @@ case_run_ids() {
 validate_trial() {
   local letter="$1" run_dir="$2"
   case "$letter" in
-    J|K) python3 "$HERE/analysis/validate_contact_trial.py" "$run_dir" ;;
+    J|K|L) python3 "$HERE/analysis/validate_contact_trial.py" "$run_dir" ;;
     *) return 0 ;;
   esac
 }
@@ -219,7 +226,7 @@ run_case() {
 
   run_ids="$(case_run_ids "$letter")"
   if [ -z "$run_ids" ]; then
-    echo "No case $letter in this runner. Cases present: A, B, C, D, E, F, H, J, K." >&2
+    echo "No case $letter in this runner. Cases present: A, B, C, D, E, F, H, J, K, L." >&2
     return 2
   fi
 
@@ -351,7 +358,7 @@ case "${1:-status}" in
     ;;
   case)
     if [ $# -lt 2 ]; then
-      echo "usage: $(basename "$0") case <A|B|C|D|E|F|H|J|K> [auto]" >&2
+      echo "usage: $(basename "$0") case <A|B|C|D|E|F|H|J|K|L> [auto]" >&2
       exit 2
     fi
     run_case "$2" "${3:-}" || exit $?
@@ -359,7 +366,7 @@ case "${1:-status}" in
     ;;
   next)
     if ! next_trial="$(find_next)"; then
-      echo "Cases A--K are complete."
+      echo "Cases A--L are complete."
       exit 0
     fi
     read -r run_id repeat_index <<< "$next_trial"
@@ -379,7 +386,7 @@ case "${1:-status}" in
     show_status
     ;;
   *)
-    echo "usage: $(basename "$0") [status|next|case <A|B|C|D|E|F|H|J|K> [auto]]" >&2
+    echo "usage: $(basename "$0") [status|next|case <A|B|C|D|E|F|H|J|K|L> [auto]]" >&2
     exit 2
     ;;
 esac
