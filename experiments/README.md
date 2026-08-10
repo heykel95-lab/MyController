@@ -103,6 +103,44 @@ The guided runner executes one robot trial at a time, selects the next missing
 repeat, verifies the exact gain matrices without connecting to the robot,
 archives the trial through `run.sh`, and refreshes metrics and plots.
 
+### Sign symmetry and lever magnitude (Cases J and K)
+
+Cases D, E and H fix the direction of the compliance-centre lever but leave two
+things open: they only ever commanded a tilt leaning one way, and 60 mm was the
+only lever length ever run.
+
+```bash
+./experiments/run_axis_study.sh case J auto    # 18 trials, run this first
+./experiments/run_axis_study.sh case K auto    # 42 trials
+```
+
+Both run unattended through the same `lib/auto_drive.py` path as Case F, with
+no per-case support needed: the driver reads `startup_mode.txt` and answers `s`
+for a contact case, and the stored `grinding_tool` mount profile answers the
+only other prompt. Every J and K trial is checked by
+`analysis/validate_contact_trial.py` before the next one starts, and the case
+stops on the first failure — that check is what makes them safe to leave
+running. Drop `auto` to stop between trials instead.
+
+**Case J** mirrors every Case D coarse condition: the tilt is negated and all
+three levers \(-60,0,+60\,\mathrm{mm}\) are kept, so the prediction that the
+lever must reverse with the tilt can fail. `MAIN_J_sign_symmetry.pdf` draws the
+Case D curve mirrored, as the prediction, under the measured negative-tilt one.
+
+**Case K** holds the assisting sign and sweeps the length,
+\(|r_{c,t}|\in\{20,40,60,80\}\,\mathrm{mm}\) against \(\theta\in\{5,10\}^\circ\)
+on both axes, so the lever can be reported as \(\rho^\star(|\theta_0|)\)
+instead of as one number. The \(10^\circ/60\,\mathrm{mm}\) corner is not re-run:
+`MAIN_D1_t1_rc_t2_m060` and `MAIN_D2_t2_rc_t1_p060` already measured it at these
+gains and the figure reads them in. Run `MAIN_K1_*` first if time is short.
+
+Run J before K — K commands only the assisting sign, which is the rule J tests.
+Within J the zero-lever runs come first, so the mirrored tilt is pressed without
+a lever before one is added to it. Predictions for both cases are pre-registered
+in
+[`PREDICTIONS.md`](PREDICTIONS.md); the design is in
+[`AXIS_STUDY.md`](AXIS_STUDY.md).
+
 ### Automatic nullspace study
 
 Case F holds the end-effector while applying the same smooth point force at

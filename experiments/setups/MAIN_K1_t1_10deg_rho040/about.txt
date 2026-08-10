@@ -1,0 +1,12 @@
+run_id:   MAIN_K1_t1_10deg_rho040
+repeats:  3
+
+plane profile: horizontal
+
+tool profile: grinding_tool
+
+purpose:
+  Case K lever magnitude: +10 deg about t1 with the assisting lever at r_c,t2=-40 mm.
+
+pass criterion:
+  Against the other lengths at the same tilt, and against the same length at the other tilt. The lever is linear in the moment it makes, so the correction is expected to grow with it and then saturate as the residual angle runs out. Where it saturates is the quantity being measured. A length that removes more angle but leaves the final error, the 90% time or the steady load worse is not the better setting and must not be reported as one.

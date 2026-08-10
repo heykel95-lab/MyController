@@ -261,3 +261,94 @@ The measured turnover is consistent with the point-shifted stiffness term:
 beyond the beneficial region, increasing the lever can re-stiffen the
 rotational response. The experiment therefore treats the deliberately
 commanded surface-frame lever as the independent variable.
+
+---
+
+## J and K — pre-registered, 2026-08-10
+
+**Status: pre-registered.** Written before any `MAIN_J*` or `MAIN_K*` run
+existed. `experiments/results/` contains 84 run directories at this commit and
+none of them is a J or K run, which is checkable from the repository rather
+than from this claim. The B3 section above exists because that check was not
+made once; it is made here.
+
+### What is already settled, and what is not
+
+Cases D, E and H fix the lever's **direction**: perpendicular to the tilt axis,
+rotating with it, no fixed pole serving every direction. What they do not fix
+is its **sign against a tilt that leans the other way**, because every tilt the
+campaign has commanded leans the same way, and its **length**, because
+\(60\,\mathrm{mm}\) is the only magnitude anything has been run at.
+
+### J — the sign rule
+
+From \(f=-Fn_s\) and \(m=f\times r_c=F\,(r_{c,t_2},-r_{c,t_1},0)\), negating the
+lever negates the moment.
+
+**Prediction J1.** At \(-10^\circ\) about \(t_1\), the lever
+\(r_{c,t_2}=+60\,\mathrm{mm}\) removes an amount comparable to what
+\(-60\,\mathrm{mm}\) removed at \(+10^\circ\) in `MAIN_D1` (6.1 deg, 7.0 to
+0.9). "Comparable" is fixed in advance as **within 25% of the Case D twin**,
+which is wider than the 0.4 deg largest within-group spread on \(t_1\) and
+narrower than the difference between assisting and non-assisting levers,
+which in Case D was the whole effect.
+
+**Prediction J2.** At \(-10^\circ\) about \(t_2\), \(r_{c,t_1}=-60\,\mathrm{mm}\)
+does the same against `MAIN_D2` (6.4 deg, 8.5 to 2.1), on the same 25% band.
+The \(t_2\) band is expected to be met less cleanly than \(t_1\): the declared
+mount play is a rotation about \(Y_{EE}\), 25 deg from \(t_2\), and the tool
+slip that follows from it can only make a \(t_2\) condition read worse.
+
+**Prediction J3.** The lever Case D selected, applied to the mirrored tilt,
+removes **nothing distinguishable from the zero-lever run** at the same tilt.
+This is the falsifier. If it instead assists, the pole is a fixed property of
+the fixture and the whole selection law is wrong.
+
+**Prediction J4.** The zero-lever mirrored runs reproduce their Case A
+counterparts in magnitude: \(|\theta|\) before contact near the commanded
+\(10^\circ\) less the settled approach residual, and the removed angle near
+`MAIN_A2` (0.64 deg on \(t_1\)) and `MAIN_A4` (1.06 deg on \(t_2\)).
+
+**Scoring.** J is confirmed if J1, J2 and J3 all hold. J1 or J2 failing while
+J3 holds means the rule has the sign right and the magnitude is not symmetric,
+which is a fixture result and must be reported as one, not folded into the
+rule. J3 failing refutes the rule outright and no wording rescues it.
+
+### K — the length
+
+The moment is linear in the lever, \(\lVert m\rVert=\lVert r_c\rVert\lVert
+f\rVert\), against a restoring \(K_R\) linear in the angle. But the point shift
+also adds \(K_{p,t}\lVert r_c\rVert^2\) of rotational stiffness, which resists
+the correction and grows faster. The historical B3/B4 sweeps in this file
+measured exactly that competition and found an interior maximum with the
+response *reversing* past it, not flattening.
+
+**Prediction K1.** The removed angle rises with \(|r_{c,t}|\) and then turns
+over. It is **not** monotonic across \(20\ldots80\,\mathrm{mm}\) at both tilts.
+
+**Prediction K2.** The turnover is at a **shorter lever for the \(5^\circ\)
+tilt than for the \(10^\circ\) one**. This is the substantive claim and the
+reason the case exists: it is what makes \(\rho^\star\) a function of
+\(|\theta_0|\) rather than a constant. If the two tilts turn over at the same
+length, \(\rho^\star\) is a property of the contact and the gains alone, the
+selection law collapses to a constant, and 60 mm can be reported as an
+optimum after all.
+
+**Prediction K3.** At \(5^\circ\) with \(|r_{c,t}|=80\,\mathrm{mm}\), the signed
+residual crosses zero — the tool is carried past flat. This is the concrete
+form of "a lever useful at \(10^\circ\) is too much at a smaller tilt". If no
+condition overshoots, the useful range is wider than the mechanism suggests
+and that is the result.
+
+**Prediction K4.** The steady load is flat across the sweep, within the G3
+band. The lever changes the moment, not the normal press. A load that trends
+with the lever means the lever is moving the contact patch, which is a contact
+finding and not a spring one.
+
+**Scoring.** K is reported as a curve \(\rho^\star(|\theta_0|)\) with its
+saturation or turnover point per axis and per tilt, never as a single optimum.
+K2 is scored on whether the two turnover points differ by more than the
+lever spacing, \(20\,\mathrm{mm}\). If the sampled grid puts the turnover at an
+endpoint, the honest statement is that the optimum is not bracketed, and the
+grid is extended rather than the endpoint reported as the optimum — which is
+the mistake the B3 postscript above records.

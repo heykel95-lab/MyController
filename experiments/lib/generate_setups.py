@@ -641,6 +641,116 @@ for name, axis_offset_deg, edge_mm in (("y_long", 0.0, 120), ("x_short", -90.0, 
     )
 
 
+# Case J: the mirror. Every tilt the campaign has commanded so far leans the
+# same way, so the lever Case D selected has only ever met one sign of the
+# error it corrects. The rule behind it is a sign rule:
+#
+#   f = -F n,  m = f x r_c = F (r_c,t2, -r_c,t1, 0),
+#
+# so negating the lever negates the moment. A tilt that leans the other way
+# needs the correction to point the other way, and therefore the lever to point
+# the other way too. Case D's own result read as that rule is
+#
+#   +10 about t1 corrected by r_c,t2 = -60 mm   (7.0 -> 0.9 deg)
+#   +10 about t2 corrected by r_c,t1 = +60 mm   (8.5 -> 2.1 deg)
+#
+# and Case J is the same six conditions with the commanded tilt negated. The
+# question is not "does the same pole still work for the opposite tilt?" --
+# the rule already says it cannot -- but "does reversing the pole with the tilt
+# recover the same correction?"
+#
+# All three levels are kept at each mirrored condition rather than only the
+# predicted one. The wrong-sign lever is what makes the claim falsifiable: if
+# -10 deg about t1 were still corrected by -60 mm, the pole would be a fixed
+# property of the fixture and not a function of the measured tilt. The zero
+# lever carries the mirrored no-lever reference, which no archived run
+# provides, because Case A never commanded a negative tilt either.
+#
+# The metric needs no change: align_t*_improve_deg is |before| - |after|, so a
+# mirrored run is directly comparable to its Case D twin as recorded.
+for axis in (1, 2):
+    rc_axis = 2 if axis == 1 else 1
+    tilt = (-TOOL_TILT_DEG, 0.0) if axis == 1 else (0.0, -TOOL_TILT_DEG)
+    assisting_mm = 60.0 if axis == 1 else -60.0
+    for rc_mm in (-60.0, 0.0, 60.0):
+        tag = f"{'m' if rc_mm < 0 else 'p'}{abs(int(rc_mm)):03d}"
+        rc = ((rc_mm, 0.0, 0.0) if rc_axis == 1 else (0.0, rc_mm, 0.0))
+        add(
+            f"MAIN_J{axis}_t{axis}neg_rc_t{rc_axis}_{tag}",
+            f"Case J sign symmetry: {-TOOL_TILT_DEG:+.0f} deg about t{axis}, "
+            f"direct r_c,t{rc_axis}={rc_mm:+.0f} mm. Mirror of "
+            f"MAIN_D{axis}_t{axis}_rc_t{rc_axis}_{tag}.",
+            f"The predicted assisting lever here is "
+            f"r_c,t{rc_axis}={assisting_mm:+.0f} mm, the reverse of the one "
+            f"Case D selected. It must remove about as much as its Case D "
+            f"twin removed, and the opposite sign must remove nothing. If the "
+            f"same lever as Case D still assists, the pole is fixed rather "
+            f"than a function of the measured tilt and the sign rule fails. "
+            f"The zero lever must reproduce the mirrored decoupled reference.",
+            direct_pole_overrides(tilt, rc),
+            repeats=3,
+        )
+
+
+# Case K: how far out, and does that depend on the error being corrected?
+#
+# Case D and Case J settle the direction and the sign of the lever. Neither
+# says anything about its length: 60 mm was the only magnitude tested, and it
+# was chosen, not measured. The moment the lever makes is
+#
+#   ||m|| = ||r_c|| ||f||,
+#
+# linear in the lever, against a restoring K_R that is linear in the angle. So
+# a lever suited to a large initial tilt is not obviously suited to a small
+# one, and a single number cannot be the answer for every misalignment. What
+# the campaign can produce instead is a selection law,
+#
+#   r_c* = rho*(|theta|) d(u_theta, sgn theta),
+#
+# with the direction d already fixed by Cases D, H and J, and rho* the only
+# thing left to measure.
+#
+# The sign is not a factor here -- Case J settles it -- so every K run uses the
+# assisting sign for its axis and sweeps only the magnitude. Two initial tilts
+# against four lengths, on both surface axes. The 10 deg / 60 mm corner of that
+# grid is exactly MAIN_D1_t1_rc_t2_m060 and MAIN_D2_t2_rc_t1_p060, already
+# archived at these gains with three repeats, so it is not generated again; the
+# analysis reads those runs into the K curves.
+#
+# Read more than the alignment removed. A lever long enough to overshoot the
+# plane, oscillate, or push the load up is not the better setting even if it
+# removes the most angle, so the pass criterion names the final error, the
+# 90% time and the steady load alongside it.
+K_TILTS_DEG = (5.0, 10.0)
+K_LEVERS_MM = (20.0, 40.0, 60.0, 80.0)
+for axis in (1, 2):
+    rc_axis = 2 if axis == 1 else 1
+    sign = -1.0 if axis == 1 else 1.0
+    for tilt_deg in K_TILTS_DEG:
+        for rho_mm in K_LEVERS_MM:
+            if tilt_deg == TOOL_TILT_DEG and rho_mm == POLE_RHO_MM:
+                continue  # Case D already ran this corner, three repeats.
+            rc_mm = sign * rho_mm
+            tilt = ((tilt_deg, 0.0) if axis == 1 else (0.0, tilt_deg))
+            rc = ((rc_mm, 0.0, 0.0) if rc_axis == 1 else (0.0, rc_mm, 0.0))
+            add(
+                f"MAIN_K{axis}_t{axis}_{int(tilt_deg):02d}deg_rho{int(rho_mm):03d}",
+                f"Case K lever magnitude: {tilt_deg:+.0f} deg about t{axis} "
+                f"with the assisting lever at "
+                f"r_c,t{rc_axis}={rc_mm:+.0f} mm.",
+                "Against the other lengths at the same tilt, and against the "
+                "same length at the other tilt. The lever is linear in the "
+                "moment it makes, so the correction is expected to grow with "
+                "it and then saturate as the residual angle runs out. Where "
+                "it saturates is the quantity being measured. A length that "
+                "removes more angle but leaves the final error, the 90% time "
+                "or the steady load worse is not the better setting and must "
+                "not be reported as one.",
+                direct_pole_overrides(tilt, rc),
+                repeats=3,
+            )
+
+
 # Case F: the null-space terms, isolated. This is a hold experiment, not a
 # contact sequence: the arm holds one pose while a smooth point-force command
 # displaces a point fixed to link 3, and the recovery is what is compared.

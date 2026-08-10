@@ -20,6 +20,14 @@
 # Case H continues from Case D's result: D found the lever that aligns each
 # surface axis, H asks whether one lever can serve every tilt direction and
 # whether the pole belongs above the plane, in it, or under it.
+#
+# Cases J and K finish the pole question that D, E and H opened. D, E and H
+# only ever commanded a tilt leaning one way and a lever 60 mm long. J
+# negates the tilt and asks whether negating the lever with it recovers the
+# same correction; K holds the sign and sweeps the length against two
+# initial tilts, so the lever can be reported as a function of the
+# misalignment instead of as one number. Run J before K: K assumes the sign
+# rule J tests.
 
 set -u
 
@@ -73,12 +81,39 @@ RUN_IDS=(
   MAIN_H3_rcn_p020
   MAIN_H3_rcn_p060
   MAIN_H3_rcn_p120
+  # Case J: the zero-lever runs first at each axis. They are the mirrored
+  # no-lever reference and also the cheapest reachability check on a tilt sign
+  # the arm has never been commanded to, so nothing adds a lever to a negative
+  # tilt until one has been pressed without one.
+  MAIN_J1_t1neg_rc_t2_p000
+  MAIN_J1_t1neg_rc_t2_p060
+  MAIN_J1_t1neg_rc_t2_m060
+  MAIN_J2_t2neg_rc_t1_p000
+  MAIN_J2_t2neg_rc_t1_m060
+  MAIN_J2_t2neg_rc_t1_p060
+  # Case K: shortest lever first at each tilt, so the run that grows the
+  # commanded moment is always the one after a run that already pressed.
+  MAIN_K1_t1_05deg_rho020
+  MAIN_K1_t1_05deg_rho040
+  MAIN_K1_t1_05deg_rho060
+  MAIN_K1_t1_05deg_rho080
+  MAIN_K1_t1_10deg_rho020
+  MAIN_K1_t1_10deg_rho040
+  MAIN_K1_t1_10deg_rho080
+  MAIN_K2_t2_05deg_rho020
+  MAIN_K2_t2_05deg_rho040
+  MAIN_K2_t2_05deg_rho060
+  MAIN_K2_t2_05deg_rho080
+  MAIN_K2_t2_10deg_rho020
+  MAIN_K2_t2_10deg_rho040
+  MAIN_K2_t2_10deg_rho080
 )
 
 repeats_for() {
   case "$1" in
     MAIN_F2_ksigma_4p0) echo 1 ;;
-    MAIN_A*|MAIN_B*|MAIN_C*|MAIN_D*|MAIN_E*|MAIN_F*|MAIN_H*) echo 3 ;;
+    MAIN_A*|MAIN_B*|MAIN_C*|MAIN_D*|MAIN_E*|MAIN_F*|MAIN_H*|MAIN_J*|MAIN_K*)
+      echo 3 ;;
     *) echo 0 ;;
   esac
 }
@@ -145,6 +180,26 @@ case_run_ids() {
   done
 }
 
+# Cases J and K enter regimes the campaign has not been in: J commands its
+# first negative tilts, K sweeps the lever a third past anything archived. A
+# trial that archives cleanly can still be wrong -- the tilt not mirroring at
+# first contact, a press that never reached the plane, a load past the point
+# the protocol says to stop at -- and unattended, the sweep would go on to
+# repeat that seventeen more times. So each J and K trial is checked before the
+# next one starts, in both driving modes.
+#
+# The check is deliberately not a hypothesis test. Its bounds come from the
+# archive, and it passes all 108 archived MAIN contact trials, including the
+# not-converged MAIN_D1_t1_rc_t2_m060/r01 that Case J exists to mirror. An
+# unexpected result inside those bounds is a result and runs.
+validate_trial() {
+  local letter="$1" run_dir="$2"
+  case "$letter" in
+    J|K) python3 "$HERE/analysis/validate_contact_trial.py" "$run_dir" ;;
+    *) return 0 ;;
+  esac
+}
+
 # Extraction re-parses every archived CSV and takes about a minute, so a case
 # loop pays it once at the end rather than after each of its trials.
 refresh_derived() {
@@ -164,7 +219,7 @@ run_case() {
 
   run_ids="$(case_run_ids "$letter")"
   if [ -z "$run_ids" ]; then
-    echo "No case $letter in this runner. Cases present: A, B, C, D, E, F, H." >&2
+    echo "No case $letter in this runner. Cases present: A, B, C, D, E, F, H, J, K." >&2
     return 2
   fi
 
@@ -182,6 +237,7 @@ run_case() {
       return 2
     fi
   fi
+
 
   for run_id in $run_ids; do
     repeats="$(repeats_for "$run_id")"
@@ -256,6 +312,16 @@ run_case() {
       refresh_derived
       return 1
     fi
+    echo ""
+    if ! validate_trial "$letter" \
+         "$HERE/results/$run_id/$(printf 'r%02d' "$i")"; then
+      echo "" >&2
+      echo "Trial $run_id/$(printf 'r%02d' "$i") archived but did not pass the" >&2
+      echo "contact check above. Stopping case $letter with $((${#pending[@]} - done_count)) trial(s) unrun." >&2
+      echo "The trial is kept: inspect it before deciding to continue." >&2
+      refresh_derived
+      return 1
+    fi
     if [ "$done_count" -lt "${#pending[@]}" ] && [ "$auto" = "auto" ]; then
       # Each automatic trial starts a new libfranka session and moves back to
       # q_init.  Allow residual motion from the preceding controller shutdown
@@ -285,7 +351,7 @@ case "${1:-status}" in
     ;;
   case)
     if [ $# -lt 2 ]; then
-      echo "usage: $(basename "$0") case <A|B|C|D|E|F|H> [auto]" >&2
+      echo "usage: $(basename "$0") case <A|B|C|D|E|F|H|J|K> [auto]" >&2
       exit 2
     fi
     run_case "$2" "${3:-}" || exit $?
@@ -293,12 +359,19 @@ case "${1:-status}" in
     ;;
   next)
     if ! next_trial="$(find_next)"; then
-      echo "Cases A--H are complete."
+      echo "Cases A--K are complete."
       exit 0
     fi
     read -r run_id repeat_index <<< "$next_trial"
     echo "Next trial: $run_id / $(printf 'r%02d' "$repeat_index")"
     "$HERE/run.sh" "$run_id" "$repeat_index" || exit $?
+    # Same check the case loop applies, so a trial driven one at a time is
+    # held to the condition an unattended one would have been.
+    trial_letter="${run_id#MAIN_}"
+    trial_letter="${trial_letter:0:1}"
+    echo ""
+    validate_trial "$trial_letter" \
+      "$HERE/results/$run_id/$(printf 'r%02d' "$repeat_index")" || true
     python3 "$HERE/analysis/extract_metrics.py" || exit $?
     python3 "$HERE/analysis/make_figures.py" || exit $?
     echo ""
@@ -306,7 +379,7 @@ case "${1:-status}" in
     show_status
     ;;
   *)
-    echo "usage: $(basename "$0") [status|next|case <A|B|C|D|E|F|H> [auto]]" >&2
+    echo "usage: $(basename "$0") [status|next|case <A|B|C|D|E|F|H|J|K> [auto]]" >&2
     exit 2
     ;;
 esac

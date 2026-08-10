@@ -601,6 +601,131 @@ def fig_main_compliance_centre(rows):
     return save(fig, "MAIN_D_CoC.pdf")
 
 
+def _lever_buckets(rows, prefix, xkey, ykey, transform=abs):
+    """Runs under one prefix, bucketed by their commanded lever."""
+    buckets = {}
+    for row in rows:
+        if not row["run_id"].startswith(prefix):
+            continue
+        x = fnum(row, xkey)
+        y = fnum(row, ykey)
+        if np.isnan(x) or np.isnan(y):
+            continue
+        x = transform(x) if transform is not None else x
+        buckets.setdefault(x, {"good": [], "bad": []})
+        buckets[x]["bad" if data_suspect(row) else "good"].append(y)
+    return buckets
+
+
+def fig_main_sign_symmetry(rows):
+    """Case J against Case D: does the lever reverse with the tilt?
+
+    One panel per surface axis, both tilt signs on the same lever axis. The
+    moment rule makes an exact prediction here -- negating the tilt negates the
+    lever that corrects it and changes nothing else -- so the two curves should
+    be reflections of each other in the vertical axis. That reflection is drawn
+    explicitly, as the positive-tilt curve mirrored, because the claim being
+    tested is a shape and not a single number: if the mirrored curve lands on
+    the measured negative-tilt one, the pole is a function of the measured
+    tilt; if the negative-tilt curve instead tracks the positive one unmirrored,
+    the pole is a fixed property of the fixture and the sign rule is wrong.
+    """
+    selected = _main_rows(rows, ("MAIN_J",))
+    if not selected:
+        return None
+    paired = _main_rows(rows, ("MAIN_D1_", "MAIN_D2_"))
+    fig, axes = plt.subplots(1, 2, figsize=(7.4, 3.3))
+    for ax, axis in zip(axes, (1, 2)):
+        xkey = "rc_t2_mm" if axis == 1 else "rc_t1_mm"
+        ykey = f"align_t{axis}_improve_deg"
+        pos = _lever_buckets(paired, f"MAIN_D{axis}_t{axis}_rc_",
+                             xkey, ykey, transform=None)
+        neg = _lever_buckets(selected, f"MAIN_J{axis}_t{axis}neg_rc_",
+                             xkey, ykey, transform=None)
+        # The prediction first, so the measurements are drawn over it.
+        mirrored = {-x: v for x, v in pos.items()}
+        if mirrored:
+            xs = sorted(mirrored)
+            means = [np.mean(mirrored[x]["good"]) for x in xs
+                     if mirrored[x]["good"]]
+            xs = [x for x in xs if mirrored[x]["good"]]
+            if xs:
+                # Wide and pale, and drawn first, so that agreement reads as
+                # the measured curve sitting inside the predicted band rather
+                # than as a line disappearing underneath it.
+                ax.plot(xs, means, color="0.72", linewidth=3.2,
+                        solid_capstyle="round", zorder=1,
+                        label=r"$+10^\circ$ mirrored (predicted)")
+        errorbar_from_buckets(ax, pos, r"$+10^\circ$ (Case D)",
+                              SERIES_BLACK, marker="o")
+        errorbar_from_buckets(ax, neg, r"$-10^\circ$ (Case J)",
+                              SERIES_RED, marker="s")
+        ax.axhline(0.0, color="0.45", linewidth=1)
+        sweep_axis(ax, (-60, 0, 60))
+        ax.set_xlabel(
+            rf"lever $r_{{c,t_{2 if axis == 1 else 1}}}$ [mm]")
+        ax.set_ylabel(rf"$t_{axis}$ error removed [deg]")
+    figure_legend(fig, axes, ncol=3)
+    return save(fig, "MAIN_J_sign_symmetry.pdf")
+
+
+def fig_main_lever_magnitude(rows):
+    """Case K: how much lever each initial tilt needs.
+
+    The sign is not a variable here -- Cases D and J settle it -- so every run
+    uses the assisting sign for its axis and the x axis is the magnitude alone.
+    The 10 deg / 60 mm point of each axis was measured in Case D at the same
+    gains, so those runs are read in rather than repeated.
+
+    Three panels, because the most correction is not on its own the best
+    setting. The middle panel keeps the sign of the residual: a lever long
+    enough to carry the tool past flat shows up there as a crossing below zero,
+    which the removed-angle panel cannot distinguish from a good correction.
+    """
+    selected = _main_rows(rows, ("MAIN_K",))
+    if not selected:
+        return None
+    reused = _main_rows(rows, ("MAIN_D1_t1_rc_t2_m060",
+                               "MAIN_D2_t2_rc_t1_p060"))
+    series = (
+        (1, 5.0, "MAIN_K1_t1_05deg_", SERIES_BLACK, "o"),
+        (1, 10.0, "MAIN_K1_t1_10deg_", SERIES_RED, "s"),
+        (2, 5.0, "MAIN_K2_t2_05deg_", SERIES_BLUE, "^"),
+        (2, 10.0, "MAIN_K2_t2_10deg_", SERIES_YELLOW, "D"),
+    )
+    fig, axes = plt.subplots(1, 3, figsize=(9.5, 3.1))
+    for ax, ykey_template, ylabel, zero_line in (
+        (axes[0], "align_t{axis}_improve_deg",
+         "excited-axis error removed [deg]", True),
+        (axes[1], "align_t{axis}_after_deg",
+         "signed excited-axis error left [deg]", True),
+        (axes[2], "force_steady_N", "steady estimated load [N]", False),
+    ):
+        for axis, tilt_deg, prefix, color, marker in series:
+            xkey = "rc_t2_mm" if axis == 1 else "rc_t1_mm"
+            ykey = ykey_template.format(axis=axis)
+            buckets = _lever_buckets(selected, prefix, xkey, ykey)
+            if tilt_deg == 10.0:
+                for x, v in _lever_buckets(
+                    reused, f"MAIN_D{axis}_t{axis}_rc_", xkey, ykey
+                ).items():
+                    dest = buckets.setdefault(x, {"good": [], "bad": []})
+                    dest["good"].extend(v["good"])
+                    dest["bad"].extend(v["bad"])
+            errorbar_from_buckets(
+                ax, buckets,
+                rf"$t_{axis}$, ${tilt_deg:.0f}^\circ$",
+                color, marker=marker,
+            )
+        if zero_line:
+            ax.axhline(0.0, color="0.45", linewidth=1)
+        sweep_axis(ax, (20, 40, 60, 80))
+        ax.set_xlabel(r"lever magnitude $|r_{c,t}|$ [mm]")
+        ax.set_ylabel(ylabel)
+    figure_legend(fig, axes, ncol=5)
+    return save(fig, "MAIN_K_lever_magnitude.pdf")
+
+
 # Categorical slots 1 and 2 of the validated default palette. Two series only:
 # the all-pairs floors hold for the first three slots, and marker shape carries
 # identity as well as hue so the figure survives greyscale printing.
@@ -1077,6 +1202,8 @@ def main():
         fig_main_translational_stiffness,
         fig_main_interaction,
         fig_main_compliance_centre,
+        fig_main_sign_symmetry,
+        fig_main_lever_magnitude,
         fig_main_tool_axis_tilt,
         fig_main_general_pole,
         fig_plane_validation,

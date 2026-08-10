@@ -203,6 +203,110 @@ contact, not the spring.
 
 Case H contributes 33 trials.
 
+## Case J: the mirror, or does the lever reverse with the tilt?
+
+Cases D, E and H between them fix the lever's **direction**: perpendicular to
+the tilt axis, rotating with it, one pole per direction. Every one of those
+runs commanded a tilt leaning the same way. So the rule has never met the
+opposite sign of the error it claims to correct, and a sign rule that has only
+been shown one sign has not been tested as one.
+
+The rule itself is unambiguous. From
+\(m=f\times r_c=F\,(r_{c,t_2},-r_{c,t_1},0)\), negating the lever negates the
+moment, so a tilt leaning the other way needs the lever pointing the other way.
+Written against what Case D measured:
+
+| initial tilt | assisting lever | status |
+|---|---:|---|
+| \(+10^\circ\) about \(t_1\) | \(r_{c,t_2}=-60\,\mathrm{mm}\) | archived, `MAIN_D1` |
+| \(-10^\circ\) about \(t_1\) | \(r_{c,t_2}=+60\,\mathrm{mm}\) | Case J |
+| \(+10^\circ\) about \(t_2\) | \(r_{c,t_1}=+60\,\mathrm{mm}\) | archived, `MAIN_D2` |
+| \(-10^\circ\) about \(t_2\) | \(r_{c,t_1}=-60\,\mathrm{mm}\) | Case J |
+
+The question worth asking is **not** "does the same pole still work for a
+negative tilt?" — the rule already says it cannot, and a run confirming that
+tests nothing. It is whether *reversing the pole together with the tilt*
+recovers a comparable correction.
+
+All three levels \(-60,0,+60\,\mathrm{mm}\) are kept at each mirrored
+condition, not only the predicted one. The wrong-sign run is what makes the
+claim falsifiable: if \(-10^\circ\) about \(t_1\) were still corrected by
+\(-60\,\mathrm{mm}\), the pole would be a fixed property of the fixture rather
+than a function of the measured tilt. The zero-lever runs carry the mirrored
+no-lever reference, which no archived run provides, because Case A never
+commanded a negative tilt either.
+
+No change to the metric is needed: `align_t*_improve_deg` is
+\(|\theta_{\text{before}}|-|\theta_{\text{after}}|\), so each mirrored run is
+directly comparable to its Case D twin as recorded.
+
+| run | tilt | lever |
+|---|---|---:|
+| `MAIN_J1_t1neg_rc_t2_p000` | \(-10^\circ\) about \(t_1\) | \(0\) |
+| `MAIN_J1_t1neg_rc_t2_p060` | same | \(+60\) — predicted assisting |
+| `MAIN_J1_t1neg_rc_t2_m060` | same | \(-60\) — Case D's lever, predicted useless |
+| `MAIN_J2_t2neg_rc_t1_p000` | \(-10^\circ\) about \(t_2\) | \(0\) |
+| `MAIN_J2_t2neg_rc_t1_m060` | same | \(-60\) — predicted assisting |
+| `MAIN_J2_t2neg_rc_t1_p060` | same | \(+60\) — Case D's lever, predicted useless |
+
+Case J contributes 18 trials and produces `MAIN_J_sign_symmetry.pdf`.
+
+**Safety.** These are the campaign's first negative commanded tilts, so the arm
+approaches contact leaning a way it never has. Case J runs unattended like
+every other case; what protects it is that each trial is checked against
+`analysis/validate_contact_trial.py` before the next one starts, and the sweep
+stops on the first trial that does not pass. The zero-lever `J1` runs are still
+ordered first, so the mirrored tilt is pressed without a lever before one is
+added to it.
+
+## Case K: how long a lever, and does that depend on the tilt?
+
+Cases D, H and J fix the lever's direction and sign. None of them says anything
+about its **length**. \(60\,\mathrm{mm}\) was the only magnitude ever tested,
+and it was chosen, not measured. So the campaign cannot claim an optimum pole,
+and the thesis correctly does not.
+
+There is a reason to expect that no single length can be optimal. The moment
+the lever makes is \(\lVert m\rVert=\lVert r_c\rVert\lVert f\rVert\), linear in
+the lever, against a restoring \(K_R\) linear in the angle. A lever suited to a
+\(10^\circ\) error therefore commands the same moment against a \(2^\circ\) one,
+where it can carry the tool past flat. The right object is not a number but a
+**selection law**,
+
+\[
+r_c^\star=\rho^\star(|\theta|)\;d(u_\theta,\operatorname{sgn}\theta),
+\]
+
+in which the direction \(d\) is already settled by Cases D, H and J, and
+\(\rho^\star\) is the only unmeasured part.
+
+Case K measures it: two initial tilts against four lengths, on both surface
+axes, always at the assisting sign.
+
+\[
+\theta\in\{5^\circ,10^\circ\},\qquad
+|r_{c,t}|\in\{20,40,60,80\}\,\mathrm{mm}.
+\]
+
+The \(10^\circ/60\,\mathrm{mm}\) corner of each axis is exactly
+`MAIN_D1_t1_rc_t2_m060` and `MAIN_D2_t2_rc_t1_p060`, already archived at these
+gains with three repeats, so it is not run again — the analysis reads those
+runs into the K curves. That leaves 14 new setups and 42 trials.
+
+**The most correction is not on its own the best setting.** Read the residual,
+the 90% time and the steady load beside it. `MAIN_K_lever_magnitude.pdf` keeps
+the *sign* of the residual for that reason: a lever long enough to carry the
+tool past flat appears there as a crossing below zero, which a
+removed-angle panel cannot distinguish from a good correction. A length that
+removes more angle while leaving the final error, the settling time or the
+load worse is not the better setting and must not be reported as one.
+
+The reportable outcome is \(\rho^\star=\rho^\star(|\theta_0|)\) with its
+saturation point, not \(\rho^\star=60\,\mathrm{mm}\).
+
+If time is short, run axis \(t_1\) first: `MAIN_K1_*` is 7 setups and 21 trials
+and gives the shape of the curve at both tilts on its own.
+
 ## Evaluation outputs
 
 - scalar physical-plane alignment before and after set-up;
@@ -217,17 +321,47 @@ Case H contributes 33 trials.
 
 ## Guided execution
 
-The runner currently exposes only Cases A--C:
+The runner exposes Cases A--F, H, J and K:
 
 ```bash
 ./experiments/run_axis_study.sh status
-./experiments/run_axis_study.sh next
+./experiments/run_axis_study.sh case J auto
+./experiments/run_axis_study.sh case K auto
 ```
 
-`next` performs exactly one robot trial, archives the raw logs, effective
-parameters, plane calibration, terminal transcript and Git provenance, then
-refreshes the derived metrics and figures. It stops after Case C so that the
-selected gains can be reviewed before Case D is enabled.
+`case <letter> auto` runs every remaining trial of one case without an operator
+at the keyboard, driven by `lib/auto_drive.py`, which answers the four
+controller prompts with exactly what a hand would type. Dropping `auto` runs
+the same sequence but stops between trials so the setup can be reset. Either
+way `run.sh` archives the raw logs, effective parameters, plane calibration,
+terminal transcript and Git provenance, and the metrics and figures are
+refreshed once at the end of the case.
+
+`auto` needs no per-case support: `auto_drive.py` reads `startup_mode.txt` from
+the setup, so a contact case answers `s` and a hold case `h`, and the stored
+`grinding_tool` mount profile answers `run.sh`'s only other prompt. Cases J and
+K are contact cases like D, E and H and run through the same path unchanged.
+
+Run Case J before Case K. K commands only the assisting sign, which is the rule
+J tests; running K first would assume the answer.
+
+**Per-trial checking.** Every J and K trial is passed to
+`analysis/validate_contact_trial.py` before the next one starts, in both
+driving modes, and the case stops on the first trial that does not pass. This
+is what makes the two new cases safe to leave unattended: it catches a trial
+that archived cleanly and is still wrong — the tilt not mirroring at first
+contact, a press that never reached the plane, a load past the 70 N the
+protocol stops at, or a set-up phase that ended while the tool was still
+moving. Its bounds are taken from the archive rather than chosen, and it passes
+all 108 archived MAIN contact trials, including the `not-converged`
+`MAIN_D1_t1_rc_t2_m060/r01` that Case J exists to mirror. An unexpected
+*result* inside those bounds — an assisting lever that assists less than
+predicted, a long lever that overshoots — passes and runs.
+
+**`next` does not work on this archive**, and did not before Cases J and K were
+added. 25 archived setups, `MAIN_A0_00deg` among them, have a `terminal.log`
+without the `SET-UP RESULT` block that `repeat_complete` looks for, so
+`find_next` stops on the first of them. Use `case` and name the letter.
 
 All primary conditions use the same normal preload command:
 
