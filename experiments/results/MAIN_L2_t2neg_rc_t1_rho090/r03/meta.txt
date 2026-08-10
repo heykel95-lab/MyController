@@ -1,0 +1,11 @@
+run_id:        MAIN_L2_t2neg_rc_t1_rho090
+repeat:        3
+timestamp:     2026-08-10T15:12:05+02:00
+git_commit:    0c8719f714606c79653acac46db88f7c37196e89
+git_dirty:     no
+host:          Computer19
+plane_profile: horizontal
+tool_profile:  grinding_tool
+tool_mount_status: rigid
+tool_mount_play_bound_deg: 0.0
+controller_exit: 0

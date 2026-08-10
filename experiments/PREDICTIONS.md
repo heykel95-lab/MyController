@@ -481,3 +481,69 @@ for at their starting angle, 80 mm on \(t_1\) and 90 mm on \(t_2\). If 80 mm
 brings the mirrored \(t_1\) residual to zero, the J deficit was an
 under-levered condition and the law holds in both directions. If it does not,
 the deficit is direction-dependence the moment rule does not contain.
+
+### L — outcome: rho* predicted out of sample on t2, and t1 is anomalous
+
+Recorded 2026-08-10, 6 trials, all passing the contact gate. Case L put each
+mirrored tilt at the lever K's zero-crossing law asks for at its starting angle.
+
+| condition | lever | \|start\| | removed | **left** | load |
+|---|---:|---:|---:|---:|---:|
+| \(t_1\) +10° (D) | 60 | 6.98 | +6.41 | −0.56 | 36.5 |
+| \(t_1\) −10° (J) | 60 | 7.94 | +3.13 | +4.82 | 38.6 |
+| \(t_1\) −10° (**L**) | **80** | 8.03 | +4.80 | **+3.22** | 34.6 |
+| \(t_2\) +10° (D) | 60 | 8.33 | +6.44 | −1.89 | 39.2 |
+| \(t_2\) −10° (J) | 60 | 9.41 | +5.70 | +3.71 | 39.7 |
+| \(t_2\) −10° (**L**) | **90** | 9.39 | +9.16 | **−0.23** | 32.3 |
+
+**\(t_2\): the law predicted correctly, out of sample.** 90 mm brought the
+mirrored residual to −0.23 deg, 97.5% of the error removed. That lever was a
+double extrapolation -- derived from a 10 deg crossing that was itself
+unbracketed, then extrapolated past every lever the campaign had run -- and it
+landed. J's \(t_2\) asymmetry was an under-levered condition and nothing more.
+
+**\(t_1\): it is not.** \(\rho^\star\) asked for 80 mm and predicted a residual
+near zero. It stalled at +3.22 deg. The extra 20 mm bought 1.67 deg, so closing
+the remainder at that rate would need about 118 mm, half again beyond what the
+law asks. Correct levering does not rescue it.
+
+So the law reaches flat in three of the four quadrants -- \(+t_1\), \(+t_2\),
+\(-t_2\) -- and fails in \(-t_1\). Both candidates offered for that deficit are
+now dead: the plane tilt was refuted by K, the under-levering by L.
+
+**A clue, recorded as a clue.** The mirrored \(t_1\) runs are the only
+conditions in the campaign where the cross-axis error *grows* while the excited
+axis is corrected: 1.70 to 3.04 deg at 60 mm, 1.68 to 1.93 at 80 mm. Every
+condition that reaches flat also cleans up its other axis. Their total tip is
+small too, 3.43 and 4.83 deg of actual rotation against 6.52 and 9.94 for the
+conditions that work. That is consistent with rotation being absorbed somewhere
+in the \(-t_1\) direction rather than with the spring being wrong, but three
+conditions do not identify a mechanism and none is named here.
+
+### Campaign parameter consistency, audited 2026-08-10
+
+Every archived MAIN contact run was re-read from its own `params_effective/`:
+**174 runs, cases A through L, 229 parameter keys.** 29 keys take more than one
+value and every one of them is accounted for:
+
+- **Independent variables, as designed:** the two tilt offsets, the four
+  tangential gains (B and C only), the three `coupled_rc_*` levers,
+  `use_coupled_stiffness` and `coupled_use_direct_rc_surface`.
+- **Keys absent from the older runs:** the `coupled_pole_ee_*` and several
+  `disturbance_*` keys did not exist when Cases A--C were recorded. Absent, not
+  different.
+- **`nullspace_k_sigma` = 1.0 in A--H and 2.0 in J--L.** Inert. All 174 runs
+  are `nullspace_mode = 1`, and `computeNullspaceTorque` returns the damping
+  term at `control_math.cpp:811` before `nullspace_k_sigma` is ever read
+  (`kDampingOnly = 1` in `controller.h:79`). No contact run can have been
+  affected.
+- **`disturbance_*`:** every contact run has the automatic disturbance absent
+  or `0`, so none of it reaches a set-up press.
+
+Everything that decides a contact press -- the press depth and speed, the
+set-up window, the normal and rotational stiffnesses, the commanded twist, the
+approach gates, `q_init`, the null-space mode -- is identical across all 174
+runs. The plane calibration overlay is byte-identical to the live `horizontal`
+profile in **all 205 archived MAIN runs**, contact and hold together.
+
+The campaign is one configuration with declared variables moving on top of it.
